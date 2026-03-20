@@ -1,0 +1,14 @@
+UI State after CSS fix:
+- Settings toggle button: shows correctly with ▲ icon when open, ⚙️ when closed
+- Red dot indicator shows when no token is set
+- Facebook Access Token section: label, input field with eye icon, Save/Validate buttons
+- Token input field and eye icon are properly sized now
+- Save Token (green) and Validate Token (blue) buttons are side by side, proper size
+- Add Catalog section: label, input field with "+ 新增" button
+- "+ 新增" button is now properly sized (not full width)
+- Below settings panel: CPAS 目錄 dropdown, 客戶名稱, 存取密碼, 讀取商品 button
+
+Issues remaining:
+1. The settings toggle button text "▲ 系統設定" is not visible (button appears solid blue with just a red dot)
+   - This is because the global button style sets background-color: var(--primary-color) and color: white
+   - Need to override for .settings-toggle-btn

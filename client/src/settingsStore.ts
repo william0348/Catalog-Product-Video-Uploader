@@ -1,9 +1,9 @@
 /**
  * settingsStore.ts
  * 
- * Centralized settings store using localStorage.
+ * Centralized settings store backed by the server database via fetch API.
  * All users share the same Access Token and Catalog configurations.
- * Admin panel writes settings; MainApp reads them.
+ * Falls back to localStorage for offline/initial loading.
  */
 
 const FB_API_VERSION = "v23.0";
@@ -18,7 +18,7 @@ export interface CatalogConfig {
 export interface AppSettings {
   facebookAccessToken: string;
   catalogs: CatalogConfig[];
-  accessKey: string; // The shared access key for front-end users
+  accessKey: string;
 }
 
 const SETTINGS_STORAGE_KEY = 'cpv_app_settings';
@@ -29,18 +29,25 @@ const DEFAULT_SETTINGS: AppSettings = {
   accessKey: 'RhinoShield2025',
 };
 
+// ===== Local cache for fast reads =====
+let _cachedSettings: AppSettings | null = null;
+
 /**
- * Load settings from localStorage
+ * Load settings from localStorage (fast, synchronous)
  */
 export const loadSettings = (): AppSettings => {
+  if (_cachedSettings) return { ..._cachedSettings };
   try {
     const stored = localStorage.getItem(SETTINGS_STORAGE_KEY);
     if (stored) {
       const parsed = JSON.parse(stored);
-      return {
-        ...DEFAULT_SETTINGS,
-        ...parsed,
+      const merged: AppSettings = {
+        facebookAccessToken: parsed.facebookAccessToken ?? DEFAULT_SETTINGS.facebookAccessToken,
+        catalogs: parsed.catalogs ?? DEFAULT_SETTINGS.catalogs,
+        accessKey: parsed.accessKey ?? DEFAULT_SETTINGS.accessKey,
       };
+      _cachedSettings = merged;
+      return { ...merged };
     }
   } catch (e) {
     console.error('Failed to load settings:', e);
@@ -49,14 +56,66 @@ export const loadSettings = (): AppSettings => {
 };
 
 /**
- * Save settings to localStorage
+ * Save settings to both localStorage (for fast reads) and server database
  */
-export const saveSettings = (settings: AppSettings): void => {
+export const saveSettings = async (settings: AppSettings): Promise<void> => {
+  _cachedSettings = { ...settings };
+  // Save to localStorage for immediate availability
   try {
     localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(settings));
   } catch (e) {
-    console.error('Failed to save settings:', e);
+    console.error('Failed to save settings to localStorage:', e);
   }
+  // Persist to server database
+  try {
+    await fetch('/api/trpc/settings.set', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ "0": { json: { key: 'facebookAccessToken', value: settings.facebookAccessToken } } }),
+    });
+    await fetch('/api/trpc/settings.set', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ "0": { json: { key: 'catalogs', value: JSON.stringify(settings.catalogs) } } }),
+    });
+    await fetch('/api/trpc/settings.set', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ "0": { json: { key: 'accessKey', value: settings.accessKey } } }),
+    });
+  } catch (e) {
+    console.error('Failed to persist settings to server:', e);
+  }
+};
+
+/**
+ * Load settings from server database and update local cache
+ */
+export const loadSettingsFromServer = async (): Promise<AppSettings> => {
+  try {
+    const response = await fetch('/api/trpc/settings.getAll', {
+      method: 'GET',
+      credentials: 'include',
+    });
+    const data = await response.json();
+    const result = data?.result?.data?.json;
+    if (result) {
+      const settings: AppSettings = {
+        facebookAccessToken: result.facebookAccessToken || DEFAULT_SETTINGS.facebookAccessToken,
+        catalogs: result.catalogs ? JSON.parse(result.catalogs) : DEFAULT_SETTINGS.catalogs,
+        accessKey: result.accessKey || DEFAULT_SETTINGS.accessKey,
+      };
+      _cachedSettings = { ...settings };
+      localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(settings));
+      return settings;
+    }
+  } catch (e) {
+    console.error('Failed to load settings from server:', e);
+  }
+  return loadSettings();
 };
 
 /**
@@ -107,5 +166,52 @@ export const validateAccessToken = async (accessToken: string): Promise<{ valid:
     return { valid: true, message: `Token valid. User: ${data.name || data.id}` };
   } catch (e: any) {
     return { valid: false, message: e.message || 'Failed to validate token' };
+  }
+};
+
+/**
+ * Save an upload record to the database
+ */
+export const saveUploadRecord = async (record: {
+  catalogId: string;
+  retailerId: string;
+  productName: string;
+  productImageUrl?: string;
+  video4x5Download?: string;
+  video4x5Embed?: string;
+  video9x16Download?: string;
+  video9x16Embed?: string;
+  clientName: string;
+  uploadedBy?: string;
+}): Promise<boolean> => {
+  try {
+    const response = await fetch('/api/trpc/uploads.create', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ "0": { json: record } }),
+    });
+    const data = await response.json();
+    return !!data?.result?.data?.json;
+  } catch (e) {
+    console.error('Failed to save upload record:', e);
+    return false;
+  }
+};
+
+/**
+ * Get upload records for a specific catalog from the database
+ */
+export const getUploadRecords = async (catalogId: string): Promise<any[]> => {
+  try {
+    const response = await fetch(`/api/trpc/uploads.listByCatalog?input=${encodeURIComponent(JSON.stringify({ "0": { json: { catalogId } } }))}`, {
+      method: 'GET',
+      credentials: 'include',
+    });
+    const data = await response.json();
+    return data?.result?.data?.json || [];
+  } catch (e) {
+    console.error('Failed to get upload records:', e);
+    return [];
   }
 };

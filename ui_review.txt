@@ -1,0 +1,13 @@
+Admin Panel UI Review:
+1. Token section looks good - green "儲存 Token" and blue "驗證 Token" buttons are equal width
+2. Catalog management section: "新增目錄" input + "+ 新增" button - the button looks grayed out/disabled
+3. The "+ 新增" button needs better styling - it appears too faded
+4. Overall Apple HIG design is applied correctly - white cards, rounded corners, proper spacing
+5. Footer with logos showing correctly
+
+Main Page UI Review:
+1. "系統設定" button with gear icon and red dot indicator - working
+2. "CPAS 目錄" shows warning "請先輸入 Access Token" - correct behavior
+3. Input fields have proper Apple-style rounded corners
+4. "讀取商品" button is properly styled but grayed out (disabled state)
+5. Footer links and logos are correct

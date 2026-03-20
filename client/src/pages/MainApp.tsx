@@ -13,7 +13,7 @@ import {
     MASTER_GOOGLE_SHEET_ID, SHEET_TAB_NAME, GOOGLE_APPS_SCRIPT_URL,
     SESSION_DATA_KEY, INTRO_GUIDE_KEY, SHEET_DATA_HEADER
 } from '@/constants';
-import { loadSettings, type CatalogConfig } from '@/settingsStore';
+import { loadSettings, saveSettings, fetchCatalogName, validateAccessToken, loadSettingsFromServer, saveUploadRecord, getUploadRecords, type CatalogConfig, type AppSettings } from '@/settingsStore';
 import type { Product, ProductSet, Catalog, HoveredImage, ProductVideos, VideoType, ToastMessage, UploadedVideo, VideoFilterType } from '@/types';
 import { apiFetch, fetchAllPages } from '@/api';
 import { getColumnLetter } from '@/lib/helpers';
@@ -58,21 +58,110 @@ export const MainApp = () => {
   const [configuredCatalogs, setConfiguredCatalogs] = useState<CatalogConfig[]>([]);
   const [fbAccessToken, setFbAccessToken] = useState<string>('');
 
-  // Load settings on mount
+  // ===== Inline settings management state =====
+  const [showSettings, setShowSettings] = useState(false);
+  const [tokenInput, setTokenInput] = useState('');
+  const [showToken, setShowToken] = useState(false);
+  const [isValidatingToken, setIsValidatingToken] = useState(false);
+  const [tokenStatus, setTokenStatus] = useState<{ type: 'success' | 'error' | null; message: string }>({ type: null, message: '' });
+  const [newCatalogId, setNewCatalogId] = useState('');
+  const [isAddingCatalog, setIsAddingCatalog] = useState(false);
+  const [catalogError, setCatalogError] = useState<string | null>(null);
+  const [isSaved, setIsSaved] = useState(false);
+
+  // Load settings on mount — first from localStorage (fast), then from server (authoritative)
   useEffect(() => {
     const settings = loadSettings();
     setConfiguredCatalogs(settings.catalogs);
     setFbAccessToken(settings.facebookAccessToken);
+    setTokenInput(settings.facebookAccessToken);
+    // Then load from server to get the latest shared settings
+    loadSettingsFromServer().then(serverSettings => {
+      setConfiguredCatalogs(serverSettings.catalogs);
+      setFbAccessToken(serverSettings.facebookAccessToken);
+      setTokenInput(serverSettings.facebookAccessToken);
+    }).catch(console.error);
   }, []);
 
   // Refresh settings when returning to input view
   useEffect(() => {
     if (view === 'input') {
-      const settings = loadSettings();
-      setConfiguredCatalogs(settings.catalogs);
-      setFbAccessToken(settings.facebookAccessToken);
+      loadSettingsFromServer().then(serverSettings => {
+        setConfiguredCatalogs(serverSettings.catalogs);
+        setFbAccessToken(serverSettings.facebookAccessToken);
+        setTokenInput(serverSettings.facebookAccessToken);
+      }).catch(console.error);
     }
   }, [view]);
+
+  // ===== Inline settings handlers =====
+  const handleSaveToken = useCallback(() => {
+    const settings = loadSettings();
+    const updated = { ...settings, facebookAccessToken: tokenInput };
+    saveSettings(updated);
+    setFbAccessToken(tokenInput);
+    setIsSaved(true);
+    setTimeout(() => setIsSaved(false), 2000);
+  }, [tokenInput]);
+
+  const handleValidateToken = useCallback(async () => {
+    if (!tokenInput) {
+      setTokenStatus({ type: 'error', message: t('tokenRequired') });
+      return;
+    }
+    setIsValidatingToken(true);
+    setTokenStatus({ type: null, message: '' });
+    try {
+      const result = await validateAccessToken(tokenInput);
+      setTokenStatus({ type: result.valid ? 'success' : 'error', message: result.message });
+    } catch (e: any) {
+      setTokenStatus({ type: 'error', message: e.message });
+    } finally {
+      setIsValidatingToken(false);
+    }
+  }, [tokenInput, t]);
+
+  const handleAddCatalog = useCallback(async () => {
+    const trimmedId = newCatalogId.trim();
+    if (!trimmedId) {
+      setCatalogError(t('catalogIdRequired'));
+      return;
+    }
+    const currentToken = tokenInput || fbAccessToken;
+    if (!currentToken) {
+      setCatalogError(t('tokenRequiredForCatalog'));
+      return;
+    }
+    if (configuredCatalogs.some(c => c.id === trimmedId)) {
+      setCatalogError(t('catalogAlreadyExists'));
+      return;
+    }
+    setIsAddingCatalog(true);
+    setCatalogError(null);
+    try {
+      const name = await fetchCatalogName(trimmedId, currentToken);
+      const newCatalog: CatalogConfig = { id: trimmedId, name, addedAt: new Date().toISOString() };
+      const settings = loadSettings();
+      const updated = { ...settings, catalogs: [...settings.catalogs, newCatalog] };
+      saveSettings(updated);
+      setConfiguredCatalogs(updated.catalogs);
+      setNewCatalogId('');
+    } catch (e: any) {
+      setCatalogError(`${t('fetchCatalogFailed')}: ${e.message}`);
+    } finally {
+      setIsAddingCatalog(false);
+    }
+  }, [newCatalogId, tokenInput, fbAccessToken, configuredCatalogs, t]);
+
+  const handleRemoveCatalog = useCallback((catalogIdToRemove: string) => {
+    const settings = loadSettings();
+    const updated = { ...settings, catalogs: settings.catalogs.filter(c => c.id !== catalogIdToRemove) };
+    saveSettings(updated);
+    setConfiguredCatalogs(updated.catalogs);
+    if (catalogId === catalogIdToRemove) {
+      setCatalogId('');
+    }
+  }, [catalogId]);
 
   const addToast = useCallback((message: string, type: ToastMessage['type'] = 'info') => {
     const id = toastIdRef.current++;
@@ -216,58 +305,34 @@ export const MainApp = () => {
     }
   }, [googleAccessToken, isGapiClientReady, handleLogout]);
 
-  const writeDataToSheet = async (product: Product, video: UploadedVideo, videoType: VideoType) => {
-    if (GOOGLE_APPS_SCRIPT_URL.includes("YOUR_APPS_SCRIPT_URL_HERE")) {
-        const errorMsg = "Configuration error: Google Apps Script URL is not set in index.tsx. Please ask the administrator to configure it.";
-        addToast(errorMsg, 'error');
-        setUploadedVideos(prev => ({ ...prev, [product.retailer_id]: { ...prev[product.retailer_id], [videoType]: { ...video, saveError: errorMsg } }}));
-        return;
-    }
-    if (!googleAccessToken) {
-        const errorMsg = "Cannot write to sheet: Google user not logged in.";
-        addToast(errorMsg, 'error');
-        setUploadedVideos(prev => ({ ...prev, [product.retailer_id]: { ...prev[product.retailer_id], [videoType]: { ...video, saveError: errorMsg } }}));
-        return;
-    }
-    
+  const writeDataToDatabase = async (product: Product, video: UploadedVideo, videoType: VideoType) => {
     const currentStateOfThisProduct = uploadedVideos[product.retailer_id] || {};
     const newVideosForProduct = { ...currentStateOfThisProduct, [videoType]: video };
     const masterVideo = newVideosForProduct.master;
     const nineBySixteenVideo = newVideosForProduct.nineBySixteen;
 
-    const rowData = [
-        catalogId, product.retailer_id, product.name, product.image_url,
-        masterVideo?.downloadLink || '', masterVideo?.embedLink || '',
-        nineBySixteenVideo?.downloadLink || '', nineBySixteenVideo?.embedLink || '',
-        clientName,
-        new Date().toISOString(),
-        userEmail || 'N/A',
-    ];
-
-    const payload = {
-      retailerId: product.retailer_id,
-      rowData: rowData,
-    };
-
     try {
-        const response = await fetch(GOOGLE_APPS_SCRIPT_URL, {
-            method: 'POST',
-            mode: 'cors',
-            redirect: 'follow',
-            headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-            body: JSON.stringify(payload),
+        const success = await saveUploadRecord({
+            catalogId,
+            retailerId: product.retailer_id,
+            productName: product.name,
+            productImageUrl: product.image_url,
+            video4x5Download: masterVideo?.downloadLink || '',
+            video4x5Embed: masterVideo?.embedLink || '',
+            video9x16Download: nineBySixteenVideo?.downloadLink || '',
+            video9x16Embed: nineBySixteenVideo?.embedLink || '',
+            clientName,
+            uploadedBy: userEmail || 'N/A',
         });
 
-        const result = await response.json();
-
-        if (result.status === 'success') {
+        if (success) {
             addToast(t('recordSavedSuccess'), 'success');
             setUploadedVideos(prev => ({ ...prev, [product.retailer_id]: { ...prev[product.retailer_id], [videoType]: { ...video, saveError: undefined }}}));
         } else {
-            throw new Error(result.message || 'The Apps Script API reported an unknown failure.');
+            throw new Error('Failed to save record to database.');
         }
     } catch (err: any) {
-        const saveError = `Failed to save record to Sheet. Error: ${err.message}`;
+        const saveError = `Failed to save record. Error: ${err.message}`;
         addToast(saveError, 'error');
         setUploadedVideos(prev => ({ ...prev, [product.retailer_id]: { ...prev[product.retailer_id], [videoType]: { ...video, saveError }}}));
     }
@@ -279,102 +344,59 @@ export const MainApp = () => {
     }
   };
 
-  const syncVideosFromSheet = useCallback(async () => {
-    if (!googleAccessToken || !isGapiClientReady) {
+  const syncVideosFromDatabase = useCallback(async () => {
+    if (!catalogId) {
         setUploadedVideos({});
-        return;
-    }
-    if (MASTER_GOOGLE_SHEET_ID.includes("YOUR_GOOGLE_SHEET_ID_HERE")) {
-        setError("Please configure the Master Google Sheet ID in index.tsx.");
         return;
     }
     
     setIsSyncing(true);
     setError(null);
     try {
-        gapi.client.setToken({ access_token: googleAccessToken });
-        const lastColumn = getColumnLetter(SHEET_DATA_HEADER.length);
-        const rangeToFetch = `${SHEET_TAB_NAME}!A:${lastColumn}`;
-        
-        const response = await gapi.client.sheets.spreadsheets.values.get({
-            spreadsheetId: MASTER_GOOGLE_SHEET_ID,
-            range: rangeToFetch,
-        });
-        
-        const rows = response.result.values;
+        const records = await getUploadRecords(catalogId);
 
-        if (rows && rows.length > 0) {
-            const header = rows[0].map((h: any) => (h || '').trim());
-            
-            const retailerIdIndex = header.indexOf('Retailer ID');
-            const masterDownloadLinkIndex = header.indexOf('4x5 Download');
-            const masterEmbedLinkIndex = header.indexOf('4x5 Video Embed URL');
-            const nineBySixteenDownloadLinkIndex = header.indexOf('9x16 Download');
-            const nineBySixteenEmbedLinkIndex = header.indexOf('9x16 Video Embed URL');
-            const productNameIndex = header.indexOf('Product Name');
+        if (records && records.length > 0) {
+            const syncedVideos: Record<string, ProductVideos> = {};
+            for (const record of records) {
+                const cleanRetailerId = String(record.retailerId).trim();
+                const productVideos: ProductVideos = {};
 
-            const missingRequiredHeaders = [];
-            if (retailerIdIndex === -1) missingRequiredHeaders.push('Retailer ID');
-            if (masterDownloadLinkIndex === -1) missingRequiredHeaders.push('4x5 Download');
-            if (masterEmbedLinkIndex === -1) missingRequiredHeaders.push('4x5 Video Embed URL');
-
-            if (missingRequiredHeaders.length > 0) {
-                 const errorMsg = `Could not find required columns in Google Sheet: ${missingRequiredHeaders.join(', ')}. Please check the header's format.`;
-                 setError(errorMsg);
-                 setUploadedVideos({});
-            } else {
-                const syncedVideos: Record<string, ProductVideos> = {};
-                for (let i = 1; i < rows.length; i++) {
-                    const row = rows[i];
-                    if (!row || row.length <= retailerIdIndex) continue;
-                    const retailerIdValue = row[retailerIdIndex];
-                    if (retailerIdValue) {
-                        const cleanRetailerId = String(retailerIdValue).trim();
-                        const productVideos: ProductVideos = {};
-
-                        if (row[masterDownloadLinkIndex] && row[masterEmbedLinkIndex]) {
-                            productVideos.master = {
-                                productName: productNameIndex > -1 ? (row[productNameIndex] || '') : '',
-                                downloadLink: row[masterDownloadLinkIndex] || '',
-                                embedLink: row[masterEmbedLinkIndex] || '',
-                                saveError: undefined,
-                                isProcessing: false,
-                            };
-                        }
-
-                        if (nineBySixteenDownloadLinkIndex > -1 && nineBySixteenEmbedLinkIndex > -1 && row[nineBySixteenDownloadLinkIndex] && row[nineBySixteenEmbedLinkIndex]) {
-                            productVideos.nineBySixteen = {
-                                productName: productNameIndex > -1 ? (row[productNameIndex] || '') : '',
-                                downloadLink: row[nineBySixteenDownloadLinkIndex] || '',
-                                embedLink: row[nineBySixteenEmbedLinkIndex] || '',
-                                saveError: undefined,
-                                isProcessing: false,
-                            };
-                        }
-
-                        if (Object.keys(productVideos).length > 0) {
-                            syncedVideos[cleanRetailerId] = productVideos;
-                        }
-                    }
+                if (record.video4x5Download && record.video4x5Embed) {
+                    productVideos.master = {
+                        productName: record.productName || '',
+                        downloadLink: record.video4x5Download || '',
+                        embedLink: record.video4x5Embed || '',
+                        saveError: undefined,
+                        isProcessing: false,
+                    };
                 }
-                setUploadedVideos(syncedVideos);
+
+                if (record.video9x16Download && record.video9x16Embed) {
+                    productVideos.nineBySixteen = {
+                        productName: record.productName || '',
+                        downloadLink: record.video9x16Download || '',
+                        embedLink: record.video9x16Embed || '',
+                        saveError: undefined,
+                        isProcessing: false,
+                    };
+                }
+
+                if (Object.keys(productVideos).length > 0) {
+                    syncedVideos[cleanRetailerId] = productVideos;
+                }
             }
+            setUploadedVideos(syncedVideos);
         } else {
             setUploadedVideos({});
         }
-    } catch (sheetError: any) {
-        const message = sheetError.result?.error?.message || sheetError.message || "An unknown error occurred.";
-        if (message.toLowerCase().includes('token')) {
-            setError("Your Google session may have expired. Please log in again.");
-            handleLogout();
-        } else {
-            setError(`Could not sync video data via API. Ensure you have at least 'Viewer' access to the sheet. Error: ${message}`);
-        }
+    } catch (dbError: any) {
+        const message = dbError.message || "An unknown error occurred.";
+        setError(`Could not sync video data from database. Error: ${message}`);
         setUploadedVideos({});
     } finally {
         setIsSyncing(false);
     }
-  }, [googleAccessToken, isGapiClientReady, handleLogout]);
+  }, [catalogId]);
 
     useEffect(() => {
         const PROCESSING_TIMEOUT_MS = 5 * 60 * 1000;
@@ -412,7 +434,6 @@ export const MainApp = () => {
         return; 
     }
     if (GOOGLE_CLIENT_ID.includes("YOUR_GOOGLE_CLIENT_ID")) { setError("Please replace the placeholder Google Client ID in index.tsx."); return; }
-    if (MASTER_GOOGLE_SHEET_ID.includes("YOUR_GOOGLE_SHEET_ID_HERE")) { setError("Please configure the Master Google Sheet ID in index.tsx."); return; }
     if (!catalogId || !clientName || !accessKey) { 
         setError("Please fill all required fields: Catalog, Client Name, and Access Key."); 
         return; 
@@ -516,9 +537,9 @@ export const MainApp = () => {
     };
 
     fetchViewData();
-    syncVideosFromSheet();
+    syncVideosFromDatabase();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [view, selectedSet, catalogId, syncVideosFromSheet, fbAccessToken]);
+  }, [view, selectedSet, catalogId, syncVideosFromDatabase, fbAccessToken]);
 
   const handleUploadSuccess = (product: Product, video: Omit<UploadedVideo, 'saveError' | 'productName' | 'isProcessing' | 'uploadTimestamp'>, videoType: VideoType) => {
     if (!userEmail) {
@@ -539,11 +560,11 @@ export const MainApp = () => {
             [videoType]: completeVideoData
         }
     }));
-    writeDataToSheet(product, completeVideoData, videoType);
+    writeDataToDatabase(product, completeVideoData, videoType);
   };
   
   const handleRetrySave = (product: Product, video: UploadedVideo, videoType: VideoType) => {
-      writeDataToSheet(product, video, videoType);
+      writeDataToDatabase(product, video, videoType);
   };
   
   const handleBulkUploadSuccess = (video: Omit<UploadedVideo, 'saveError' | 'productName' | 'isProcessing' | 'uploadTimestamp'>, videoType: VideoType) => {
@@ -648,10 +669,11 @@ export const MainApp = () => {
 
   const isGoogleReady = isGapiClientReady && !!googleTokenClient;
 
-  // ===== INPUT VIEW — Now uses dropdown for catalog selection =====
+  // ===== INPUT VIEW — Integrated settings + catalog selection =====
   if (view === "input") {
     const allFieldsFilled = catalogId && clientName && accessKey;
     const hasCatalogs = configuredCatalogs.length > 0;
+    const hasToken = !!fbAccessToken;
     
     return (
       <main className="container">
@@ -663,8 +685,102 @@ export const MainApp = () => {
             </div>
             <LanguageSwitcher />
           </header>
+
+          {/* ===== Settings Toggle ===== */}
+          <div className="settings-toggle-section">
+            <button
+              className={`settings-toggle-btn ${showSettings ? 'active' : ''}`}
+              onClick={() => setShowSettings(!showSettings)}
+            >
+              <span className="settings-toggle-icon">{showSettings ? '▲' : '⚙️'}</span>
+              <span>{t('systemSettings')}</span>
+              {hasToken && <span className="settings-status-dot green"></span>}
+              {!hasToken && <span className="settings-status-dot red"></span>}
+            </button>
+          </div>
+
+          {/* ===== Inline Settings Panel ===== */}
+          {showSettings && (
+            <div className="inline-settings-panel">
+              {/* Token Section */}
+              <div className="inline-settings-group">
+                <label htmlFor="fbTokenInline">{t('fbAccessToken')}</label>
+                <div className="inline-token-row">
+                  <input
+                    id="fbTokenInline"
+                    type={showToken ? 'text' : 'password'}
+                    value={tokenInput}
+                    onChange={(e) => { setTokenInput(e.target.value); setTokenStatus({ type: null, message: '' }); setIsSaved(false); }}
+                    placeholder={t('enterAccessToken')}
+                    className="inline-token-input"
+                  />
+                  <button
+                    onClick={() => setShowToken(!showToken)}
+                    className="inline-icon-btn"
+                    title={showToken ? t('hideToken') : t('showToken')}
+                  >
+                    {showToken ? '🙈' : '👁️'}
+                  </button>
+                </div>
+                <div className="inline-btn-row">
+                  <button onClick={handleSaveToken} className="inline-action-btn save">
+                    {isSaved ? `✓ ${t('saved')}` : t('saveToken')}
+                  </button>
+                  <button onClick={handleValidateToken} disabled={isValidatingToken} className="inline-action-btn validate">
+                    {isValidatingToken ? '...' : t('validateToken')}
+                  </button>
+                </div>
+                {tokenStatus.type && (
+                  <p className={tokenStatus.type === 'success' ? 'success-text-sm' : 'error-text-sm'}>
+                    {tokenStatus.message}
+                  </p>
+                )}
+              </div>
+
+              {/* Add Catalog Section */}
+              <div className="inline-settings-group">
+                <label htmlFor="newCatalogInline">{t('addNewCatalog')}</label>
+                <div className="inline-catalog-row">
+                  <input
+                    id="newCatalogInline"
+                    type="text"
+                    value={newCatalogId}
+                    onChange={(e) => { setNewCatalogId(e.target.value.trim()); setCatalogError(null); }}
+                    placeholder={t('enterCatalogId')}
+                    onKeyDown={(e) => { if (e.key === 'Enter') handleAddCatalog(); }}
+                    className="inline-catalog-input"
+                  />
+                  <button onClick={handleAddCatalog} disabled={isAddingCatalog || !newCatalogId.trim()} className="inline-action-btn add">
+                    {isAddingCatalog ? '...' : `+ ${t('addCatalog')}`}
+                  </button>
+                </div>
+                {catalogError && <p className="error-text-sm">{catalogError}</p>}
+              </div>
+
+              {/* Configured Catalogs List */}
+              {configuredCatalogs.length > 0 && (
+                <div className="inline-catalogs-list">
+                  {configuredCatalogs.map(catalog => (
+                    <div key={catalog.id} className="inline-catalog-chip">
+                      <div className="inline-catalog-chip-info">
+                        <span className="inline-catalog-chip-name">{catalog.name}</span>
+                        <span className="inline-catalog-chip-id">{catalog.id}</span>
+                      </div>
+                      <button
+                        onClick={() => handleRemoveCatalog(catalog.id)}
+                        className="inline-catalog-chip-remove"
+                        title={t('removeCatalog')}
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
           
-          {/* Catalog Dropdown (replaces manual Catalog ID input) */}
+          {/* ===== Catalog Dropdown ===== */}
           <div className="form-group">
               <label htmlFor="catalogSelect">{t('catalogIdLabel')}</label>
               {hasCatalogs ? (
@@ -674,7 +790,6 @@ export const MainApp = () => {
                       onChange={(e) => {
                           const selectedId = e.target.value;
                           setCatalogId(selectedId);
-                          // Auto-fill client name from catalog name
                           const selected = configuredCatalogs.find(c => c.id === selectedId);
                           if (selected && !clientName) {
                               setClientName(selected.name);
@@ -691,7 +806,7 @@ export const MainApp = () => {
                   </select>
               ) : (
                   <div className="no-catalogs-notice">
-                      <p>{t('noCatalogsAvailable')}</p>
+                      <p>{!hasToken ? t('tokenRequired') : t('noCatalogsAvailable')}</p>
                   </div>
               )}
           </div>
@@ -704,7 +819,7 @@ export const MainApp = () => {
               <input id="accessKey" type="password" value={accessKey} onChange={(e) => setAccessKey(e.target.value.trim())} placeholder={t('accessKeyPlaceholder')} />
           </div>
 
-          <button onClick={handleFetchData} disabled={isLoading || !allFieldsFilled}>
+          <button className="fetch-btn" onClick={handleFetchData} disabled={isLoading || !allFieldsFilled}>
               {isLoading ? <div className="loader-small"></div> : t('fetchProducts')}
           </button>
           {error && <p className="error-text" role="alert">{error}</p>}
