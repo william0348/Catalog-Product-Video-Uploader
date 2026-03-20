@@ -66,13 +66,13 @@ export const GoogleDriveUploader = ({
             const folderId = await getDriveFolderId();
             
             const lastDotIndex = file.name.lastIndexOf('.');
-            const fileNameWithoutExtension = lastDotIndex !== -1 ? file.name.slice(0, lastDotIndex) : file.name;
             const fileExtension = lastDotIndex !== -1 ? file.name.slice(lastDotIndex) : '.mp4';
 
             const sanitizedRetailerId = retailerId.replace(/[^a-zA-Z0-9-_\.]/g, '_');
             const sanitizedCatalogId = catalogId.replace(/[^a-zA-Z0-9-_\.]/g, '_');
+            const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, ''); // YYYYMMDD
             
-            const fileName = `${fileNameWithoutExtension}-${sanitizedCatalogId}-${sanitizedRetailerId}${fileExtension}`;
+            const fileName = `${sanitizedCatalogId}_${sanitizedRetailerId}_${dateStr}${fileExtension}`;
 
             const metadata = { name: fileName, mimeType: file.type, parents: [folderId] };
 

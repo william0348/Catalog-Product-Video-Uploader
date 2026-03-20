@@ -72,3 +72,6 @@
 
 ## Phase 13: CSV Video URL 格式轉換
 - [x] CSV 匯出中的 video URL 轉換為 Google Drive 直接下載格式 (https://drive.google.com/uc?export=download&id={FILE_ID})
+
+## Phase 14: 上傳檔案命名格式
+- [x] 上傳到 Google Drive 的檔案名稱改為 目錄ID_零售商ID_日期 格式
