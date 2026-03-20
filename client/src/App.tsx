@@ -1,42 +1,60 @@
-import { Toaster } from "@/components/ui/sonner";
-import { TooltipProvider } from "@/components/ui/tooltip";
-import NotFound from "@/pages/NotFound";
-import { Route, Switch } from "wouter";
-import ErrorBoundary from "./components/ErrorBoundary";
-import { ThemeProvider } from "./contexts/ThemeContext";
-import Home from "./pages/Home";
+import { useState, useEffect, useContext } from "react";
+import { LanguageProvider, LanguageContext } from "@/contexts/LanguageContext";
+import { AdminPanel } from "@/pages/AdminPanel";
+import { TermsOfServicePage } from "@/pages/TermsOfServicePage";
+import { HomePage } from "@/pages/HomePage";
+import { MainApp } from "@/pages/MainApp";
 
-
-function Router() {
-  return (
-    <Switch>
-      <Route path={"/"} component={Home} />
-      <Route path={"/404"} component={NotFound} />
-      {/* Final fallback route */}
-      <Route component={NotFound} />
-    </Switch>
-  );
-}
-
-// NOTE: About Theme
-// - First choose a default theme according to your design style (dark or light bg), than change color palette in index.css
-//   to keep consistent foreground/background color across components
-// - If you want to make theme switchable, pass `switchable` ThemeProvider and use `useTheme` hook
+const PageRouter = () => {
+    const { t } = useContext(LanguageContext);
+    const [hash, setHash] = useState(window.location.hash.toLowerCase() || '#/');
+    
+    useEffect(() => {
+        const handleHashChange = () => {
+            setHash(window.location.hash.toLowerCase() || '#/');
+        };
+        window.addEventListener('hashchange', handleHashChange);
+        handleHashChange();
+        return () => window.removeEventListener('hashchange', handleHashChange);
+    }, []);
+    
+    useEffect(() => {
+        let title = 'CPAS Video Uploader';
+        switch (hash) {
+            case '#/admin':
+                title = `${t('adminPanel')} - CPAS Video Uploader`;
+                break;
+            case '#/terms':
+                title = `${t('termsOfService')} - CPAS Video Uploader`;
+                break;
+            case '#/home':
+                title = `${t('home')} - CPAS Video Uploader`;
+                break;
+        }
+        document.title = title;
+    }, [hash, t]);
+    
+    switch (hash) {
+        case '#/admin':
+            return <AdminPanel onBack={() => { window.location.hash = '#/home'; }} />;
+        case '#/terms':
+            return <TermsOfServicePage />;
+        case '#/home':
+            return <HomePage />;
+        case '#/app':
+        case '#/':
+        default:
+            return <MainApp />;
+    }
+};
 
 function App() {
-  return (
-    <ErrorBoundary>
-      <ThemeProvider
-        defaultTheme="light"
-        // switchable
-      >
-        <TooltipProvider>
-          <Toaster />
-          <Router />
-        </TooltipProvider>
-      </ThemeProvider>
-    </ErrorBoundary>
-  );
+    return (
+        <LanguageProvider>
+            <PageRouter />
+        </LanguageProvider>
+    );
 }
 
 export default App;
+export { App };
