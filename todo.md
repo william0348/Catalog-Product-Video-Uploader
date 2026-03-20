@@ -59,3 +59,6 @@
 - [x] 修復 settingsStore.ts tRPC 請求格式錯誤（settings.set 回傳 400）
 - [x] 修復 settings 無法儲存到資料庫的問題
 - [x] 將 Facebook API 呼叫改為透過後端代理（避免 CORS）
+
+## Phase 10: 帳號切換功能
+- [x] Google 登入要能更換帳號（不自動使用快取的帳號）

@@ -3252,3 +3252,122 @@ tbody tr.selected:hover td {
     opacity: 0.5;
     pointer-events: none;
 }
+
+/* ==================== Input View Header Right ==================== */
+.input-header-right {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+/* Google Account Info (Input View) */
+.google-account-info {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+}
+
+.google-account-email {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  background: rgba(0, 122, 255, 0.06);
+  padding: 6px 12px;
+  border-radius: var(--radius-sm);
+}
+
+.google-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  background: #4285F4;
+  color: white;
+  font-size: 12px;
+  font-weight: 700;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+
+.google-email-text {
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.switch-account-btn {
+  background: none;
+  border: 1px solid var(--gray-4);
+  color: var(--system-blue);
+  font-size: 12px;
+  font-weight: 500;
+  padding: 4px 12px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  width: auto !important;
+  flex: 0 0 auto !important;
+}
+
+.switch-account-btn:hover {
+  background: rgba(0, 122, 255, 0.06);
+  border-color: var(--system-blue);
+}
+
+/* Google Login Button (Input View) */
+.google-login-button-input {
+  background-color: var(--google-blue-color, #4285F4);
+  color: white;
+  border: none;
+  padding: 8px 18px;
+  border-radius: var(--radius-sm);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+  white-space: nowrap;
+  width: auto !important;
+  flex: 0 0 auto !important;
+}
+
+.google-login-button-input:hover:not(:disabled) {
+  background-color: var(--google-blue-hover-color, #3367D6);
+}
+
+.google-login-button-input:disabled {
+  background-color: #a1c3f9;
+  cursor: not-allowed;
+}
+
+/* Mobile responsive */
+@media (max-width: 480px) {
+  .input-view-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  
+  .input-header-right {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  
+  .google-account-info {
+    flex-direction: row;
+    align-items: center;
+    gap: 8px;
+  }
+  
+  .google-email-text {
+    max-width: 140px;
+  }
+}

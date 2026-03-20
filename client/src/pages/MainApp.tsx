@@ -216,12 +216,22 @@ export const MainApp = () => {
   }, []);
 
   const handleLogout = useCallback(() => {
+    // Revoke the Google token so the account chooser appears on next login
+    const token = googleAccessToken || localStorage.getItem(GOOGLE_AUTH_TOKEN_KEY);
+    if (token && window.google?.accounts?.oauth2) {
+      window.google.accounts.oauth2.revoke(token, () => {
+        console.log('[Google] Token revoked');
+      });
+    }
     localStorage.removeItem(GOOGLE_AUTH_TOKEN_KEY);
     sessionStorage.removeItem('google_drive_folder_id');
+    if (window.gapi?.client) {
+      gapi.client.setToken(null);
+    }
     setGoogleAccessToken(null);
     setUserEmail(null);
     setUploadedVideos({});
-  }, []);
+  }, [googleAccessToken]);
   
   useEffect(() => {
       const checkGapi = () => {
@@ -680,7 +690,7 @@ export const MainApp = () => {
         <div className="card">
           <header className="input-view-header">
             <div className="input-header-text">
-                <div style={{ display: 'flex', gap: '12px', marginBottom: '4px' }}>
+                <div style={{ display: 'flex', gap: '12px', marginBottom: '4px', flexWrap: 'wrap', alignItems: 'center' }}>
                     <button onClick={() => { window.location.hash = '#/home'; }} className="back-nav-button">
                         ← {t('back') || 'Back'}
                     </button>
@@ -691,7 +701,24 @@ export const MainApp = () => {
                 <h1>{t('homeHeader')}</h1>
                 <p>{t('inputHeader')}</p>
             </div>
-            <LanguageSwitcher />
+            <div className="input-header-right">
+              {googleAccessToken && userEmail ? (
+                <div className="google-account-info">
+                  <div className="google-account-email">
+                    <span className="google-icon">G</span>
+                    <span className="google-email-text">{userEmail}</span>
+                  </div>
+                  <button onClick={handleLogout} className="switch-account-btn" title={t('switchAccount') || '切換帳號'}>
+                    {t('switchAccount') || '切換帳號'}
+                  </button>
+                </div>
+              ) : (
+                <button onClick={handleGoogleLogin} disabled={!isGoogleReady} className="google-login-button-input">
+                  {isGapiClientReady ? (t('loginWithGoogle') || '使用 Google 登入') : (t('initializing') || '初始化中...')}
+                </button>
+              )}
+              <LanguageSwitcher />
+            </div>
           </header>
 
           {/* ===== Settings Toggle ===== */}

@@ -127,6 +127,7 @@ export const translations = {
         deleteRecord: "Delete",
         deleteConfirmTitle: "Delete Record",
         deleteConfirmMessage: "Are you sure you want to delete this record? This action cannot be undone.",
+        switchAccount: "Switch Account",
     },
     'zh-TW': {
         // General
@@ -255,5 +256,6 @@ export const translations = {
         deleteRecord: "刪除",
         deleteConfirmTitle: "刪除記錄",
         deleteConfirmMessage: "確定要刪除此記錄嗎？此操作無法復原。",
+        switchAccount: "切換帳號",
     }
 };
