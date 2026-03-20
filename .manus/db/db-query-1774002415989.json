@@ -1,0 +1,16 @@
+{
+  "query": "SELECT video4x5Download, video4x5Embed, video9x16Download, video9x16Embed FROM upload_records LIMIT 3;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway03.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 2i7zmHsYDkLMCtd.517e86959c58 --database nN7fRv522pr6qmVvUdeAQB --execute SELECT video4x5Download, video4x5Embed, video9x16Download, video9x16Embed FROM upload_records LIMIT 3;",
+  "rows": [
+    {
+      "video4x5Download": "https://drive.google.com/uc?export=download&id=1M9kzs4wO2saVYPpj7ViYMFCBVYyz3_X0",
+      "video4x5Embed": "https://drive.google.com/file/d/1M9kzs4wO2saVYPpj7ViYMFCBVYyz3_X0/preview",
+      "video9x16Download": "",
+      "video9x16Embed": ""
+    }
+  ],
+  "messages": [],
+  "stdout": "video4x5Download\tvideo4x5Embed\tvideo9x16Download\tvideo9x16Embed\nhttps://drive.google.com/uc?export=download&id=1M9kzs4wO2saVYPpj7ViYMFCBVYyz3_X0\thttps://drive.google.com/file/d/1M9kzs4wO2saVYPpj7ViYMFCBVYyz3_X0/preview\t\t\n",
+  "stderr": "",
+  "execution_time_ms": 1572
+}

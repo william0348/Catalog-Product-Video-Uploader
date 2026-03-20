@@ -66,3 +66,9 @@
 ## Phase 11: 文字調整
 - [x] 標題從 "RhinoShield x Meta 影片上傳工具" 改為 "Meta 影片上傳工具"
 - [x] 目錄標籤從 "CPAS 目錄" 改為 "選擇目錄"
+
+## Phase 12: CSV URL 顯示
+- [x] 在管理面板「系統設定」頁籤中顯示每個目錄的 CSV 匯出 URL
+
+## Phase 13: CSV Video URL 格式轉換
+- [x] CSV 匯出中的 video URL 轉換為 Google Drive 直接下載格式 (https://drive.google.com/uc?export=download&id={FILE_ID})

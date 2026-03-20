@@ -51,8 +51,8 @@ async function startServer() {
       for (const record of records) {
         const row = [
           record.retailerId,
-          record.video4x5Embed || "",
-          record.video9x16Embed || "",
+          record.video4x5Download || "",
+          record.video9x16Download || "",
           clientName,
           `"${(record.productName || "").replace(/"/g, '""')}"`
         ];
