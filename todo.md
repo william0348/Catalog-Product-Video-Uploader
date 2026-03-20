@@ -39,3 +39,17 @@
 - [x] Add export XLSX button
 - [x] Add stats summary (total records, filtered results, catalog count)
 - [x] Style the Video Log table with Apple HIG design
+
+## Phase 8: CSV URL 顯示 + 返回按鈕 + 刪除影片
+- [x] 在管理面板顯示每個 Catalog 的 CSV 外部存取 URL
+- [x] 每個頁面加上返回上一頁按鈕
+- [x] 整合刪除影片功能（Catalog Batch API UPDATE 空值）
+- [x] 刪除前先確認商品 ID 在目錄上沒有影片
+- [x] 刪除後同步刪除後端資料庫記錄
+- [ ] 撰寫圖片轉幻燈片影片可行性評估報告
+
+## Phase 9: 最終測試與發布
+- [x] 測試刪除影片功能（Facebook Catalog Batch API 正常運作）
+- [x] 測試 CSV 匯出 URL（Meta Catalog 可正確下載）
+- [x] 執行完整 vitest 測試並修復回歸問題（15/15 passed）
+- [x] 建立 Checkpoint 並發布

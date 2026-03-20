@@ -8,7 +8,12 @@ export const TermsOfServicePage = () => {
     return (
         <main className="container data-view" style={{maxWidth: '800px'}}>
           <div className="card static-page-card">
-            <header><h1>{t('termsOfService')}</h1></header>
+            <header>
+                <button onClick={() => { window.history.back(); }} className="back-nav-button" style={{ marginBottom: '12px' }}>
+                    ← {t('back') || 'Back'}
+                </button>
+                <h1>{t('termsOfService')}</h1>
+            </header>
             <p><strong>Last Updated:</strong> August 1, 2024</p>
             <p>Please read these Terms of Service ("Terms", "Terms of Service") carefully before using the "CPAS Catalog Video Uploader" application (the "Service") operated by us.</p>
             <p>Your access to and use of the Service is conditioned on your acceptance of and compliance with these Terms. These Terms apply to all visitors, users, and others who access or use the Service.</p>

@@ -680,6 +680,14 @@ export const MainApp = () => {
         <div className="card">
           <header className="input-view-header">
             <div className="input-header-text">
+                <div style={{ display: 'flex', gap: '12px', marginBottom: '4px' }}>
+                    <button onClick={() => { window.location.hash = '#/home'; }} className="back-nav-button">
+                        ← {t('back') || 'Back'}
+                    </button>
+                    <button onClick={() => { window.location.hash = '#/admin'; }} className="back-nav-button" style={{ background: 'var(--color-fill-tertiary)', color: 'var(--color-label-secondary)' }}>
+                        ⚙️ {t('adminPanel')}
+                    </button>
+                </div>
                 <h1>{t('homeHeader')}</h1>
                 <p>{t('inputHeader')}</p>
             </div>
@@ -840,6 +848,9 @@ export const MainApp = () => {
         <ImagePreview image={hoveredImage} />
         <header className="data-header">
             <div className="header-left">
+                <button onClick={resetAndGoBack} className="back-nav-button" style={{ marginRight: '8px' }}>
+                    ←
+                </button>
                 <img src="./lion_logo.png" alt="Lion Logo" className="header-logo" />
                 <div className="header-title-group">
                     <h1>{catalogName}</h1>

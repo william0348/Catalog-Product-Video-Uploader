@@ -125,6 +125,13 @@ export async function getAllUploadRecords(): Promise<UploadRecord[]> {
   return db.select().from(uploadRecords).orderBy(uploadRecords.uploadTimestamp);
 }
 
+export async function getUploadRecordById(id: number): Promise<UploadRecord | undefined> {
+  const db = await getDb();
+  if (!db) return undefined;
+  const rows = await db.select().from(uploadRecords).where(eq(uploadRecords.id, id)).limit(1);
+  return rows[0];
+}
+
 export async function deleteUploadRecord(id: number): Promise<void> {
   const db = await getDb();
   if (!db) return;

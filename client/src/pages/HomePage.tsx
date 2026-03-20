@@ -9,6 +9,11 @@ export const HomePage = () => {
         <main className="container">
             <div className="card">
                 <header className="home-header">
+                    <div className="admin-header-left">
+                        <button onClick={() => { window.location.hash = '#/app'; }} className="back-nav-button" title={t('back') || 'Back'}>
+                            ← {t('back') || 'Back'}
+                        </button>
+                    </div>
                     <h1>{t('homeHeader')}</h1>
                     <p>{t('homeSubheader')}</p>
                 </header>

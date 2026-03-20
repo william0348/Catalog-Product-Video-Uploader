@@ -1,0 +1,60 @@
+## Facebook Dynamic Media API - Video Deletion Research
+
+### Key Findings from Documentation:
+
+1. **Catalog Batch API endpoint**: POST `/{product_catalog_id}/items_batch`
+2. **Method for updating**: "UPDATE" method in the requests array
+3. **Video field**: `video` is an array of objects with `url` and optional `tag`
+
+### How to "delete" videos:
+- Use method "UPDATE" with an empty video array: `"video": []`
+- Or update with video URLs set to empty strings
+- The user mentioned: "刪除方式是上傳video0.url 裡面為空值"
+
+### Batch API Request Format:
+```json
+{
+  "access_token": "<ACCESS_TOKEN>",
+  "item_type": "PRODUCT_ITEM",
+  "requests": [
+    {
+      "method": "UPDATE",
+      "data": {
+        "id": "<retailer_id>",
+        "video": []
+      }
+    }
+  ]
+}
+```
+
+### Important Notes:
+- For UPDATE requests, set `allow_upsert` to `false` to prevent accidental creation
+- Max batch size: 5,000 items per request
+- Async processing returns a handle for status checking
+- Check status: GET `/{catalog_id}/check_batch_request_status?handle=<handle>`
+
+### CSV Feed approach (alternative):
+- In feed file, leave video[0].url empty for products to remove videos
+- Supplemental feed can also be used to update/remove videos
+
+### Product Item Image Fields (for slideshow feature):
+- `additional_image_cdn_urls`: list of CDN URLs for additional images
+- `additional_image_urls`: list of additional image URLs
+- `additional_images`: list of ProductImage objects
+- `images`: list of image URLs
+- `image_link`: main product image URL
+- Can query: GET /{product-item-id}?fields=images,additional_image_urls,image_link
+
+### Slideshow Video Generation Options:
+1. **FFmpeg (server-side)**: Free, open-source, supports transitions (xfade), text overlay, custom aspect ratios
+2. **Shotstack API**: Cloud-based, $49/mo, REST API, supports transitions, text overlays
+3. **Creatomate API**: Cloud-based, $39/mo, JSON template-based, transitions, text
+4. **JSON2Video**: Cloud-based, pay-per-video, REST API
+5. **Cloudinary**: Cloud-based, has slideshow generation feature
+6. **Canvas/Browser-based**: Use HTML5 Canvas + MediaRecorder API in browser
+
+### For our implementation:
+1. Backend API: POST to FB items_batch with method="UPDATE", video=[]
+2. Before deleting from DB, call FB API first
+3. After FB confirms, delete from our database

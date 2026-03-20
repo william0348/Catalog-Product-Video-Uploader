@@ -1,0 +1,9 @@
+{
+  "query": "SELECT * FROM app_settings;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway03.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 2i7zmHsYDkLMCtd.517e86959c58 --database nN7fRv522pr6qmVvUdeAQB --execute SELECT * FROM app_settings;",
+  "rows": [],
+  "messages": [],
+  "stdout": "",
+  "stderr": "",
+  "execution_time_ms": 1559
+}

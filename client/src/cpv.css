@@ -199,7 +199,7 @@ input[type="checkbox"] {
 
 /* ==================== Buttons (Apple HIG) ==================== */
 button {
-  width: 100%;
+  width: auto;
   padding: 12px 20px;
   background-color: var(--system-blue);
   color: white;
@@ -213,6 +213,12 @@ button {
   display: flex;
   justify-content: center;
   align-items: center;
+}
+
+/* Full-width buttons for main form actions */
+.fetch-btn,
+.settings-toggle-btn {
+  width: 100%;
   height: 48px;
   box-sizing: border-box;
   letter-spacing: -0.01em;
@@ -1672,7 +1678,7 @@ tbody tr.selected:hover td {
 .token-actions button {
   width: auto;
   height: auto;
-  flex: 1;
+  flex: none;
 }
 
 .save-token-button {
@@ -2893,4 +2899,356 @@ tbody tr.selected:hover td {
     width: 32px;
     height: 32px;
   }
+}
+
+
+/* ==================== Back Navigation Button ==================== */
+.back-nav-button {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 6px 14px;
+    border: none;
+    border-radius: 8px;
+    background: var(--gray-6);
+    color: var(--system-blue);
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    width: auto !important;
+    height: auto !important;
+}
+.back-nav-button:hover {
+    background: var(--gray-5);
+}
+
+/* ==================== Admin Header ==================== */
+.admin-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 16px;
+}
+.admin-header-left {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+.admin-header-left h1 {
+    margin: 0;
+}
+
+/* ==================== Delete Confirmation Modal ==================== */
+.delete-confirm-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.4);
+    backdrop-filter: blur(4px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+}
+.delete-confirm-modal {
+    background: var(--bg-secondary);
+    border-radius: 16px;
+    padding: 24px;
+    max-width: 440px;
+    width: 90%;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+}
+.delete-confirm-modal h3 {
+    font-size: 18px;
+    font-weight: 600;
+    margin: 0 0 12px 0;
+    color: var(--text-primary);
+}
+.delete-confirm-modal p {
+    font-size: 14px;
+    color: var(--text-secondary);
+    line-height: 1.5;
+    margin: 0;
+}
+.delete-confirm-actions {
+    display: flex;
+    gap: 12px;
+    margin-top: 20px;
+    justify-content: flex-end;
+}
+.cancel-delete-btn {
+    padding: 8px 20px !important;
+    border: 1px solid var(--separator-opaque) !important;
+    border-radius: 10px !important;
+    background: var(--bg-secondary) !important;
+    color: var(--text-primary) !important;
+    font-size: 14px !important;
+    font-weight: 500 !important;
+    cursor: pointer;
+    width: auto !important;
+    height: auto !important;
+}
+.cancel-delete-btn:hover {
+    background: var(--gray-6) !important;
+}
+.confirm-delete-btn {
+    padding: 8px 20px !important;
+    border: none !important;
+    border-radius: 10px !important;
+    background: var(--system-red) !important;
+    color: white !important;
+    font-size: 14px !important;
+    font-weight: 500 !important;
+    cursor: pointer;
+    width: auto !important;
+    height: auto !important;
+}
+.confirm-delete-btn:hover {
+    opacity: 0.9;
+}
+.confirm-delete-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+/* ==================== CSV URL Display ==================== */
+.csv-url-section {
+    margin-top: 16px;
+    padding: 16px;
+    background: var(--gray-6);
+    border-radius: var(--radius-md);
+}
+.csv-url-section h4 {
+    font-size: 14px;
+    font-weight: 600;
+    margin: 0 0 8px 0;
+    color: var(--text-primary);
+}
+.csv-url-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+    padding: 8px 12px;
+    background: var(--bg-secondary);
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--separator-opaque);
+}
+.csv-url-item:last-child {
+    margin-bottom: 0;
+}
+.csv-url-label {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-secondary);
+    white-space: nowrap;
+    min-width: 100px;
+}
+.csv-url-input {
+    flex: 1;
+    font-size: 12px !important;
+    padding: 6px 10px !important;
+    border: 1px solid var(--separator-opaque) !important;
+    border-radius: 6px !important;
+    background: var(--gray-6) !important;
+    color: var(--text-secondary) !important;
+    min-width: 0;
+    height: auto !important;
+    font-family: 'SF Mono', Monaco, monospace;
+}
+.copy-csv-btn {
+    padding: 6px 12px !important;
+    border: 1px solid var(--separator-opaque) !important;
+    border-radius: 6px !important;
+    background: var(--bg-secondary) !important;
+    color: var(--text-primary) !important;
+    cursor: pointer;
+    font-size: 13px !important;
+    width: auto !important;
+    height: auto !important;
+    flex-shrink: 0;
+    font-weight: 500 !important;
+}
+.copy-csv-btn:hover {
+    background: var(--gray-6) !important;
+}
+
+/* ==================== Catalogs Table ==================== */
+.catalogs-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 12px;
+    font-size: 14px;
+}
+.catalogs-table th {
+    text-align: left;
+    padding: 10px 12px;
+    font-weight: 600;
+    font-size: 12px;
+    color: var(--text-tertiary);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    border-bottom: 1px solid var(--separator-opaque);
+}
+.catalogs-table td {
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--separator);
+    vertical-align: middle;
+}
+.catalogs-table code {
+    font-size: 12px;
+    background: var(--gray-6);
+    padding: 2px 6px;
+    border-radius: 4px;
+}
+.catalog-actions {
+    display: flex;
+    gap: 6px;
+}
+.refresh-catalog-button,
+.remove-catalog-button {
+    padding: 4px 10px !important;
+    border: 1px solid var(--separator-opaque) !important;
+    border-radius: 6px !important;
+    background: var(--bg-secondary) !important;
+    cursor: pointer;
+    font-size: 14px !important;
+    width: auto !important;
+    height: auto !important;
+    color: var(--text-primary) !important;
+}
+.refresh-catalog-button:hover {
+    background: var(--gray-6) !important;
+}
+.remove-catalog-button {
+    color: var(--system-red) !important;
+}
+.remove-catalog-button:hover {
+    background: rgba(255, 59, 48, 0.1) !important;
+}
+
+/* ==================== Token Input Group ==================== */
+.token-input-group {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+.token-input {
+    flex: 1;
+}
+.toggle-visibility-button {
+    padding: 6px 12px !important;
+    border: 1px solid var(--separator-opaque) !important;
+    border-radius: 8px !important;
+    background: var(--bg-secondary) !important;
+    cursor: pointer;
+    font-size: 16px !important;
+    width: auto !important;
+    height: auto !important;
+    color: var(--text-primary) !important;
+}
+.token-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 8px;
+}
+.save-token-button {
+    padding: 8px 20px !important;
+    border: none !important;
+    border-radius: 10px !important;
+    background: var(--system-green) !important;
+    color: white !important;
+    font-size: 14px !important;
+    font-weight: 500 !important;
+    cursor: pointer;
+    width: auto !important;
+    height: auto !important;
+    flex: 0 0 auto !important;
+}
+.save-token-button:hover {
+    background: var(--system-green-hover) !important;
+}
+.validate-token-button {
+    padding: 8px 20px !important;
+    border: none !important;
+    border-radius: 10px !important;
+    background: var(--system-blue) !important;
+    color: white !important;
+    font-size: 14px !important;
+    font-weight: 500 !important;
+    cursor: pointer;
+    width: auto !important;
+    height: auto !important;
+    flex: 0 0 auto !important;
+}
+.validate-token-button:hover {
+    background: var(--system-blue-hover) !important;
+}
+
+/* ==================== Add Catalog Form ==================== */
+.add-catalog-input-group {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+.add-catalog-input-group input {
+    flex: 1;
+}
+.add-catalog-button {
+    padding: 8px 20px !important;
+    border: none !important;
+    border-radius: 10px !important;
+    background: var(--system-green) !important;
+    color: white !important;
+    font-size: 14px !important;
+    font-weight: 500 !important;
+    cursor: pointer;
+    width: auto !important;
+    height: auto !important;
+    white-space: nowrap;
+}
+.add-catalog-button:hover {
+    background: var(--system-green-hover) !important;
+}
+.add-catalog-button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* ==================== Settings Section ==================== */
+.settings-section {
+    background: var(--bg-secondary);
+    border-radius: 12px;
+    padding: 20px;
+    margin-bottom: 16px;
+    border: 1px solid var(--separator-opaque);
+}
+.settings-section h3 {
+    font-size: 16px;
+    font-weight: 600;
+    margin: 0 0 12px 0;
+    color: var(--text-primary);
+}
+.settings-manager h2 {
+    font-size: 20px;
+    font-weight: 600;
+    margin: 0 0 8px 0;
+}
+.settings-manager > .info-text {
+    margin-bottom: 16px;
+}
+
+.empty-catalogs {
+    text-align: center;
+    padding: 20px;
+    color: var(--text-tertiary);
+}
+
+/* ==================== Deleting state in table ==================== */
+.log-row.deleting {
+    opacity: 0.5;
+    pointer-events: none;
 }

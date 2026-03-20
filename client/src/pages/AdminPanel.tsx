@@ -20,6 +20,7 @@ const SettingsManager = ({ t }: { t: (key: string) => string }) => {
     const [catalogError, setCatalogError] = useState<string | null>(null);
     const [showToken, setShowToken] = useState(false);
     const [isSaved, setIsSaved] = useState(false);
+    const [copiedCsvUrl, setCopiedCsvUrl] = useState<string | null>(null);
 
     useEffect(() => {
         loadSettingsFromServer().then(s => setSettings(s));
@@ -123,6 +124,18 @@ const SettingsManager = ({ t }: { t: (key: string) => string }) => {
         }
     };
 
+    const getCsvUrl = (catalogId: string) => {
+        return `${window.location.origin}/api/export/csv/${catalogId}`;
+    };
+
+    const handleCopyCsvUrl = (catalogId: string) => {
+        const url = getCsvUrl(catalogId);
+        navigator.clipboard.writeText(url).then(() => {
+            setCopiedCsvUrl(catalogId);
+            setTimeout(() => setCopiedCsvUrl(null), 2000);
+        });
+    };
+
     return (
         <div className="settings-manager">
             <h2>{t('systemSettings')}</h2>
@@ -200,7 +213,7 @@ const SettingsManager = ({ t }: { t: (key: string) => string }) => {
                                 <tr>
                                     <th>{t('catalogId')}</th>
                                     <th>{t('catalogName')}</th>
-                                    <th>{t('addedDate')}</th>
+                                    <th>CSV URL</th>
                                     <th>{t('actions')}</th>
                                 </tr>
                             </thead>
@@ -209,7 +222,24 @@ const SettingsManager = ({ t }: { t: (key: string) => string }) => {
                                     <tr key={catalog.id}>
                                         <td><code>{catalog.id}</code></td>
                                         <td>{catalog.name}</td>
-                                        <td>{new Date(catalog.addedAt).toLocaleDateString()}</td>
+                                        <td className="csv-url-cell">
+                                            <div className="csv-url-group">
+                                                <input
+                                                    type="text"
+                                                    readOnly
+                                                    value={getCsvUrl(catalog.id)}
+                                                    className="csv-url-input"
+                                                    onClick={(e) => (e.target as HTMLInputElement).select()}
+                                                />
+                                                <button
+                                                    onClick={() => handleCopyCsvUrl(catalog.id)}
+                                                    className="copy-csv-btn"
+                                                    title="Copy CSV URL"
+                                                >
+                                                    {copiedCsvUrl === catalog.id ? '✓' : '📋'}
+                                                </button>
+                                            </div>
+                                        </td>
                                         <td className="catalog-actions">
                                             <button
                                                 onClick={() => handleRefreshCatalogName(catalog.id)}
@@ -275,6 +305,8 @@ const VideoLog = ({ t }: { t: (key: string) => string }) => {
     
     // Delete confirmation
     const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null);
+    const [isDeleting, setIsDeleting] = useState(false);
+    const [deleteError, setDeleteError] = useState<string | null>(null);
 
     // Available catalogs from settings
     const [catalogs, setCatalogs] = useState<CatalogConfig[]>([]);
@@ -309,19 +341,31 @@ const VideoLog = ({ t }: { t: (key: string) => string }) => {
         fetchRecords();
     }, [fetchRecords]);
 
-    // Delete a record
-    const handleDelete = async (id: number) => {
+    // Delete a record — calls FB Catalog Batch API first, then deletes from DB
+    const handleDeleteVideo = async (id: number) => {
+        setIsDeleting(true);
+        setDeleteError(null);
         try {
-            await fetch('/api/trpc/uploads.delete', {
+            const response = await fetch('/api/trpc/uploads.deleteVideoFromCatalog', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 credentials: 'include',
                 body: JSON.stringify({ "0": { json: { id } } }),
             });
+            const data = await response.json();
+            
+            // Check for errors in tRPC response
+            if (data?.[0]?.error) {
+                const errorMsg = data[0].error.json?.message || data[0].error.message || 'Unknown error';
+                throw new Error(errorMsg);
+            }
+            
             setRecords(prev => prev.filter(r => r.id !== id));
             setDeleteConfirmId(null);
         } catch (e: any) {
-            setError(`Failed to delete record: ${e.message}`);
+            setDeleteError(e.message || 'Failed to delete video');
+        } finally {
+            setIsDeleting(false);
         }
     };
 
@@ -424,16 +468,34 @@ const VideoLog = ({ t }: { t: (key: string) => string }) => {
 
             {/* Delete Confirmation Modal */}
             {deleteConfirmId !== null && (
-                <div className="image-modal-backdrop" onClick={() => setDeleteConfirmId(null)}>
+                <div className="image-modal-backdrop" onClick={() => { if (!isDeleting) setDeleteConfirmId(null); }}>
                     <div className="delete-confirm-modal" onClick={e => e.stopPropagation()}>
-                        <h3>{t('deleteConfirmTitle') || 'Delete Record'}</h3>
-                        <p>{t('deleteConfirmMessage') || 'Are you sure you want to delete this record? This action cannot be undone.'}</p>
+                        <h3>{t('deleteVideoTitle') || 'Delete Video from Catalog'}</h3>
+                        <p>{t('deleteVideoMessage') || 'This will remove the video from the Facebook Catalog (via Batch API with UPDATE method and empty video array), then delete the record from the database.'}</p>
+                        {deleteError && (
+                            <p className="error-text" style={{ marginTop: '8px' }}>{deleteError}</p>
+                        )}
                         <div className="delete-confirm-actions">
-                            <button className="cancel-delete-btn" onClick={() => setDeleteConfirmId(null)}>
+                            <button
+                                className="cancel-delete-btn"
+                                onClick={() => { setDeleteConfirmId(null); setDeleteError(null); }}
+                                disabled={isDeleting}
+                            >
                                 {t('cancel')}
                             </button>
-                            <button className="confirm-delete-btn" onClick={() => handleDelete(deleteConfirmId)}>
-                                {t('deleteRecord') || 'Delete'}
+                            <button
+                                className="confirm-delete-btn"
+                                onClick={() => handleDeleteVideo(deleteConfirmId)}
+                                disabled={isDeleting}
+                            >
+                                {isDeleting ? (
+                                    <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                        <div className="loader-small"></div>
+                                        {t('deletingVideo') || 'Deleting...'}
+                                    </span>
+                                ) : (
+                                    t('deleteRecord') || 'Delete'
+                                )}
                             </button>
                         </div>
                     </div>
@@ -677,10 +739,14 @@ export const AdminPanel = ({ onBack }: AdminPanelProps) => {
         <main className="container data-view">
             <div className="card admin-panel">
                 <header className="admin-header">
-                    <h1>{t('adminPanel')}</h1>
+                    <div className="admin-header-left">
+                        <button onClick={onBack} className="back-nav-button" title={t('backToHome')}>
+                            ← {t('back') || 'Back'}
+                        </button>
+                        <h1>{t('adminPanel')}</h1>
+                    </div>
                     <div className="header-actions">
                         <LanguageSwitcher />
-                        <button onClick={onBack} className="back-button">{t('backToHome')}</button>
                     </div>
                 </header>
 
