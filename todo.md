@@ -28,3 +28,14 @@
 - [x] 驗證 CSV 端點外部可存取
 - [x] 驗證上傳記錄正確寫入資料庫（vitest 9/9 passed）
 - [x] 驗證 UI 設計符合 Apple HIG
+
+## Phase 7: Video Log Integration
+- [x] Integrate database records into Video Log tab in AdminPanel
+- [x] Add search functionality (by product name, retailer ID, client name)
+- [x] Add filter by catalog ID dropdown
+- [x] Add filter by date range (from/to)
+- [x] Add pagination for large datasets
+- [x] Add delete record functionality
+- [x] Add export XLSX button
+- [x] Add stats summary (total records, filtered results, catalog count)
+- [x] Style the Video Log table with Apple HIG design

@@ -4,13 +4,7 @@ import * as XLSX from 'xlsx';
 import { AppFooter } from '@/components/AppFooter';
 import { LanguageSwitcher } from '@/components/LanguageSwitcher';
 import { LanguageContext } from '@/contexts/LanguageContext';
-import { GOOGLE_AUTH_TOKEN_KEY, MASTER_GOOGLE_SHEET_ID, SHEET_DATA_HEADER, SHEET_TAB_NAME, ADMIN_ACCESS_SHEET_TAB_NAME, ADMIN_ACCESS_EMAIL_COLUMN, ADMIN_ACCESS_CATALOG_COLUMN, GOOGLE_CLIENT_ID, GOOGLE_API_SCOPES } from '@/constants';
-import type { AdminAccessInfo } from '@/types';
-import { getColumnLetter } from '@/lib/helpers';
-import { loadSettings, saveSettings, fetchCatalogName, validateAccessToken, type AppSettings, type CatalogConfig } from '@/settingsStore';
-
-declare const gapi: any;
-declare const window: any;
+import { loadSettings, saveSettings, fetchCatalogName, validateAccessToken, loadSettingsFromServer, type AppSettings, type CatalogConfig } from '@/settingsStore';
 
 interface AdminPanelProps {
     onBack: () => void;
@@ -27,6 +21,10 @@ const SettingsManager = ({ t }: { t: (key: string) => string }) => {
     const [showToken, setShowToken] = useState(false);
     const [isSaved, setIsSaved] = useState(false);
 
+    useEffect(() => {
+        loadSettingsFromServer().then(s => setSettings(s));
+    }, []);
+
     const handleTokenChange = (value: string) => {
         const updated = { ...settings, facebookAccessToken: value };
         setSettings(updated);
@@ -34,8 +32,8 @@ const SettingsManager = ({ t }: { t: (key: string) => string }) => {
         setIsSaved(false);
     };
 
-    const handleSaveToken = () => {
-        saveSettings(settings);
+    const handleSaveToken = async () => {
+        await saveSettings(settings);
         setIsSaved(true);
         setTimeout(() => setIsSaved(false), 2000);
     };
@@ -86,7 +84,7 @@ const SettingsManager = ({ t }: { t: (key: string) => string }) => {
                 catalogs: [...settings.catalogs, newCatalog],
             };
             setSettings(updated);
-            saveSettings(updated);
+            await saveSettings(updated);
             setNewCatalogId('');
         } catch (e: any) {
             setCatalogError(`${t('fetchCatalogFailed')}: ${e.message}`);
@@ -95,13 +93,13 @@ const SettingsManager = ({ t }: { t: (key: string) => string }) => {
         }
     };
 
-    const handleRemoveCatalog = (catalogId: string) => {
+    const handleRemoveCatalog = async (catalogId: string) => {
         const updated = {
             ...settings,
             catalogs: settings.catalogs.filter(c => c.id !== catalogId),
         };
         setSettings(updated);
-        saveSettings(updated);
+        await saveSettings(updated);
     };
 
     const handleRefreshCatalogName = async (catalogId: string) => {
@@ -119,7 +117,7 @@ const SettingsManager = ({ t }: { t: (key: string) => string }) => {
                 ),
             };
             setSettings(updated);
-            saveSettings(updated);
+            await saveSettings(updated);
         } catch (e: any) {
             setCatalogError(`${t('refreshFailed')}: ${e.message}`);
         }
@@ -173,7 +171,6 @@ const SettingsManager = ({ t }: { t: (key: string) => string }) => {
                 <h3>{t('catalogManagement')}</h3>
                 <p className="info-text">{t('catalogManagementDesc')}</p>
 
-                {/* Add New Catalog */}
                 <div className="add-catalog-form">
                     <div className="form-group">
                         <label htmlFor="newCatalogId">{t('addNewCatalog')}</label>
@@ -194,7 +191,6 @@ const SettingsManager = ({ t }: { t: (key: string) => string }) => {
                     </div>
                 </div>
 
-                {/* Configured Catalogs List */}
                 <div className="catalogs-list">
                     {settings.catalogs.length === 0 ? (
                         <p className="info-text empty-catalogs">{t('noCatalogsConfigured')}</p>
@@ -242,308 +238,447 @@ const SettingsManager = ({ t }: { t: (key: string) => string }) => {
 };
 
 
-// ==================== Main AdminPanel Component ====================
-export const AdminPanel = ({ onBack }: AdminPanelProps) => {
-    const [activeTab, setActiveTab] = useState<'settings' | 'log'>('settings');
-    const [sheetData, setSheetData] = useState<any[][] | null>(null);
+// ==================== Video Log Component (Database-backed) ====================
+interface UploadRecord {
+    id: number;
+    catalogId: string;
+    retailerId: string;
+    productName: string;
+    productImageUrl: string | null;
+    video4x5Download: string | null;
+    video4x5Embed: string | null;
+    video9x16Download: string | null;
+    video9x16Embed: string | null;
+    clientName: string;
+    uploadTimestamp: string;
+    uploadedBy: string | null;
+}
+
+const RECORDS_PER_PAGE = 50;
+
+const VideoLog = ({ t }: { t: (key: string) => string }) => {
+    const [records, setRecords] = useState<UploadRecord[]>([]);
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
-    const [googleTokenClient, setGoogleTokenClient] = useState<any>(null);
-    const [googleAccessToken, setGoogleAccessToken] = useState<string | null>(null);
-    const [userEmail, setUserEmail] = useState<string|null>(null);
-    const [isGapiClientReady, setIsGapiClientReady] = useState(false);
-    const [searchTerm, setSearchTerm] = useState("");
-    const [isCheckingAccess, setIsCheckingAccess] = useState(false);
-    const [adminAccessInfo, setAdminAccessInfo] = useState<AdminAccessInfo>({ type: null, allowedCatalogs: [] });
+    
+    // Filters
+    const [searchTerm, setSearchTerm] = useState('');
+    const [catalogFilter, setCatalogFilter] = useState<string>('all');
+    const [dateFrom, setDateFrom] = useState('');
+    const [dateTo, setDateTo] = useState('');
+    
+    // Pagination
+    const [currentPage, setCurrentPage] = useState(1);
+    
+    // Image preview
     const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
-    const { t } = useContext(LanguageContext);
+    
+    // Delete confirmation
+    const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null);
 
+    // Available catalogs from settings
+    const [catalogs, setCatalogs] = useState<CatalogConfig[]>([]);
 
-    const handleLogout = useCallback(() => {
-        localStorage.removeItem(GOOGLE_AUTH_TOKEN_KEY);
-        sessionStorage.removeItem('google_drive_folder_id');
-        setGoogleAccessToken(null);
-        setUserEmail(null);
-        setSheetData(null);
-        setAdminAccessInfo({ type: null, allowedCatalogs: [] });
-    }, []);
-
-    const fetchDataFromSheet = useCallback(async () => {
-        if (!googleAccessToken || !isGapiClientReady) {
-            setError("Google API client is not ready.");
-            return;
-        }
-        if (MASTER_GOOGLE_SHEET_ID.includes("YOUR_GOOGLE_SHEET_ID_HERE")) {
-            setError("Please configure the Master Google Sheet ID in index.tsx.");
-            setIsLoading(false);
-            return;
-        }
-
+    // Load records from database
+    const fetchRecords = useCallback(async () => {
         setIsLoading(true);
         setError(null);
         try {
-            gapi.client.setToken({ access_token: googleAccessToken });
-            
-            const lastColumn = getColumnLetter(SHEET_DATA_HEADER.length);
-            const rangeToFetch = `${SHEET_TAB_NAME}!A:${lastColumn}`;
-
-            const response = await gapi.client.sheets.spreadsheets.values.get({
-                spreadsheetId: MASTER_GOOGLE_SHEET_ID,
-                range: rangeToFetch,
-                valueRenderOption: 'UNFORMATTED_VALUE',
+            const response = await fetch('/api/trpc/uploads.listAll', {
+                method: 'GET',
+                credentials: 'include',
             });
-            setSheetData(response.result.values || []);
-        } catch (apiError: any) {
-            const message = apiError.result?.error?.message || apiError.message || "An unknown error occurred.";
-             if (message.toLowerCase().includes('token') && (message.toLowerCase().includes('expired') || message.toLowerCase().includes('invalid'))) {
-                setError("Your Google session has expired. Please log in again.");
-                handleLogout();
+            const data = await response.json();
+            const result = data?.result?.data?.json;
+            if (Array.isArray(result)) {
+                setRecords(result);
             } else {
-                setError(`Failed to load data from Google Sheet. Check Sheet ID, tab name, and permissions. Error: ${message}`);
+                setRecords([]);
             }
-            setSheetData(null);
+        } catch (e: any) {
+            setError(`Failed to load records: ${e.message}`);
+            setRecords([]);
         } finally {
             setIsLoading(false);
         }
-    }, [googleAccessToken, isGapiClientReady, handleLogout]);
-    
-    useEffect(() => {
-        const checkGapi = () => {
-            if (window.gapi) {
-                gapi.load('client', () => {
-                    gapi.client.init({
-                        discoveryDocs: [
-                            "https://www.googleapis.com/discovery/v1/apis/drive/v3/rest",
-                            "https://www.googleapis.com/discovery/v1/apis/sheets/v4/rest"
-                        ]
-                    }).then(() => setIsGapiClientReady(true))
-                      .catch((initError: any) => setError(`Failed to initialize Google APIs. Error: ${initError.message}`));
-                });
-            } else {
-                setTimeout(checkGapi, 100);
-            }
-        };
-        checkGapi();
     }, []);
 
+    // Load catalogs from settings
     useEffect(() => {
-        if (!isGapiClientReady) return;
-        const checkGis = () => {
-            if (window.google) {
-                const tokenClient = window.google.accounts.oauth2.initTokenClient({
-                    client_id: GOOGLE_CLIENT_ID,
-                    scope: GOOGLE_API_SCOPES,
-                    callback: (tokenResponse: any) => {
-                        if (tokenResponse.error) {
-                            setError(`Google login error: ${tokenResponse.error_description || tokenResponse.error}`);
-                            setGoogleAccessToken(null);
-                            localStorage.removeItem(GOOGLE_AUTH_TOKEN_KEY);
-                            return;
-                        }
-                        const token = tokenResponse.access_token;
-                        setGoogleAccessToken(token);
-                        localStorage.setItem(GOOGLE_AUTH_TOKEN_KEY, token);
-                        gapi.client.setToken({ access_token: token });
-                    },
-                });
-                setGoogleTokenClient(tokenClient);
-            } else {
-                setTimeout(checkGis, 100);
-            }
-        };
-        checkGis();
-    }, [isGapiClientReady]);
-    
-    useEffect(() => {
-        const storedToken = localStorage.getItem(GOOGLE_AUTH_TOKEN_KEY);
-        if (storedToken && isGapiClientReady) {
-            setGoogleAccessToken(storedToken);
-            gapi.client.setToken({ access_token: storedToken });
-        }
-    }, [isGapiClientReady]);
+        loadSettingsFromServer().then(s => setCatalogs(s.catalogs));
+        fetchRecords();
+    }, [fetchRecords]);
 
-    const checkAdminAccess = useCallback(async (email: string): Promise<AdminAccessInfo> => {
-        if (!googleAccessToken || !isGapiClientReady) {
-            setError("Google API client is not ready for access check.");
-            return { type: 'denied', allowedCatalogs: [] };
-        }
-        if (MASTER_GOOGLE_SHEET_ID.includes("YOUR_GOOGLE_SHEET_ID_HERE")) {
-            setError("Master Google Sheet ID is not configured. Cannot verify permissions.");
-            return { type: 'denied', allowedCatalogs: [] };
-        }
-    
-        setIsCheckingAccess(true);
-        setError(null);
+    // Delete a record
+    const handleDelete = async (id: number) => {
         try {
-            gapi.client.setToken({ access_token: googleAccessToken });
-            const range = `${ADMIN_ACCESS_SHEET_TAB_NAME}!${ADMIN_ACCESS_EMAIL_COLUMN}:${ADMIN_ACCESS_CATALOG_COLUMN}`;
-            const response = await gapi.client.sheets.spreadsheets.values.get({
-                spreadsheetId: MASTER_GOOGLE_SHEET_ID,
-                range: range,
+            await fetch('/api/trpc/uploads.delete', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
+                body: JSON.stringify({ "0": { json: { id } } }),
             });
-    
-            const userRows = response?.result?.values?.filter((row: any[]) => 
-                row[0] && String(row[0]).toLowerCase().trim() === email.toLowerCase().trim()
-            ) || [];
-
-            if (userRows.length === 0) {
-                 return { type: 'denied', allowedCatalogs: [] };
-            }
-
-            const hasAllAccess = userRows.some((row: any[]) => String(row[1] || '').toLowerCase().trim() === 'all');
-            if (hasAllAccess) {
-                return { type: 'all', allowedCatalogs: [] };
-            }
-
-            const allowedCatalogs = userRows
-                .map((row: any[]) => String(row[1] || '').trim())
-                .filter((catalogId: string) => catalogId && catalogId.toLowerCase() !== 'all');
-            
-            if (allowedCatalogs.length > 0) {
-                return { type: 'specific', allowedCatalogs: Array.from(new Set(allowedCatalogs as string[])) };
-            }
-
-            return { type: 'denied', allowedCatalogs: [] };
-    
-        } catch (apiError: any) {
-            const message = apiError.result?.error?.message || apiError.message || "An unknown error occurred.";
-            if (message.includes('Unable to parse range')) {
-                setError(`Failed to verify permissions. Please ensure a tab named "${ADMIN_ACCESS_SHEET_TAB_NAME}" exists in your Google Sheet.`);
-            } else {
-                 setError(`Failed to verify admin permissions. Error: ${message}`);
-            }
-            return { type: 'denied', allowedCatalogs: [] };
-        } finally {
-            setIsCheckingAccess(false);
-        }
-    }, [googleAccessToken, isGapiClientReady]);
-
-    useEffect(() => {
-        const verifyUserAndAccess = async (token: string) => {
-            try {
-                const userInfoResponse = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
-                    headers: { 'Authorization': `Bearer ${token}` }
-                });
-                if (!userInfoResponse.ok) {
-                    if (userInfoResponse.status === 401) {
-                        handleLogout();
-                        throw new Error('Google session expired. Please log in again.');
-                    }
-                    throw new Error('Failed to fetch user info');
-                }
-                const userInfo = await userInfoResponse.json();
-                if (!userInfo.email) {
-                    throw new Error("Could not retrieve your Google email address.");
-                }
-                setUserEmail(userInfo.email);
-                
-                const accessInfo = await checkAdminAccess(userInfo.email);
-                setAdminAccessInfo(accessInfo);
-
-            } catch (err: any) {
-                console.error("Error during user verification:", err);
-                if (!err.message.includes('session expired')) {
-                    setError(err.message || "An error occurred during verification.");
-                }
-                setAdminAccessInfo({ type: 'denied', allowedCatalogs: [] });
-            }
-        };
-
-        if (googleAccessToken && isGapiClientReady && userEmail === null) {
-            verifyUserAndAccess(googleAccessToken);
-        }
-    }, [googleAccessToken, isGapiClientReady, userEmail, handleLogout, checkAdminAccess]);
-
-    useEffect(() => {
-        if ((adminAccessInfo.type === 'all' || adminAccessInfo.type === 'specific') && activeTab === 'log') {
-            fetchDataFromSheet();
-        }
-    }, [adminAccessInfo, fetchDataFromSheet, activeTab]);
-
-
-    const handleGoogleLogin = () => {
-        if (googleTokenClient) {
-            setError(null);
-            setAdminAccessInfo({ type: null, allowedCatalogs: [] });
-            googleTokenClient.requestAccessToken();
+            setRecords(prev => prev.filter(r => r.id !== id));
+            setDeleteConfirmId(null);
+        } catch (e: any) {
+            setError(`Failed to delete record: ${e.message}`);
         }
     };
-    
-    const filteredSheetData = useMemo(() => {
-        if (!sheetData || sheetData.length <= 1) return sheetData;
-    
-        const header = sheetData[0];
-        const dataRows = sheetData.slice(1);
-    
-        let accessFilteredRows = dataRows;
-        if (adminAccessInfo.type === 'specific') {
-            const catalogIdHeaderIndex = header.indexOf('Catalog ID');
-            if (catalogIdHeaderIndex !== -1) {
-                const allowedSet = new Set(adminAccessInfo.allowedCatalogs);
-                accessFilteredRows = dataRows.filter(row => {
-                    if (!row) return false;
-                    const rowCatalogId = String(row[catalogIdHeaderIndex] || '').trim();
-                    return rowCatalogId && allowedSet.has(rowCatalogId);
-                });
-            }
+
+    // Filtered records
+    const filteredRecords = useMemo(() => {
+        let result = [...records];
+
+        // Filter by catalog
+        if (catalogFilter !== 'all') {
+            result = result.filter(r => r.catalogId === catalogFilter);
         }
-    
-        if (!searchTerm) {
-            return [header, ...accessFilteredRows];
+
+        // Filter by date range
+        if (dateFrom) {
+            const fromDate = new Date(dateFrom);
+            result = result.filter(r => new Date(r.uploadTimestamp) >= fromDate);
         }
-    
-        const lowercasedSearchTerm = searchTerm.toLowerCase();
-        const searchableHeaders = ['Catalog ID', 'Client Name', 'Product Name', 'Retailer ID'];
-        const searchIndices = searchableHeaders.map(h => header.indexOf(h)).filter(index => index !== -1);
-        if (searchIndices.length === 0) return [header, ...accessFilteredRows];
-    
-        const searchFilteredRows = accessFilteredRows.filter(row => {
-            if (!row) return false;
-            return searchIndices.some(index => {
-                const cellValue = row[index];
-                return cellValue && String(cellValue).toLowerCase().includes(lowercasedSearchTerm);
-            });
+        if (dateTo) {
+            const toDate = new Date(dateTo);
+            toDate.setHours(23, 59, 59, 999);
+            result = result.filter(r => new Date(r.uploadTimestamp) <= toDate);
+        }
+
+        // Filter by search term
+        if (searchTerm) {
+            const lower = searchTerm.toLowerCase();
+            result = result.filter(r =>
+                r.productName.toLowerCase().includes(lower) ||
+                r.retailerId.toLowerCase().includes(lower) ||
+                r.clientName.toLowerCase().includes(lower) ||
+                r.catalogId.toLowerCase().includes(lower)
+            );
+        }
+
+        return result;
+    }, [records, catalogFilter, dateFrom, dateTo, searchTerm]);
+
+    // Pagination
+    const totalPages = Math.max(1, Math.ceil(filteredRecords.length / RECORDS_PER_PAGE));
+    const paginatedRecords = useMemo(() => {
+        const start = (currentPage - 1) * RECORDS_PER_PAGE;
+        return filteredRecords.slice(start, start + RECORDS_PER_PAGE);
+    }, [filteredRecords, currentPage]);
+
+    // Reset page when filters change
+    useEffect(() => {
+        setCurrentPage(1);
+    }, [searchTerm, catalogFilter, dateFrom, dateTo]);
+
+    // Unique catalog IDs from records
+    const uniqueCatalogs = useMemo(() => {
+        const ids = new Set(records.map(r => r.catalogId));
+        return Array.from(ids).map(id => {
+            const config = catalogs.find(c => c.id === id);
+            return { id, name: config?.name || id };
         });
-    
-        return [header, ...searchFilteredRows];
-    }, [sheetData, searchTerm, adminAccessInfo]);
+    }, [records, catalogs]);
 
-    const handleDownload = () => {
-        if (!filteredSheetData || filteredSheetData.length <= 1) {
-            alert("No data available to export.");
-            return;
-        }
+    // Export to XLSX
+    const handleExport = () => {
+        if (filteredRecords.length === 0) return;
 
-        const worksheet = XLSX.utils.aoa_to_sheet(filteredSheetData);
+        const exportData = filteredRecords.map(r => ({
+            'Catalog ID': r.catalogId,
+            'Retailer ID': r.retailerId,
+            'Product Name': r.productName,
+            'Product Image URL': r.productImageUrl || '',
+            '4x5 Download': r.video4x5Download || '',
+            '4x5 Video Embed URL': r.video4x5Embed || '',
+            '9x16 Download': r.video9x16Download || '',
+            '9x16 Video Embed URL': r.video9x16Embed || '',
+            'Client Name': r.clientName,
+            'Upload Timestamp': r.uploadTimestamp ? new Date(r.uploadTimestamp).toLocaleString() : '',
+            'Uploaded By': r.uploadedBy || '',
+        }));
+
+        const worksheet = XLSX.utils.json_to_sheet(exportData);
         const workbook = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(workbook, worksheet, 'Uploaded Videos Log');
-        XLSX.writeFile(workbook, `cpas_video_log_export_${new Date().toISOString().split('T')[0]}.xlsx`);
+        XLSX.utils.book_append_sheet(workbook, worksheet, 'Upload Records');
+        XLSX.writeFile(workbook, `cpas_video_log_${new Date().toISOString().split('T')[0]}.xlsx`);
     };
 
-    const isGoogleReady = isGapiClientReady && !!googleTokenClient;
-    const isLoggedIn = !!googleAccessToken;
-    const hasAccess = adminAccessInfo.type === 'all' || adminAccessInfo.type === 'specific';
+    // Get catalog name helper
+    const getCatalogDisplayName = (catalogId: string) => {
+        const config = catalogs.find(c => c.id === catalogId);
+        return config?.name || catalogId;
+    };
 
     return (
-        <main className="container data-view">
-             {previewImageUrl && (
+        <div className="video-log">
+            {/* Image Preview Modal */}
+            {previewImageUrl && (
                 <div className="image-modal-backdrop" onClick={() => setPreviewImageUrl(null)}>
                     <div className="image-modal-content" onClick={e => e.stopPropagation()}>
-                        <img src={previewImageUrl} alt="Enlarged Product Preview" />
+                        <img src={previewImageUrl} alt="Preview" />
                         <button onClick={() => setPreviewImageUrl(null)} className="close-modal-button">&times;</button>
                     </div>
                 </div>
             )}
+
+            {/* Delete Confirmation Modal */}
+            {deleteConfirmId !== null && (
+                <div className="image-modal-backdrop" onClick={() => setDeleteConfirmId(null)}>
+                    <div className="delete-confirm-modal" onClick={e => e.stopPropagation()}>
+                        <h3>{t('deleteConfirmTitle') || 'Delete Record'}</h3>
+                        <p>{t('deleteConfirmMessage') || 'Are you sure you want to delete this record? This action cannot be undone.'}</p>
+                        <div className="delete-confirm-actions">
+                            <button className="cancel-delete-btn" onClick={() => setDeleteConfirmId(null)}>
+                                {t('cancel')}
+                            </button>
+                            <button className="confirm-delete-btn" onClick={() => handleDelete(deleteConfirmId)}>
+                                {t('deleteRecord') || 'Delete'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Stats Bar */}
+            <div className="log-stats-bar">
+                <div className="log-stat">
+                    <span className="log-stat-number">{records.length}</span>
+                    <span className="log-stat-label">{t('totalRecords') || 'Total Records'}</span>
+                </div>
+                <div className="log-stat">
+                    <span className="log-stat-number">{filteredRecords.length}</span>
+                    <span className="log-stat-label">{t('filteredRecords') || 'Filtered'}</span>
+                </div>
+                <div className="log-stat">
+                    <span className="log-stat-number">{uniqueCatalogs.length}</span>
+                    <span className="log-stat-label">{t('catalogCount') || 'Catalogs'}</span>
+                </div>
+            </div>
+
+            {/* Filter Bar */}
+            <div className="log-filter-bar">
+                <div className="log-filter-row">
+                    <div className="log-filter-item log-filter-search">
+                        <label>{t('searchLabel')}</label>
+                        <input
+                            type="text"
+                            placeholder={t('searchPlaceholder') || 'Search by name, ID, client...'}
+                            value={searchTerm}
+                            onChange={e => setSearchTerm(e.target.value)}
+                        />
+                    </div>
+                    <div className="log-filter-item">
+                        <label>{t('filterByCatalog') || 'Catalog'}</label>
+                        <select
+                            value={catalogFilter}
+                            onChange={e => setCatalogFilter(e.target.value)}
+                        >
+                            <option value="all">{t('showAll')}</option>
+                            {uniqueCatalogs.map(c => (
+                                <option key={c.id} value={c.id}>{c.name} ({c.id})</option>
+                            ))}
+                        </select>
+                    </div>
+                </div>
+                <div className="log-filter-row">
+                    <div className="log-filter-item">
+                        <label>{t('dateFrom') || 'From'}</label>
+                        <input
+                            type="date"
+                            value={dateFrom}
+                            onChange={e => setDateFrom(e.target.value)}
+                        />
+                    </div>
+                    <div className="log-filter-item">
+                        <label>{t('dateTo') || 'To'}</label>
+                        <input
+                            type="date"
+                            value={dateTo}
+                            onChange={e => setDateTo(e.target.value)}
+                        />
+                    </div>
+                </div>
+                <div className="log-filter-row" style={{ justifyContent: 'flex-end' }}>
+                    <div className="log-filter-actions">
+                        <button
+                            className="log-action-btn log-refresh-btn"
+                            onClick={fetchRecords}
+                            disabled={isLoading}
+                        >
+                            {isLoading ? '...' : '↻ ' + (t('refresh') || 'Refresh')}
+                        </button>
+                        <button
+                            className="log-action-btn log-export-btn"
+                            onClick={handleExport}
+                            disabled={filteredRecords.length === 0}
+                        >
+                            ↓ {t('exportXlsx') || 'Export XLSX'}
+                        </button>
+                        <button
+                            className="log-action-btn log-clear-btn"
+                            onClick={() => { setSearchTerm(''); setCatalogFilter('all'); setDateFrom(''); setDateTo(''); }}
+                        >
+                            ✕ {t('clearFilters') || 'Clear'}
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            {/* Error */}
+            {error && <p className="error-text" style={{ margin: '12px 0' }}>{error}</p>}
+
+            {/* Loading */}
+            {isLoading && (
+                <div className="log-loading">
+                    <div className="loader"></div>
+                </div>
+            )}
+
+            {/* Records Table */}
+            {!isLoading && (
+                <>
+                    {paginatedRecords.length === 0 ? (
+                        <div className="log-empty-state">
+                            <p>{filteredRecords.length === 0 && records.length > 0
+                                ? (t('noMatchingRecords') || 'No records match your filters.')
+                                : (t('noRecordsYet') || 'No upload records yet. Records will appear here after uploading videos.')
+                            }</p>
+                        </div>
+                    ) : (
+                        <div className="log-table-container">
+                            <table className="log-table">
+                                <thead>
+                                    <tr>
+                                        <th className="col-image">{t('image')}</th>
+                                        <th className="col-product">{t('name')}</th>
+                                        <th className="col-retailer">{t('retailerId')}</th>
+                                        <th className="col-catalog">{t('catalogId')}</th>
+                                        <th className="col-client">{t('clientNameLabel')}</th>
+                                        <th className="col-video">4:5</th>
+                                        <th className="col-video">9:16</th>
+                                        <th className="col-date">{t('uploadDate') || 'Date'}</th>
+                                        <th className="col-actions">{t('actions')}</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {paginatedRecords.map((record) => (
+                                        <tr key={record.id}>
+                                            <td className="col-image">
+                                                {record.productImageUrl ? (
+                                                    <img
+                                                        src={record.productImageUrl}
+                                                        alt={record.productName}
+                                                        className="log-product-image"
+                                                        loading="lazy"
+                                                        onClick={() => setPreviewImageUrl(record.productImageUrl)}
+                                                    />
+                                                ) : (
+                                                    <div className="log-no-image">—</div>
+                                                )}
+                                            </td>
+                                            <td className="col-product">
+                                                <span className="log-product-name">{record.productName}</span>
+                                            </td>
+                                            <td className="col-retailer">
+                                                <code className="log-retailer-id">{record.retailerId}</code>
+                                            </td>
+                                            <td className="col-catalog">
+                                                <span className="log-catalog-badge">{getCatalogDisplayName(record.catalogId)}</span>
+                                            </td>
+                                            <td className="col-client">{record.clientName}</td>
+                                            <td className="col-video">
+                                                {record.video4x5Embed ? (
+                                                    <a href={record.video4x5Download || record.video4x5Embed} target="_blank" rel="noopener noreferrer" className="log-video-link" title="Open 4:5 video">
+                                                        ▶
+                                                    </a>
+                                                ) : (
+                                                    <span className="log-no-video">—</span>
+                                                )}
+                                            </td>
+                                            <td className="col-video">
+                                                {record.video9x16Embed ? (
+                                                    <a href={record.video9x16Download || record.video9x16Embed} target="_blank" rel="noopener noreferrer" className="log-video-link" title="Open 9:16 video">
+                                                        ▶
+                                                    </a>
+                                                ) : (
+                                                    <span className="log-no-video">—</span>
+                                                )}
+                                            </td>
+                                            <td className="col-date">
+                                                <span className="log-date">{new Date(record.uploadTimestamp).toLocaleDateString()}</span>
+                                                <span className="log-time">{new Date(record.uploadTimestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                                            </td>
+                                            <td className="col-actions">
+                                                <button
+                                                    className="log-delete-btn"
+                                                    onClick={() => setDeleteConfirmId(record.id)}
+                                                    title={t('deleteRecord') || 'Delete'}
+                                                >
+                                                    🗑
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    )}
+
+                    {/* Pagination */}
+                    {totalPages > 1 && (
+                        <div className="log-pagination">
+                            <button
+                                className="log-page-btn"
+                                disabled={currentPage === 1}
+                                onClick={() => setCurrentPage(1)}
+                            >
+                                ««
+                            </button>
+                            <button
+                                className="log-page-btn"
+                                disabled={currentPage === 1}
+                                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                            >
+                                «
+                            </button>
+                            <span className="log-page-info">
+                                {currentPage} / {totalPages}
+                            </span>
+                            <button
+                                className="log-page-btn"
+                                disabled={currentPage === totalPages}
+                                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                            >
+                                »
+                            </button>
+                            <button
+                                className="log-page-btn"
+                                disabled={currentPage === totalPages}
+                                onClick={() => setCurrentPage(totalPages)}
+                            >
+                                »»
+                            </button>
+                        </div>
+                    )}
+                </>
+            )}
+        </div>
+    );
+};
+
+
+// ==================== Main AdminPanel Component ====================
+export const AdminPanel = ({ onBack }: AdminPanelProps) => {
+    const [activeTab, setActiveTab] = useState<'settings' | 'log'>('log');
+    const { t } = useContext(LanguageContext);
+
+    return (
+        <main className="container data-view">
             <div className="card admin-panel">
                 <header className="admin-header">
                     <h1>{t('adminPanel')}</h1>
                     <div className="header-actions">
-                         {userEmail && (
-                            <div className="user-info-header-small">
-                                <span>{userEmail}</span>
-                                <button onClick={handleLogout} className="logout-button-small" title={t('logout')}>{t('logout')}</button>
-                            </div>
-                        )}
                         <LanguageSwitcher />
                         <button onClick={onBack} className="back-button">{t('backToHome')}</button>
                     </div>
@@ -552,146 +687,27 @@ export const AdminPanel = ({ onBack }: AdminPanelProps) => {
                 {/* Tab Navigation */}
                 <div className="admin-tabs">
                     <button
-                        className={`admin-tab ${activeTab === 'settings' ? 'active' : ''}`}
-                        onClick={() => setActiveTab('settings')}
-                    >
-                        ⚙️ {t('systemSettings')}
-                    </button>
-                    <button
                         className={`admin-tab ${activeTab === 'log' ? 'active' : ''}`}
                         onClick={() => setActiveTab('log')}
                     >
                         📋 Video Log
                     </button>
+                    <button
+                        className={`admin-tab ${activeTab === 'settings' ? 'active' : ''}`}
+                        onClick={() => setActiveTab('settings')}
+                    >
+                        ⚙️ {t('systemSettings')}
+                    </button>
                 </div>
                 
+                {/* Log Tab (now default) */}
+                {activeTab === 'log' && (
+                    <VideoLog t={t} />
+                )}
+
                 {/* Settings Tab */}
                 {activeTab === 'settings' && (
                     <SettingsManager t={t} />
-                )}
-
-                {/* Log Tab */}
-                {activeTab === 'log' && (
-                    <>
-                        {!isLoggedIn ? (
-                            <div className="centered-prompt">
-                                <p>Please log in with Google to access the master data log from Google Sheets.</p>
-                                <button onClick={handleGoogleLogin} disabled={!isGoogleReady} className="google-login-button large">
-                                    {t('loginWithGoogle')}
-                                </button>
-                                {!isGoogleReady && <p className="info-text">{t('initializing')} Google Services...</p>}
-                                {error && <p className="error-text">{error}</p>}
-                            </div>
-                        ) : isCheckingAccess ? (
-                             <div className="centered-prompt">
-                                <div className="loader"></div>
-                                <p className="info-text" style={{marginTop: '1rem'}}>Verifying permissions for {userEmail}...</p>
-                            </div>
-                        ) : adminAccessInfo.type === 'denied' ? (
-                            <div className="centered-prompt">
-                                <h2 style={{color: 'var(--error-color)'}}>Access Denied</h2>
-                                <p>Your account (<strong>{userEmail}</strong>) is not authorized to access this panel.</p>
-                                <p className="info-text">Please contact an administrator to request access.</p>
-                                {error && <p className="error-text">{error}</p>}
-                            </div>
-                        ) : hasAccess ? (
-                            <>
-                                {adminAccessInfo.type === 'specific' && (
-                                    <p className="info-text notice">
-                                        Displaying records for {adminAccessInfo.allowedCatalogs.length} specific catalog(s) you have access to.
-                                    </p>
-                                )}
-                                <div className="admin-controls">
-                                    <div className="form-group admin-search-bar">
-                                        <input
-                                            type="text"
-                                            placeholder="Search by Catalog ID, Name, Retailer ID, etc..."
-                                            value={searchTerm}
-                                            onChange={e => setSearchTerm(e.target.value)}
-                                        />
-                                    </div>
-                                    <div className="admin-action-buttons">
-                                        <button onClick={fetchDataFromSheet} className="refresh-button" disabled={isLoading} style={{height: '40px'}}>
-                                            {isLoading ? <div className="loader-small"></div> : "Refresh"}
-                                        </button>
-                                        {filteredSheetData && (
-                                           <button onClick={handleDownload} className="download-button" disabled={!filteredSheetData || filteredSheetData.length <= 1} style={{height: '40px'}}>
-                                                Download Filtered
-                                            </button>
-                                        )}
-                                    </div>
-                                </div>
-            
-                                {isLoading && <div className="loader"></div>}
-                                {error && !isLoading && <p className="error-text">{error}</p>}
-            
-                                {filteredSheetData && (
-                                    <div className="admin-data-section">
-                                        <div className="admin-data-header">
-                                            <h2>Sheet Data ({filteredSheetData.length > 1 ? filteredSheetData.length - 1 : 0} Records Found)</h2>
-                                        </div>
-                                        <div className="table-container">
-                                            <table>
-                                                <thead>
-                                                    <tr>
-                                                        {filteredSheetData[0]?.map((header, index) => {
-                                                            if (header === '4x5 Download' || header === '9x16 Download') {
-                                                                return null;
-                                                            }
-                                                            return <th key={index}>{header}</th>
-                                                        })}
-                                                    </tr>
-                                                </thead>
-                                                <tbody>
-                                                    {filteredSheetData.slice(1).map((row, rowIndex) => (
-                                                        <tr key={rowIndex}>
-                                                            {row.map((cell, cellIndex) => {
-                                                                const header = filteredSheetData[0]?.[cellIndex] || '';
-                                                                
-                                                                if (header === '4x5 Download' || header === '9x16 Download') {
-                                                                    return null;
-                                                                }
-
-                                                                if (header === 'Product Image URL' && cell) {
-                                                                    return (
-                                                                        <td key={cellIndex} data-label={header}>
-                                                                            <img src={cell} className="admin-product-image clickable" alt="Product" loading="lazy" onClick={() => setPreviewImageUrl(cell)} />
-                                                                        </td>
-                                                                    );
-                                                                }
-                                                                if ((header === '4x5 Video Embed URL' || header === '9x16 Video Embed URL') && cell) {
-                                                                    const isNineBySixteen = header === '9x16 Video Embed URL';
-                                                                    return (
-                                                                        <td key={cellIndex} data-label={header}>
-                                                                            <iframe
-                                                                                src={cell}
-                                                                                className="admin-video-preview"
-                                                                                title="Video Preview"
-                                                                                allow="encrypted-media"
-                                                                                allowFullScreen
-                                                                                style={{width: isNineBySixteen ? '72px' : '128px', height: isNineBySixteen ? '128px' : '160px'}}
-                                                                            ></iframe>
-                                                                        </td>
-                                                                    );
-                                                                }
-                                                                
-                                                                return <td key={cellIndex} data-label={header}>{cell}</td>;
-                                                            })}
-                                                        </tr>
-                                                    ))}
-                                                </tbody>
-                                            </table>
-                                        </div>
-                                        {filteredSheetData.length <= 1 && <p className="info-text">No records match your search.</p>}
-                                    </div>
-                                )}
-                            </>
-                        ) : (
-                            <>
-                              {error && <p className="error-text">{error}</p>}
-                            </>
-                        )}
-                    </>
                 )}
             </div>
             <AppFooter />

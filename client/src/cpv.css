@@ -2284,3 +2284,613 @@ tbody tr.selected:hover td {
   margin-top: 24px;
   margin-bottom: 24px;
 }
+
+
+/* ==================== Video Log - Apple HIG Design ==================== */
+
+.video-log {
+  padding: 0;
+}
+
+/* Stats Bar */
+.log-stats-bar {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.log-stat {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 16px 12px;
+  background: var(--apple-bg-secondary, #f5f5f7);
+  border-radius: 12px;
+  transition: background 0.2s ease;
+}
+
+.log-stat:hover {
+  background: var(--apple-bg-tertiary, #ebebed);
+}
+
+.log-stat-number {
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--apple-text-primary, #1d1d1f);
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+}
+
+.log-stat-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--apple-text-secondary, #86868b);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-top: 4px;
+}
+
+/* Filter Bar */
+.log-filter-bar {
+  background: var(--apple-bg-secondary, #f5f5f7);
+  border-radius: 12px;
+  padding: 16px;
+  margin-bottom: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.log-filter-row {
+  display: flex;
+  gap: 12px;
+  align-items: flex-end;
+  flex-wrap: wrap;
+}
+
+.log-filter-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.log-filter-item.log-filter-search {
+  flex: 2;
+}
+
+.log-filter-item:not(.log-filter-search) {
+  flex: 1;
+}
+
+.log-filter-item label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--apple-text-secondary, #86868b);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.log-filter-item input,
+.log-filter-item select {
+  height: 38px;
+  padding: 0 12px;
+  border: 1px solid var(--apple-border, #d2d2d7);
+  border-radius: 8px;
+  font-size: 14px;
+  background: white;
+  color: var(--apple-text-primary, #1d1d1f);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.log-filter-item input:focus,
+.log-filter-item select:focus {
+  outline: none;
+  border-color: var(--apple-blue, #007aff);
+  box-shadow: 0 0 0 3px rgba(0, 122, 255, 0.15);
+}
+
+.log-filter-actions {
+  display: flex;
+  gap: 8px;
+  align-items: flex-end;
+  flex-shrink: 0;
+  margin-left: auto;
+}
+
+.log-action-btn {
+  height: 38px !important;
+  padding: 0 14px !important;
+  border: none;
+  border-radius: 8px !important;
+  font-size: 13px !important;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.2s ease;
+  display: inline-flex !important;
+  align-items: center;
+  gap: 4px;
+  width: auto !important;
+  margin-bottom: 0 !important;
+}
+
+.log-refresh-btn {
+  background: var(--apple-blue, #007aff);
+  color: white;
+}
+
+.log-refresh-btn:hover {
+  background: #0066d6;
+}
+
+.log-refresh-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.log-export-btn {
+  background: var(--apple-green, #34c759);
+  color: white;
+}
+
+.log-export-btn:hover {
+  background: #2db84d;
+}
+
+.log-export-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.log-clear-btn {
+  background: var(--apple-bg-tertiary, #ebebed);
+  color: var(--apple-text-secondary, #86868b);
+}
+
+.log-clear-btn:hover {
+  background: #ddd;
+  color: var(--apple-text-primary, #1d1d1f);
+}
+
+/* Loading */
+.log-loading {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 60px 0;
+}
+
+/* Empty State */
+.log-empty-state {
+  text-align: center;
+  padding: 60px 20px;
+  color: var(--apple-text-secondary, #86868b);
+}
+
+.log-empty-state p {
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+/* Table Container */
+.log-table-container {
+  overflow-x: auto;
+  border-radius: 12px;
+  border: 1px solid var(--apple-border, #d2d2d7);
+  background: white;
+}
+
+.log-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.log-table thead {
+  background: var(--apple-bg-secondary, #f5f5f7);
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.log-table th {
+  padding: 10px 12px;
+  text-align: left;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--apple-text-secondary, #86868b);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  border-bottom: 1px solid var(--apple-border, #d2d2d7);
+  white-space: nowrap;
+}
+
+.log-table td {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--apple-separator, #e5e5ea);
+  vertical-align: middle;
+  color: var(--apple-text-primary, #1d1d1f);
+}
+
+.log-table tbody tr {
+  transition: background 0.15s ease;
+}
+
+.log-table tbody tr:hover {
+  background: var(--apple-bg-secondary, #f5f5f7);
+}
+
+.log-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+/* Column widths */
+.col-image { width: 56px; }
+.col-product { min-width: 160px; max-width: 240px; }
+.col-retailer { min-width: 100px; }
+.col-catalog { min-width: 100px; }
+.col-client { min-width: 80px; }
+.col-video { width: 48px; text-align: center; }
+.col-date { width: 100px; }
+.col-actions { width: 48px; text-align: center; }
+
+.log-table th.col-video,
+.log-table th.col-actions {
+  text-align: center;
+}
+
+/* Product Image */
+.log-product-image {
+  width: 40px;
+  height: 40px;
+  object-fit: cover;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  display: block;
+}
+
+.log-product-image:hover {
+  transform: scale(1.1);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+.log-no-image {
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--apple-bg-secondary, #f5f5f7);
+  border-radius: 8px;
+  color: var(--apple-text-tertiary, #aeaeb2);
+  font-size: 16px;
+}
+
+/* Product Name */
+.log-product-name {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  font-weight: 500;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+/* Retailer ID */
+.log-retailer-id {
+  font-size: 12px;
+  background: var(--apple-bg-secondary, #f5f5f7);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-family: 'SF Mono', SFMono-Regular, ui-monospace, monospace;
+  word-break: break-all;
+}
+
+/* Catalog Badge */
+.log-catalog-badge {
+  display: inline-block;
+  font-size: 12px;
+  font-weight: 500;
+  background: rgba(0, 122, 255, 0.1);
+  color: var(--apple-blue, #007aff);
+  padding: 3px 8px;
+  border-radius: 6px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 120px;
+}
+
+/* Video Link */
+.log-video-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  background: rgba(0, 122, 255, 0.1);
+  color: var(--apple-blue, #007aff);
+  border-radius: 50%;
+  text-decoration: none;
+  font-size: 14px;
+  transition: all 0.2s ease;
+}
+
+.log-video-link:hover {
+  background: var(--apple-blue, #007aff);
+  color: white;
+  transform: scale(1.1);
+}
+
+.log-no-video {
+  color: var(--apple-text-tertiary, #aeaeb2);
+  font-size: 14px;
+  display: flex;
+  justify-content: center;
+}
+
+/* Date Column */
+.log-date {
+  display: block;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--apple-text-primary, #1d1d1f);
+}
+
+.log-time {
+  display: block;
+  font-size: 11px;
+  color: var(--apple-text-secondary, #86868b);
+  margin-top: 2px;
+}
+
+/* Delete Button */
+.log-delete-btn {
+  width: 32px !important;
+  height: 32px !important;
+  padding: 0 !important;
+  border: none;
+  background: transparent;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+  opacity: 0.4;
+}
+
+.log-delete-btn:hover {
+  background: rgba(255, 59, 48, 0.1);
+  opacity: 1;
+}
+
+/* Pagination */
+.log-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 20px 0 4px;
+}
+
+.log-page-btn {
+  width: 36px !important;
+  height: 36px !important;
+  padding: 0 !important;
+  border: 1px solid var(--apple-border, #d2d2d7);
+  border-radius: 8px;
+  background: white;
+  color: var(--apple-text-primary, #1d1d1f);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+
+.log-page-btn:hover:not(:disabled) {
+  background: var(--apple-bg-secondary, #f5f5f7);
+  border-color: var(--apple-blue, #007aff);
+  color: var(--apple-blue, #007aff);
+}
+
+.log-page-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.log-page-info {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--apple-text-secondary, #86868b);
+  padding: 0 8px;
+  min-width: 60px;
+  text-align: center;
+}
+
+/* Image Preview Modal */
+.image-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  animation: fadeIn 0.2s ease;
+}
+
+.image-modal-content {
+  position: relative;
+  max-width: 90vw;
+  max-height: 90vh;
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  animation: scaleIn 0.25s ease;
+}
+
+.image-modal-content img {
+  display: block;
+  max-width: 90vw;
+  max-height: 85vh;
+  object-fit: contain;
+}
+
+.close-modal-button {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 36px !important;
+  height: 36px !important;
+  padding: 0 !important;
+  border: none;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.5);
+  color: white;
+  font-size: 20px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s ease;
+  backdrop-filter: blur(4px);
+}
+
+.close-modal-button:hover {
+  background: rgba(0, 0, 0, 0.7);
+}
+
+/* Delete Confirmation Modal */
+.delete-confirm-modal {
+  background: white;
+  border-radius: 16px;
+  padding: 28px;
+  max-width: 400px;
+  width: 90%;
+  text-align: center;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  animation: scaleIn 0.25s ease;
+}
+
+.delete-confirm-modal h3 {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--apple-text-primary, #1d1d1f);
+  margin: 0 0 8px;
+}
+
+.delete-confirm-modal p {
+  font-size: 14px;
+  color: var(--apple-text-secondary, #86868b);
+  line-height: 1.5;
+  margin: 0 0 24px;
+}
+
+.delete-confirm-actions {
+  display: flex;
+  gap: 12px;
+}
+
+.cancel-delete-btn,
+.confirm-delete-btn {
+  flex: 1;
+  height: 44px !important;
+  border: none;
+  border-radius: 10px;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  width: auto !important;
+}
+
+.cancel-delete-btn {
+  background: var(--apple-bg-secondary, #f5f5f7);
+  color: var(--apple-text-primary, #1d1d1f);
+}
+
+.cancel-delete-btn:hover {
+  background: var(--apple-bg-tertiary, #ebebed);
+}
+
+.confirm-delete-btn {
+  background: var(--apple-red, #ff3b30);
+  color: white;
+}
+
+.confirm-delete-btn:hover {
+  background: #e0342b;
+}
+
+/* Animations */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes scaleIn {
+  from { opacity: 0; transform: scale(0.95); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+/* ==================== Video Log Responsive ==================== */
+@media (max-width: 768px) {
+  .log-stats-bar {
+    gap: 8px;
+  }
+
+  .log-stat {
+    padding: 12px 8px;
+  }
+
+  .log-stat-number {
+    font-size: 22px;
+  }
+
+  .log-filter-row {
+    flex-direction: column;
+  }
+
+  .log-filter-actions {
+    flex-wrap: wrap;
+    width: 100%;
+  }
+
+  .log-action-btn {
+    flex: 1;
+    justify-content: center;
+    min-width: 80px;
+  }
+
+  .log-table {
+    font-size: 12px;
+  }
+
+  .col-catalog,
+  .col-client {
+    display: none;
+  }
+
+  .log-product-name {
+    font-size: 12px;
+    -webkit-line-clamp: 1;
+  }
+
+  .log-product-image {
+    width: 32px;
+    height: 32px;
+  }
+}
