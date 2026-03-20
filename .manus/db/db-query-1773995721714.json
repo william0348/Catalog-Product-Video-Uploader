@@ -1,0 +1,16 @@
+{
+  "query": "SELECT * FROM app_settings WHERE settingKey = 'catalogs';",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway03.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 2i7zmHsYDkLMCtd.517e86959c58 --database nN7fRv522pr6qmVvUdeAQB --execute SELECT * FROM app_settings WHERE settingKey = 'catalogs';",
+  "rows": [
+    {
+      "id": "3",
+      "settingKey": "catalogs",
+      "settingValue": "[{\"id\":\"1225617115176128\",\"name\":\"New FR Product Feed\",\"addedAt\":\"2026-03-20T08:34:55.096Z\"}]",
+      "updatedAt": "2026-03-20 08:34:56"
+    }
+  ],
+  "messages": [],
+  "stdout": "id\tsettingKey\tsettingValue\tupdatedAt\n3\tcatalogs\t[{\"id\":\"1225617115176128\",\"name\":\"New FR Product Feed\",\"addedAt\":\"2026-03-20T08:34:55.096Z\"}]\t2026-03-20 08:34:56\n",
+  "stderr": "",
+  "execution_time_ms": 1566
+}

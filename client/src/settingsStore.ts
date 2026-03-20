@@ -1,13 +1,12 @@
 /**
  * settingsStore.ts
  * 
- * Centralized settings store backed by the server database via fetch API.
+ * Centralized settings store backed by the server database via tRPC API.
  * All users share the same Access Token and Catalog configurations.
  * Falls back to localStorage for offline/initial loading.
+ * 
+ * Facebook API calls are proxied through the backend to avoid CORS issues.
  */
-
-const FB_API_VERSION = "v23.0";
-const FB_BASE_URL = `https://graph.facebook.com/${FB_API_VERSION}`;
 
 export interface CatalogConfig {
   id: string;
@@ -31,6 +30,42 @@ const DEFAULT_SETTINGS: AppSettings = {
 
 // ===== Local cache for fast reads =====
 let _cachedSettings: AppSettings | null = null;
+
+/**
+ * Helper: call a tRPC mutation (POST)
+ */
+const trpcMutate = async (path: string, input: any): Promise<any> => {
+  const response = await fetch(`/api/trpc/${path}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify({ json: input }),
+  });
+  const data = await response.json();
+  if (data?.error) {
+    throw new Error(data.error?.json?.message || 'API error');
+  }
+  return data?.result?.data?.json;
+};
+
+/**
+ * Helper: call a tRPC query (GET)
+ */
+const trpcQuery = async (path: string, input?: any): Promise<any> => {
+  let url = `/api/trpc/${path}`;
+  if (input !== undefined) {
+    url += `?input=${encodeURIComponent(JSON.stringify({ json: input }))}`;
+  }
+  const response = await fetch(url, {
+    method: 'GET',
+    credentials: 'include',
+  });
+  const data = await response.json();
+  if (data?.error) {
+    throw new Error(data.error?.json?.message || 'API error');
+  }
+  return data?.result?.data?.json;
+};
 
 /**
  * Load settings from localStorage (fast, synchronous)
@@ -68,24 +103,9 @@ export const saveSettings = async (settings: AppSettings): Promise<void> => {
   }
   // Persist to server database
   try {
-    await fetch('/api/trpc/settings.set', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
-      body: JSON.stringify({ "0": { json: { key: 'facebookAccessToken', value: settings.facebookAccessToken } } }),
-    });
-    await fetch('/api/trpc/settings.set', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
-      body: JSON.stringify({ "0": { json: { key: 'catalogs', value: JSON.stringify(settings.catalogs) } } }),
-    });
-    await fetch('/api/trpc/settings.set', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
-      body: JSON.stringify({ "0": { json: { key: 'accessKey', value: settings.accessKey } } }),
-    });
+    await trpcMutate('settings.set', { key: 'facebookAccessToken', value: settings.facebookAccessToken });
+    await trpcMutate('settings.set', { key: 'catalogs', value: JSON.stringify(settings.catalogs) });
+    await trpcMutate('settings.set', { key: 'accessKey', value: settings.accessKey });
   } catch (e) {
     console.error('Failed to persist settings to server:', e);
   }
@@ -96,12 +116,7 @@ export const saveSettings = async (settings: AppSettings): Promise<void> => {
  */
 export const loadSettingsFromServer = async (): Promise<AppSettings> => {
   try {
-    const response = await fetch('/api/trpc/settings.getAll', {
-      method: 'GET',
-      credentials: 'include',
-    });
-    const data = await response.json();
-    const result = data?.result?.data?.json;
+    const result = await trpcQuery('settings.getAll');
     if (result) {
       const settings: AppSettings = {
         facebookAccessToken: result.facebookAccessToken || DEFAULT_SETTINGS.facebookAccessToken,
@@ -135,35 +150,20 @@ export const getCatalogs = (): CatalogConfig[] => {
 };
 
 /**
- * Fetch catalog name from Facebook API using catalog ID and access token
+ * Fetch catalog name via backend proxy (avoids CORS issues)
  */
 export const fetchCatalogName = async (catalogId: string, accessToken: string): Promise<string> => {
-  const url = `${FB_BASE_URL}/${catalogId}?fields=name&access_token=${accessToken}`;
-  const response = await fetch(url);
-  const data = await response.json();
-  
-  if (!response.ok) {
-    const errorMsg = data?.error?.message || 'Unknown error fetching catalog name';
-    throw new Error(errorMsg);
-  }
-  
-  return data.name || `Catalog ${catalogId}`;
+  const result = await trpcMutate('facebook.fetchCatalogName', { catalogId, accessToken });
+  return result.name || `Catalog ${catalogId}`;
 };
 
 /**
- * Validate a Facebook Access Token by making a simple API call
+ * Validate a Facebook Access Token via backend proxy (avoids CORS issues)
  */
 export const validateAccessToken = async (accessToken: string): Promise<{ valid: boolean; message: string }> => {
   try {
-    const url = `${FB_BASE_URL}/me?access_token=${accessToken}`;
-    const response = await fetch(url);
-    const data = await response.json();
-    
-    if (!response.ok) {
-      return { valid: false, message: data?.error?.message || 'Invalid access token' };
-    }
-    
-    return { valid: true, message: `Token valid. User: ${data.name || data.id}` };
+    const result = await trpcMutate('facebook.validateToken', { accessToken });
+    return { valid: result.valid, message: result.message };
   } catch (e: any) {
     return { valid: false, message: e.message || 'Failed to validate token' };
   }
@@ -185,14 +185,8 @@ export const saveUploadRecord = async (record: {
   uploadedBy?: string;
 }): Promise<boolean> => {
   try {
-    const response = await fetch('/api/trpc/uploads.create', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
-      body: JSON.stringify({ "0": { json: record } }),
-    });
-    const data = await response.json();
-    return !!data?.result?.data?.json;
+    const result = await trpcMutate('uploads.create', record);
+    return !!result;
   } catch (e) {
     console.error('Failed to save upload record:', e);
     return false;
@@ -204,12 +198,7 @@ export const saveUploadRecord = async (record: {
  */
 export const getUploadRecords = async (catalogId: string): Promise<any[]> => {
   try {
-    const response = await fetch(`/api/trpc/uploads.listByCatalog?input=${encodeURIComponent(JSON.stringify({ "0": { json: { catalogId } } }))}`, {
-      method: 'GET',
-      credentials: 'include',
-    });
-    const data = await response.json();
-    return data?.result?.data?.json || [];
+    return await trpcQuery('uploads.listByCatalog', { catalogId });
   } catch (e) {
     console.error('Failed to get upload records:', e);
     return [];

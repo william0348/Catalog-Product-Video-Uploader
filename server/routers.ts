@@ -183,6 +183,38 @@ export const appRouter = router({
       }),
   }),
 
+  // ==================== Facebook API Proxy ====================
+  facebook: router({
+    validateToken: publicProcedure
+      .input(z.object({ accessToken: z.string() }))
+      .mutation(async ({ input }) => {
+        try {
+          const url = `https://graph.facebook.com/v21.0/me?access_token=${input.accessToken}`;
+          const response = await fetch(url);
+          const data = await response.json();
+          if (!response.ok) {
+            return { valid: false, message: data?.error?.message || 'Invalid access token' };
+          }
+          return { valid: true, message: `Token valid. User: ${data.name || data.id}` };
+        } catch (e: any) {
+          return { valid: false, message: e.message || 'Failed to validate token' };
+        }
+      }),
+
+    fetchCatalogName: publicProcedure
+      .input(z.object({ catalogId: z.string(), accessToken: z.string() }))
+      .mutation(async ({ input }) => {
+        const url = `https://graph.facebook.com/v21.0/${input.catalogId}?fields=name&access_token=${input.accessToken}`;
+        const response = await fetch(url);
+        const data = await response.json();
+        if (!response.ok) {
+          const errorMsg = data?.error?.message || 'Unknown error fetching catalog name';
+          throw new Error(errorMsg);
+        }
+        return { name: data.name || `Catalog ${input.catalogId}` };
+      }),
+  }),
+
   // ==================== App Settings ====================
   settings: router({
     get: publicProcedure

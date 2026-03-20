@@ -53,3 +53,9 @@
 - [x] 測試 CSV 匯出 URL（Meta Catalog 可正確下載）
 - [x] 執行完整 vitest 測試並修復回歸問題（15/15 passed）
 - [x] 建立 Checkpoint 並發布
+
+## Bug Fixes
+- [x] 修復 Facebook Access Token 驗證失敗問題（之前可以，現在顯示「無效的存取金鑰」）
+- [x] 修復 settingsStore.ts tRPC 請求格式錯誤（settings.set 回傳 400）
+- [x] 修復 settings 無法儲存到資料庫的問題
+- [x] 將 Facebook API 呼叫改為透過後端代理（避免 CORS）

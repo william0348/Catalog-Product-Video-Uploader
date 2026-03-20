@@ -1,0 +1,34 @@
+{
+  "query": "SELECT * FROM app_settings;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway03.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 2i7zmHsYDkLMCtd.517e86959c58 --database nN7fRv522pr6qmVvUdeAQB --execute SELECT * FROM app_settings;",
+  "rows": [
+    {
+      "id": "1",
+      "settingKey": "test_key",
+      "settingValue": "test_value",
+      "updatedAt": "2026-03-20 08:31:58"
+    },
+    {
+      "id": "2",
+      "settingKey": "facebookAccessToken",
+      "settingValue": "EAAKgZCIurXAgBQ5ihn37X5ZAtyKDhwMDtGZBRFOA68AnW6TKj3rgOEQ88olsh0ZAwkriF4nZB1qeNcObnMZA8v54VHcLbnE7CnVshjUqW3YUmTWSRfQscnHU4lRZC0inXDQULOVdXCGMrPFGLV046TJw48qyr6EUCyIziEel0ZCLkpPy9YXdSVo57WehSeLU",
+      "updatedAt": "2026-03-20 08:34:00"
+    },
+    {
+      "id": "3",
+      "settingKey": "catalogs",
+      "settingValue": "[]",
+      "updatedAt": "2026-03-20 08:34:01"
+    },
+    {
+      "id": "4",
+      "settingKey": "accessKey",
+      "settingValue": "RhinoShield2025",
+      "updatedAt": "2026-03-20 08:34:01"
+    }
+  ],
+  "messages": [],
+  "stdout": "id\tsettingKey\tsettingValue\tupdatedAt\n1\ttest_key\ttest_value\t2026-03-20 08:31:58\n2\tfacebookAccessToken\tEAAKgZCIurXAgBQ5ihn37X5ZAtyKDhwMDtGZBRFOA68AnW6TKj3rgOEQ88olsh0ZAwkriF4nZB1qeNcObnMZA8v54VHcLbnE7CnVshjUqW3YUmTWSRfQscnHU4lRZC0inXDQULOVdXCGMrPFGLV046TJw48qyr6EUCyIziEel0ZCLkpPy9YXdSVo57WehSeLU\t2026-03-20 08:34:00\n3\tcatalogs\t[]\t2026-03-20 08:34:01\n4\taccessKey\tRhinoShield2025\t2026-03-20 08:34:01\n",
+  "stderr": "",
+  "execution_time_ms": 1560
+}
