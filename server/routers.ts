@@ -7,12 +7,21 @@ import {
   createUploadRecord,
   createUploadRecordsBatch,
   getUploadRecordsByCatalog,
+  getUploadRecordsByCompany,
   getAllUploadRecords,
   deleteUploadRecord,
   getSetting,
   setSetting,
   getAllSettings,
   getUploadRecordById,
+  createCompany,
+  getCompanyById,
+  updateCompany,
+  getCompaniesByEmail,
+  addCompanyMember,
+  getCompanyMembers,
+  removeCompanyMember,
+  activateMemberByEmail,
 } from "./db";
 
 export const appRouter = router({
@@ -26,10 +35,156 @@ export const appRouter = router({
     }),
   }),
 
+  // ==================== Company Management ====================
+  company: router({
+    // Create a new company (user becomes owner)
+    create: publicProcedure
+      .input(z.object({
+        name: z.string().min(1),
+        email: z.string().email(),
+        facebookAccessToken: z.string().optional(),
+        accessKey: z.string().optional(),
+      }))
+      .mutation(async ({ input }) => {
+        // Create the company
+        const company = await createCompany({
+          name: input.name,
+          facebookAccessToken: input.facebookAccessToken ?? null,
+          catalogs: "[]",
+          accessKey: input.accessKey ?? null,
+          createdBy: 0, // Will be updated when we have user context
+        });
+        if (!company) throw new Error("Failed to create company");
+
+        // Add the creator as owner
+        await addCompanyMember({
+          companyId: company.id,
+          email: input.email.toLowerCase(),
+          memberRole: "owner",
+          status: "active",
+          userId: null,
+        });
+
+        return company;
+      }),
+
+    // Get company by ID
+    get: publicProcedure
+      .input(z.object({ id: z.number() }))
+      .query(async ({ input }) => {
+        const company = await getCompanyById(input.id);
+        if (!company) throw new Error("Company not found");
+        // Mask the access token for security
+        return {
+          ...company,
+          facebookAccessToken: company.facebookAccessToken
+            ? `${company.facebookAccessToken.slice(0, 10)}...${company.facebookAccessToken.slice(-6)}`
+            : null,
+          facebookAccessTokenFull: company.facebookAccessToken,
+        };
+      }),
+
+    // Get companies by user email
+    getByEmail: publicProcedure
+      .input(z.object({ email: z.string().email() }))
+      .query(async ({ input }) => {
+        const companiesResult = await getCompaniesByEmail(input.email);
+        return companiesResult.map(c => ({
+          ...c,
+          // Mask token
+          facebookAccessToken: c.facebookAccessToken
+            ? `${c.facebookAccessToken.slice(0, 10)}...${c.facebookAccessToken.slice(-6)}`
+            : null,
+        }));
+      }),
+
+    // Update company settings (token, access key, etc.)
+    update: publicProcedure
+      .input(z.object({
+        id: z.number(),
+        name: z.string().optional(),
+        facebookAccessToken: z.string().optional(),
+        accessKey: z.string().optional(),
+        catalogs: z.string().optional(),
+      }))
+      .mutation(async ({ input }) => {
+        const { id, ...data } = input;
+        const updateData: Record<string, unknown> = {};
+        if (data.name !== undefined) updateData.name = data.name;
+        if (data.facebookAccessToken !== undefined) updateData.facebookAccessToken = data.facebookAccessToken;
+        if (data.accessKey !== undefined) updateData.accessKey = data.accessKey;
+        if (data.catalogs !== undefined) updateData.catalogs = data.catalogs;
+        
+        await updateCompany(id, updateData as any);
+        return { success: true };
+      }),
+
+    // Get full access token (for use in API calls)
+    getAccessToken: publicProcedure
+      .input(z.object({ id: z.number() }))
+      .query(async ({ input }) => {
+        const company = await getCompanyById(input.id);
+        if (!company) throw new Error("Company not found");
+        return { accessToken: company.facebookAccessToken };
+      }),
+  }),
+
+  // ==================== Company Members ====================
+  members: router({
+    // List members of a company
+    list: publicProcedure
+      .input(z.object({ companyId: z.number() }))
+      .query(async ({ input }) => {
+        return getCompanyMembers(input.companyId);
+      }),
+
+    // Invite a member by email
+    invite: publicProcedure
+      .input(z.object({
+        companyId: z.number(),
+        email: z.string().email(),
+      }))
+      .mutation(async ({ input }) => {
+        const member = await addCompanyMember({
+          companyId: input.companyId,
+          email: input.email.toLowerCase(),
+          memberRole: "member",
+          status: "pending",
+          userId: null,
+        });
+        return member;
+      }),
+
+    // Remove a member from company
+    remove: publicProcedure
+      .input(z.object({
+        companyId: z.number(),
+        email: z.string().email(),
+      }))
+      .mutation(async ({ input }) => {
+        await removeCompanyMember(input.companyId, input.email);
+        return { success: true };
+      }),
+
+    // Activate pending memberships when user logs in with email
+    activate: publicProcedure
+      .input(z.object({
+        email: z.string().email(),
+        userId: z.number().optional(),
+      }))
+      .mutation(async ({ input }) => {
+        if (input.userId) {
+          await activateMemberByEmail(input.email, input.userId);
+        }
+        return { success: true };
+      }),
+  }),
+
   // ==================== Upload Records ====================
   uploads: router({
     create: publicProcedure
       .input(z.object({
+        companyId: z.number().optional(),
         catalogId: z.string(),
         retailerId: z.string(),
         productName: z.string(),
@@ -44,6 +199,7 @@ export const appRouter = router({
       .mutation(async ({ input }) => {
         return createUploadRecord({
           ...input,
+          companyId: input.companyId ?? null,
           productImageUrl: input.productImageUrl ?? null,
           video4x5Download: input.video4x5Download ?? null,
           video4x5Embed: input.video4x5Embed ?? null,
@@ -55,6 +211,7 @@ export const appRouter = router({
 
     createBatch: publicProcedure
       .input(z.array(z.object({
+        companyId: z.number().optional(),
         catalogId: z.string(),
         retailerId: z.string(),
         productName: z.string(),
@@ -69,6 +226,7 @@ export const appRouter = router({
       .mutation(async ({ input }) => {
         await createUploadRecordsBatch(input.map(r => ({
           ...r,
+          companyId: r.companyId ?? null,
           productImageUrl: r.productImageUrl ?? null,
           video4x5Download: r.video4x5Download ?? null,
           video4x5Embed: r.video4x5Embed ?? null,
@@ -85,6 +243,12 @@ export const appRouter = router({
         return getUploadRecordsByCatalog(input.catalogId);
       }),
 
+    listByCompany: publicProcedure
+      .input(z.object({ companyId: z.number() }))
+      .query(async ({ input }) => {
+        return getUploadRecordsByCompany(input.companyId);
+      }),
+
     listAll: publicProcedure.query(async () => {
       return getAllUploadRecords();
     }),
@@ -98,7 +262,10 @@ export const appRouter = router({
 
     // Delete video from Facebook Catalog via Batch API, then delete DB record
     deleteVideoFromCatalog: publicProcedure
-      .input(z.object({ id: z.number() }))
+      .input(z.object({
+        id: z.number(),
+        companyId: z.number().optional(),
+      }))
       .mutation(async ({ input }) => {
         // 1. Get the record from DB
         const record = await getUploadRecordById(input.id);
@@ -106,14 +273,20 @@ export const appRouter = router({
           throw new Error("Record not found");
         }
 
-        // 2. Get the access token from settings
-        const accessToken = await getSetting("facebookAccessToken");
+        // 2. Get the access token - try company first, then global settings
+        let accessToken: string | null = null;
+        if (input.companyId) {
+          const company = await getCompanyById(input.companyId);
+          accessToken = company?.facebookAccessToken ?? null;
+        }
         if (!accessToken) {
-          throw new Error("Facebook Access Token not configured. Please set it in Admin Settings.");
+          accessToken = await getSetting("facebookAccessToken");
+        }
+        if (!accessToken) {
+          throw new Error("Facebook Access Token not configured. Please set it in company settings or Admin Settings.");
         }
 
         // 3. Call Facebook Catalog Batch API to remove videos
-        // Using method: "UPDATE" with video: [] to clear videos
         const batchUrl = `https://graph.facebook.com/v21.0/${record.catalogId}/items_batch`;
         const batchPayload = {
           access_token: accessToken,
@@ -145,15 +318,13 @@ export const appRouter = router({
           throw new Error(`Facebook API error: ${errorMsg}`);
         }
 
-        // 4. Check if the batch was accepted (FB returns a handle for async processing)
+        // 4. Check if the batch was accepted
         const handle = fbResult?.handles?.[0];
         if (handle) {
-          // Optionally check batch status - for now we trust the acceptance
           console.log(`[DeleteVideo] Batch accepted with handle: ${handle}`);
         }
 
-        // 5. Verify the product no longer has videos by querying the product
-        // Wait a brief moment for FB to process
+        // 5. Verify the product no longer has videos
         await new Promise(resolve => setTimeout(resolve, 2000));
 
         try {
@@ -162,13 +333,12 @@ export const appRouter = router({
           const verifyResult = await verifyResponse.json();
           
           if (verifyResult?.data?.[0]?.video && verifyResult.data[0].video.length > 0) {
-            console.warn(`[DeleteVideo] Warning: Product ${record.retailerId} still has videos after deletion attempt. Proceeding with DB deletion anyway.`);
+            console.warn(`[DeleteVideo] Warning: Product ${record.retailerId} still has videos after deletion attempt.`);
           } else {
             console.log(`[DeleteVideo] Verified: Product ${record.retailerId} has no videos in catalog.`);
           }
         } catch (verifyError) {
           console.warn(`[DeleteVideo] Could not verify video deletion:`, verifyError);
-          // Don't block DB deletion if verification fails
         }
 
         // 6. Delete from our database
@@ -215,7 +385,7 @@ export const appRouter = router({
       }),
   }),
 
-  // ==================== App Settings ====================
+  // ==================== App Settings (legacy, kept for backward compatibility) ====================
   settings: router({
     get: publicProcedure
       .input(z.object({ key: z.string() }))

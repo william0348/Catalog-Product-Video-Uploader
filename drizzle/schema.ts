@@ -25,9 +25,47 @@ export const users = mysqlTable("users", {
 export type User = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;
 
+// ==================== Companies ====================
+export const companies = mysqlTable("companies", {
+  id: int("id").autoincrement().primaryKey(),
+  name: varchar("name", { length: 255 }).notNull(),
+  /** Facebook Access Token shared by all members */
+  facebookAccessToken: text("facebookAccessToken"),
+  /** JSON array of catalog objects: [{id, name}] */
+  catalogs: text("catalogs"),
+  /** Access key/password for the upload tool */
+  accessKey: varchar("accessKey", { length: 255 }),
+  createdBy: int("createdBy").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type Company = typeof companies.$inferSelect;
+export type InsertCompany = typeof companies.$inferInsert;
+
+// ==================== Company Members ====================
+export const companyMembers = mysqlTable("company_members", {
+  id: int("id").autoincrement().primaryKey(),
+  companyId: int("companyId").notNull(),
+  /** Email of the member (used for invitation matching) */
+  email: varchar("email", { length: 320 }).notNull(),
+  /** Role within the company */
+  memberRole: mysqlEnum("memberRole", ["owner", "member"]).default("member").notNull(),
+  /** Status of the membership */
+  status: mysqlEnum("status", ["active", "pending"]).default("pending").notNull(),
+  /** User ID if the member has logged in and been matched */
+  userId: int("userId"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type CompanyMember = typeof companyMembers.$inferSelect;
+export type InsertCompanyMember = typeof companyMembers.$inferInsert;
+
 // ==================== Upload Records ====================
 export const uploadRecords = mysqlTable("upload_records", {
   id: int("id").autoincrement().primaryKey(),
+  companyId: int("companyId"),
   catalogId: varchar("catalogId", { length: 64 }).notNull(),
   retailerId: varchar("retailerId", { length: 255 }).notNull(),
   productName: varchar("productName", { length: 512 }).notNull(),

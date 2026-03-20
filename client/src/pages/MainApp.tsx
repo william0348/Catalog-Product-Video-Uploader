@@ -13,7 +13,7 @@ import {
     MASTER_GOOGLE_SHEET_ID, SHEET_TAB_NAME, GOOGLE_APPS_SCRIPT_URL,
     SESSION_DATA_KEY, INTRO_GUIDE_KEY, SHEET_DATA_HEADER
 } from '@/constants';
-import { loadSettings, saveSettings, fetchCatalogName, validateAccessToken, loadSettingsFromServer, saveUploadRecord, getUploadRecords, type CatalogConfig, type AppSettings } from '@/settingsStore';
+import { loadSettings, saveSettings, fetchCatalogName, validateAccessToken, loadSettingsFromServer, saveUploadRecord, getUploadRecords, getCompaniesByEmail, loadCompanySettings, saveCompanySettings, saveSelectedCompany, getSelectedCompany, activateMemberships, type CatalogConfig, type AppSettings, type CompanyInfo } from '@/settingsStore';
 import type { Product, ProductSet, Catalog, HoveredImage, ProductVideos, VideoType, ToastMessage, UploadedVideo, VideoFilterType } from '@/types';
 import { apiFetch, fetchAllPages } from '@/api';
 import { getColumnLetter } from '@/lib/helpers';
@@ -69,40 +69,106 @@ export const MainApp = () => {
   const [catalogError, setCatalogError] = useState<string | null>(null);
   const [isSaved, setIsSaved] = useState(false);
 
+  // ===== Company-based state =====
+  const [userCompanies, setUserCompanies] = useState<CompanyInfo[]>([]);
+  const [selectedCompanyId, setSelectedCompanyId] = useState<number | null>(getSelectedCompany());
+  const [isLoadingCompanies, setIsLoadingCompanies] = useState(false);
+  const [companyAccessKeyValue, setCompanyAccessKeyValue] = useState<string>('');
+
   // Load settings on mount — first from localStorage (fast), then from server (authoritative)
   useEffect(() => {
-    const settings = loadSettings();
-    setConfiguredCatalogs(settings.catalogs);
-    setFbAccessToken(settings.facebookAccessToken);
-    setTokenInput(settings.facebookAccessToken);
-    // Then load from server to get the latest shared settings
-    loadSettingsFromServer().then(serverSettings => {
-      setConfiguredCatalogs(serverSettings.catalogs);
-      setFbAccessToken(serverSettings.facebookAccessToken);
-      setTokenInput(serverSettings.facebookAccessToken);
-    }).catch(console.error);
-  }, []);
-
-  // Refresh settings when returning to input view
-  useEffect(() => {
-    if (view === 'input') {
+    const savedCompanyId = getSelectedCompany();
+    if (savedCompanyId) {
+      // Load company settings
+      loadCompanySettings(savedCompanyId).then(companySettings => {
+        setConfiguredCatalogs(companySettings.catalogs);
+        setFbAccessToken(companySettings.facebookAccessToken);
+        setTokenInput(companySettings.facebookAccessToken);
+        setCompanyAccessKeyValue(companySettings.accessKey);
+      }).catch(console.error);
+    } else {
+      // Fallback to global settings
+      const settings = loadSettings();
+      setConfiguredCatalogs(settings.catalogs);
+      setFbAccessToken(settings.facebookAccessToken);
+      setTokenInput(settings.facebookAccessToken);
       loadSettingsFromServer().then(serverSettings => {
         setConfiguredCatalogs(serverSettings.catalogs);
         setFbAccessToken(serverSettings.facebookAccessToken);
         setTokenInput(serverSettings.facebookAccessToken);
       }).catch(console.error);
     }
-  }, [view]);
+  }, []);
+
+  // Refresh settings when returning to input view
+  useEffect(() => {
+    if (view === 'input') {
+      if (selectedCompanyId) {
+        loadCompanySettings(selectedCompanyId).then(companySettings => {
+          setConfiguredCatalogs(companySettings.catalogs);
+          setFbAccessToken(companySettings.facebookAccessToken);
+          setTokenInput(companySettings.facebookAccessToken);
+          setCompanyAccessKeyValue(companySettings.accessKey);
+        }).catch(console.error);
+      } else {
+        loadSettingsFromServer().then(serverSettings => {
+          setConfiguredCatalogs(serverSettings.catalogs);
+          setFbAccessToken(serverSettings.facebookAccessToken);
+          setTokenInput(serverSettings.facebookAccessToken);
+        }).catch(console.error);
+      }
+    }
+  }, [view, selectedCompanyId]);
+
+  // Load companies when user email is available
+  useEffect(() => {
+    if (!userEmail) return;
+    setIsLoadingCompanies(true);
+    // Activate any pending memberships
+    activateMemberships(userEmail).catch(console.error);
+    // Load companies
+    getCompaniesByEmail(userEmail).then(companies => {
+      setUserCompanies(companies);
+      // Auto-select if only one company, or restore saved selection
+      const savedId = getSelectedCompany();
+      if (savedId && companies.some(c => c.id === savedId)) {
+        handleSelectCompany(savedId);
+      } else if (companies.length === 1) {
+        handleSelectCompany(companies[0].id);
+      }
+    }).catch(console.error).finally(() => setIsLoadingCompanies(false));
+  }, [userEmail]);
+
+  // Handle company selection
+  const handleSelectCompany = useCallback(async (companyId: number) => {
+    setSelectedCompanyId(companyId);
+    saveSelectedCompany(companyId);
+    try {
+      const companySettings = await loadCompanySettings(companyId);
+      setConfiguredCatalogs(companySettings.catalogs);
+      setFbAccessToken(companySettings.facebookAccessToken);
+      setTokenInput(companySettings.facebookAccessToken);
+      setCompanyAccessKeyValue(companySettings.accessKey);
+    } catch (e) {
+      console.error('Failed to load company settings:', e);
+    }
+  }, []);
 
   // ===== Inline settings handlers =====
-  const handleSaveToken = useCallback(() => {
-    const settings = loadSettings();
-    const updated = { ...settings, facebookAccessToken: tokenInput };
-    saveSettings(updated);
+  const handleSaveToken = useCallback(async () => {
+    if (selectedCompanyId) {
+      // Save to company
+      await saveCompanySettings(selectedCompanyId, { facebookAccessToken: tokenInput });
+    } else {
+      // Fallback to global settings
+      const settings = loadSettings();
+      const updated = { ...settings, facebookAccessToken: tokenInput };
+      saveSettings(updated);
+    }
     setFbAccessToken(tokenInput);
     setIsSaved(true);
     setTimeout(() => setIsSaved(false), 2000);
-  }, [tokenInput]);
+  }, [tokenInput, selectedCompanyId]);
 
   const handleValidateToken = useCallback(async () => {
     if (!tokenInput) {
@@ -141,27 +207,37 @@ export const MainApp = () => {
     try {
       const name = await fetchCatalogName(trimmedId, currentToken);
       const newCatalog: CatalogConfig = { id: trimmedId, name, addedAt: new Date().toISOString() };
-      const settings = loadSettings();
-      const updated = { ...settings, catalogs: [...settings.catalogs, newCatalog] };
-      saveSettings(updated);
-      setConfiguredCatalogs(updated.catalogs);
+      const newCatalogs = [...configuredCatalogs, newCatalog];
+      if (selectedCompanyId) {
+        await saveCompanySettings(selectedCompanyId, { catalogs: newCatalogs });
+      } else {
+        const settings = loadSettings();
+        const updated = { ...settings, catalogs: newCatalogs };
+        saveSettings(updated);
+      }
+      setConfiguredCatalogs(newCatalogs);
       setNewCatalogId('');
     } catch (e: any) {
       setCatalogError(`${t('fetchCatalogFailed')}: ${e.message}`);
     } finally {
       setIsAddingCatalog(false);
     }
-  }, [newCatalogId, tokenInput, fbAccessToken, configuredCatalogs, t]);
+  }, [newCatalogId, tokenInput, fbAccessToken, configuredCatalogs, t, selectedCompanyId]);
 
-  const handleRemoveCatalog = useCallback((catalogIdToRemove: string) => {
-    const settings = loadSettings();
-    const updated = { ...settings, catalogs: settings.catalogs.filter(c => c.id !== catalogIdToRemove) };
-    saveSettings(updated);
-    setConfiguredCatalogs(updated.catalogs);
+  const handleRemoveCatalog = useCallback(async (catalogIdToRemove: string) => {
+    const newCatalogs = configuredCatalogs.filter(c => c.id !== catalogIdToRemove);
+    if (selectedCompanyId) {
+      await saveCompanySettings(selectedCompanyId, { catalogs: newCatalogs });
+    } else {
+      const settings = loadSettings();
+      const updated = { ...settings, catalogs: newCatalogs };
+      saveSettings(updated);
+    }
+    setConfiguredCatalogs(newCatalogs);
     if (catalogId === catalogIdToRemove) {
       setCatalogId('');
     }
-  }, [catalogId]);
+  }, [catalogId, configuredCatalogs, selectedCompanyId]);
 
   const addToast = useCallback((message: string, type: ToastMessage['type'] = 'info') => {
     const id = toastIdRef.current++;
@@ -449,9 +525,9 @@ export const MainApp = () => {
         return; 
     }
     
-    // Validate access key from settings
-    const settings = loadSettings();
-    if (accessKey !== settings.accessKey) {
+    // Validate access key — use company access key if available, otherwise global settings
+    const expectedAccessKey = selectedCompanyId ? companyAccessKeyValue : loadSettings().accessKey;
+    if (accessKey !== expectedAccessKey) {
         setError(t('invalidAccessKey'));
         return;
     }
@@ -491,7 +567,7 @@ export const MainApp = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [catalogId, clientName, accessKey, t, fbAccessToken, configuredCatalogs]);
+  }, [catalogId, clientName, accessKey, t, fbAccessToken, configuredCatalogs, selectedCompanyId, companyAccessKeyValue]);
   
   useEffect(() => {
     if (view !== 'data' || !catalogId) return;
@@ -720,6 +796,46 @@ export const MainApp = () => {
               <LanguageSwitcher />
             </div>
           </header>
+
+          {/* ===== Company Selector ===== */}
+          {userEmail && userCompanies.length > 0 && (
+            <div className="company-selector-section">
+              <label>{t('selectCompany') || '選擇公司'}</label>
+              <div className="company-selector-row">
+                <select
+                  value={selectedCompanyId || ''}
+                  onChange={(e) => {
+                    const id = parseInt(e.target.value);
+                    if (id) handleSelectCompany(id);
+                  }}
+                  className="company-select"
+                >
+                  <option value="">{t('selectCompanyPlaceholder') || '-- 請選擇公司 --'}</option>
+                  {userCompanies.map(company => (
+                    <option key={company.id} value={company.id}>
+                      {company.name}
+                    </option>
+                  ))}
+                </select>
+                {selectedCompanyId && (
+                  <span className="company-selected-badge">
+                    ✓ {userCompanies.find(c => c.id === selectedCompanyId)?.name}
+                  </span>
+                )}
+              </div>
+            </div>
+          )}
+          {isLoadingCompanies && (
+            <div className="company-loading">
+              <div className="loader-small"></div>
+              <span>{t('loadingCompanies') || '載入公司資料中...'}</span>
+            </div>
+          )}
+          {userEmail && !isLoadingCompanies && userCompanies.length === 0 && (
+            <div className="no-company-notice">
+              <p>{t('noCompanyFound') || '您尚未加入任何公司。請聯繫管理員邀請您，或在管理面板中建立新公司。'}</p>
+            </div>
+          )}
 
           {/* ===== Settings Toggle ===== */}
           <div className="settings-toggle-section">

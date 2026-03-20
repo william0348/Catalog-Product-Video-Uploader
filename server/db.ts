@@ -1,6 +1,12 @@
-import { eq } from "drizzle-orm";
+import { eq, and, or } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { InsertUser, users, uploadRecords, InsertUploadRecord, UploadRecord, appSettings } from "../drizzle/schema";
+import {
+  InsertUser, users,
+  uploadRecords, InsertUploadRecord, UploadRecord,
+  appSettings,
+  companies, InsertCompany, Company,
+  companyMembers, InsertCompanyMember, CompanyMember,
+} from "../drizzle/schema";
 import { ENV } from './_core/env';
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -89,6 +95,119 @@ export async function getUserByOpenId(openId: string) {
   return result.length > 0 ? result[0] : undefined;
 }
 
+// ==================== Companies ====================
+
+export async function createCompany(data: InsertCompany): Promise<Company | undefined> {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db.insert(companies).values(data);
+  const insertId = result[0].insertId;
+  const rows = await db.select().from(companies).where(eq(companies.id, insertId)).limit(1);
+  return rows[0];
+}
+
+export async function getCompanyById(id: number): Promise<Company | undefined> {
+  const db = await getDb();
+  if (!db) return undefined;
+  const rows = await db.select().from(companies).where(eq(companies.id, id)).limit(1);
+  return rows[0];
+}
+
+export async function updateCompany(id: number, data: Partial<InsertCompany>): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(companies).set(data).where(eq(companies.id, id));
+}
+
+export async function getCompaniesByUserId(userId: number): Promise<(Company & { memberRole: string })[]> {
+  const db = await getDb();
+  if (!db) return [];
+  // Get all companies where the user is a member
+  const memberships = await db.select().from(companyMembers)
+    .where(and(eq(companyMembers.userId, userId), eq(companyMembers.status, "active")));
+  
+  if (memberships.length === 0) return [];
+  
+  const result: (Company & { memberRole: string })[] = [];
+  for (const m of memberships) {
+    const companyRows = await db.select().from(companies).where(eq(companies.id, m.companyId)).limit(1);
+    if (companyRows[0]) {
+      result.push({ ...companyRows[0], memberRole: m.memberRole });
+    }
+  }
+  return result;
+}
+
+export async function getCompaniesByEmail(email: string): Promise<(Company & { memberRole: string; status: string })[]> {
+  const db = await getDb();
+  if (!db) return [];
+  const memberships = await db.select().from(companyMembers)
+    .where(eq(companyMembers.email, email.toLowerCase()));
+  
+  if (memberships.length === 0) return [];
+  
+  const result: (Company & { memberRole: string; status: string })[] = [];
+  for (const m of memberships) {
+    const companyRows = await db.select().from(companies).where(eq(companies.id, m.companyId)).limit(1);
+    if (companyRows[0]) {
+      result.push({ ...companyRows[0], memberRole: m.memberRole, status: m.status });
+    }
+  }
+  return result;
+}
+
+// ==================== Company Members ====================
+
+export async function addCompanyMember(data: InsertCompanyMember): Promise<CompanyMember | undefined> {
+  const db = await getDb();
+  if (!db) return undefined;
+  
+  // Check if member already exists
+  const existing = await db.select().from(companyMembers)
+    .where(and(
+      eq(companyMembers.companyId, data.companyId),
+      eq(companyMembers.email, data.email.toLowerCase())
+    )).limit(1);
+  
+  if (existing.length > 0) {
+    return existing[0]; // Already a member
+  }
+  
+  const result = await db.insert(companyMembers).values({
+    ...data,
+    email: data.email.toLowerCase(),
+  });
+  const insertId = result[0].insertId;
+  const rows = await db.select().from(companyMembers).where(eq(companyMembers.id, insertId)).limit(1);
+  return rows[0];
+}
+
+export async function getCompanyMembers(companyId: number): Promise<CompanyMember[]> {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(companyMembers).where(eq(companyMembers.companyId, companyId));
+}
+
+export async function removeCompanyMember(companyId: number, email: string): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db.delete(companyMembers).where(
+    and(eq(companyMembers.companyId, companyId), eq(companyMembers.email, email.toLowerCase()))
+  );
+}
+
+export async function activateMemberByEmail(email: string, userId: number): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  // When a user logs in, activate all pending memberships matching their email
+  await db.update(companyMembers)
+    .set({ status: "active", userId })
+    .where(and(
+      eq(companyMembers.email, email.toLowerCase()),
+      eq(companyMembers.status, "pending")
+    ));
+}
+
 // ==================== Upload Records ====================
 
 export async function createUploadRecord(record: InsertUploadRecord): Promise<UploadRecord | undefined> {
@@ -117,6 +236,12 @@ export async function getUploadRecordsByCatalog(catalogId: string): Promise<Uplo
   const db = await getDb();
   if (!db) return [];
   return db.select().from(uploadRecords).where(eq(uploadRecords.catalogId, catalogId)).orderBy(uploadRecords.uploadTimestamp);
+}
+
+export async function getUploadRecordsByCompany(companyId: number): Promise<UploadRecord[]> {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(uploadRecords).where(eq(uploadRecords.companyId, companyId)).orderBy(uploadRecords.uploadTimestamp);
 }
 
 export async function getAllUploadRecords(): Promise<UploadRecord[]> {

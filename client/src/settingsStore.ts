@@ -2,9 +2,7 @@
  * settingsStore.ts
  * 
  * Centralized settings store backed by the server database via tRPC API.
- * All users share the same Access Token and Catalog configurations.
- * Falls back to localStorage for offline/initial loading.
- * 
+ * Supports both legacy global settings and company-level shared settings.
  * Facebook API calls are proxied through the backend to avoid CORS issues.
  */
 
@@ -20,7 +18,19 @@ export interface AppSettings {
   accessKey: string;
 }
 
+export interface CompanyInfo {
+  id: number;
+  name: string;
+  facebookAccessToken: string | null;
+  catalogs: string; // JSON string of CatalogConfig[]
+  accessKey: string | null;
+  createdAt: string;
+  memberRole?: string;
+  status?: string;
+}
+
 const SETTINGS_STORAGE_KEY = 'cpv_app_settings';
+const COMPANY_STORAGE_KEY = 'cpv_selected_company';
 
 const DEFAULT_SETTINGS: AppSettings = {
   facebookAccessToken: '',
@@ -67,6 +77,8 @@ const trpcQuery = async (path: string, input?: any): Promise<any> => {
   return data?.result?.data?.json;
 };
 
+// ==================== Legacy Global Settings ====================
+
 /**
  * Load settings from localStorage (fast, synchronous)
  */
@@ -95,13 +107,11 @@ export const loadSettings = (): AppSettings => {
  */
 export const saveSettings = async (settings: AppSettings): Promise<void> => {
   _cachedSettings = { ...settings };
-  // Save to localStorage for immediate availability
   try {
     localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(settings));
   } catch (e) {
     console.error('Failed to save settings to localStorage:', e);
   }
-  // Persist to server database
   try {
     await trpcMutate('settings.set', { key: 'facebookAccessToken', value: settings.facebookAccessToken });
     await trpcMutate('settings.set', { key: 'catalogs', value: JSON.stringify(settings.catalogs) });
@@ -132,6 +142,137 @@ export const loadSettingsFromServer = async (): Promise<AppSettings> => {
   }
   return loadSettings();
 };
+
+// ==================== Company-Level Settings ====================
+
+/**
+ * Get companies by user email
+ */
+export const getCompaniesByEmail = async (email: string): Promise<CompanyInfo[]> => {
+  try {
+    return await trpcQuery('company.getByEmail', { email: email.toLowerCase() });
+  } catch (e) {
+    console.error('Failed to get companies by email:', e);
+    return [];
+  }
+};
+
+/**
+ * Get full company details including access token
+ */
+export const getCompanyDetails = async (companyId: number): Promise<CompanyInfo | null> => {
+  try {
+    return await trpcQuery('company.get', { id: companyId });
+  } catch (e) {
+    console.error('Failed to get company details:', e);
+    return null;
+  }
+};
+
+/**
+ * Get company's full access token (not masked)
+ */
+export const getCompanyAccessToken = async (companyId: number): Promise<string | null> => {
+  try {
+    const result = await trpcQuery('company.getAccessToken', { id: companyId });
+    return result?.accessToken ?? null;
+  } catch (e) {
+    console.error('Failed to get company access token:', e);
+    return null;
+  }
+};
+
+/**
+ * Load settings from a specific company
+ */
+export const loadCompanySettings = async (companyId: number): Promise<AppSettings> => {
+  try {
+    const company = await getCompanyDetails(companyId);
+    if (!company) return { ...DEFAULT_SETTINGS };
+
+    // Get the full (unmasked) access token
+    const fullToken = await getCompanyAccessToken(companyId);
+
+    const catalogs: CatalogConfig[] = company.catalogs ? JSON.parse(company.catalogs) : [];
+    const settings: AppSettings = {
+      facebookAccessToken: fullToken || '',
+      catalogs,
+      accessKey: company.accessKey || '',
+    };
+
+    // Cache locally for fast reads
+    _cachedSettings = { ...settings };
+    localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(settings));
+
+    return settings;
+  } catch (e) {
+    console.error('Failed to load company settings:', e);
+    return loadSettings();
+  }
+};
+
+/**
+ * Save settings to a specific company
+ */
+export const saveCompanySettings = async (companyId: number, settings: Partial<AppSettings>): Promise<void> => {
+  try {
+    const updateData: Record<string, string> = {};
+    if (settings.facebookAccessToken !== undefined) {
+      updateData.facebookAccessToken = settings.facebookAccessToken;
+    }
+    if (settings.catalogs !== undefined) {
+      updateData.catalogs = JSON.stringify(settings.catalogs);
+    }
+    if (settings.accessKey !== undefined) {
+      updateData.accessKey = settings.accessKey;
+    }
+
+    await trpcMutate('company.update', { id: companyId, ...updateData });
+
+    // Update local cache
+    if (_cachedSettings) {
+      if (settings.facebookAccessToken !== undefined) _cachedSettings.facebookAccessToken = settings.facebookAccessToken;
+      if (settings.catalogs !== undefined) _cachedSettings.catalogs = settings.catalogs;
+      if (settings.accessKey !== undefined) _cachedSettings.accessKey = settings.accessKey;
+      localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(_cachedSettings));
+    }
+  } catch (e) {
+    console.error('Failed to save company settings:', e);
+    throw e;
+  }
+};
+
+/**
+ * Activate pending memberships when user logs in
+ */
+export const activateMemberships = async (email: string): Promise<void> => {
+  try {
+    await trpcMutate('members.activate', { email: email.toLowerCase() });
+  } catch (e) {
+    console.error('Failed to activate memberships:', e);
+  }
+};
+
+/**
+ * Save selected company ID to localStorage
+ */
+export const saveSelectedCompany = (companyId: number | null): void => {
+  if (companyId) {
+    localStorage.setItem(COMPANY_STORAGE_KEY, String(companyId));
+  } else {
+    localStorage.removeItem(COMPANY_STORAGE_KEY);
+  }
+};
+
+/**
+ * Get selected company ID from localStorage
+ */
+export const getSelectedCompany = (): number | null => {
+  const stored = localStorage.getItem(COMPANY_STORAGE_KEY);
+  return stored ? parseInt(stored, 10) : null;
+};
+
+// ==================== Shared Utilities ====================
 
 /**
  * Get the Facebook Access Token from settings
@@ -173,6 +314,7 @@ export const validateAccessToken = async (accessToken: string): Promise<{ valid:
  * Save an upload record to the database
  */
 export const saveUploadRecord = async (record: {
+  companyId?: number;
   catalogId: string;
   retailerId: string;
   productName: string;

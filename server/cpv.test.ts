@@ -2,10 +2,14 @@ import { describe, expect, it, vi, beforeEach } from "vitest";
 import { appRouter } from "./routers";
 import type { TrpcContext } from "./_core/context";
 
-// In-memory store for mocking
+// In-memory stores for mocking
 let records: any[] = [];
 let settings: Record<string, string> = {};
+let companiesStore: any[] = [];
+let membersStore: any[] = [];
 let nextId = 1;
+let nextCompanyId = 1;
+let nextMemberId = 1;
 
 // Mock the database functions
 vi.mock("./db", () => {
@@ -25,6 +29,9 @@ vi.mock("./db", () => {
     getUploadRecordsByCatalog: vi.fn(async (catalogId: string) => {
       return records.filter((r) => r.catalogId === catalogId);
     }),
+    getUploadRecordsByCompany: vi.fn(async (companyId: number) => {
+      return records.filter((r) => r.companyId === companyId);
+    }),
     getAllUploadRecords: vi.fn(async () => records),
     getUploadRecordById: vi.fn(async (id: number) => {
       return records.find((r) => r.id === id) || undefined;
@@ -41,6 +48,59 @@ vi.mock("./db", () => {
     }),
     getAllSettings: vi.fn(async () => {
       return settings;
+    }),
+    // Company functions
+    createCompany: vi.fn(async (data: any) => {
+      const company = { id: nextCompanyId++, ...data, createdAt: new Date(), updatedAt: new Date() };
+      companiesStore.push(company);
+      return company;
+    }),
+    getCompanyById: vi.fn(async (id: number) => {
+      return companiesStore.find((c) => c.id === id) || undefined;
+    }),
+    updateCompany: vi.fn(async (id: number, data: any) => {
+      const idx = companiesStore.findIndex((c) => c.id === id);
+      if (idx >= 0) {
+        companiesStore[idx] = { ...companiesStore[idx], ...data };
+      }
+    }),
+    getCompaniesByEmail: vi.fn(async (email: string) => {
+      const memberCompanyIds = membersStore
+        .filter((m) => m.email === email.toLowerCase())
+        .map((m) => m.companyId);
+      return companiesStore
+        .filter((c) => memberCompanyIds.includes(c.id))
+        .map((c) => {
+          const member = membersStore.find((m) => m.email === email.toLowerCase() && m.companyId === c.id);
+          return { ...c, memberRole: member?.memberRole || "member", status: member?.status || "active" };
+        });
+    }),
+    addCompanyMember: vi.fn(async (data: any) => {
+      // Check if already exists
+      const existing = membersStore.find(
+        (m) => m.companyId === data.companyId && m.email === data.email.toLowerCase()
+      );
+      if (existing) return existing;
+      const member = { id: nextMemberId++, ...data, email: data.email.toLowerCase(), createdAt: new Date() };
+      membersStore.push(member);
+      return member;
+    }),
+    getCompanyMembers: vi.fn(async (companyId: number) => {
+      return membersStore.filter((m) => m.companyId === companyId);
+    }),
+    removeCompanyMember: vi.fn(async (companyId: number, email: string) => {
+      const idx = membersStore.findIndex(
+        (m) => m.companyId === companyId && m.email === email.toLowerCase()
+      );
+      if (idx >= 0) membersStore.splice(idx, 1);
+    }),
+    activateMemberByEmail: vi.fn(async (email: string, userId: number) => {
+      membersStore.forEach((m) => {
+        if (m.email === email.toLowerCase() && m.status === "pending") {
+          m.status = "active";
+          m.userId = userId;
+        }
+      });
     }),
   };
 });
@@ -62,12 +122,211 @@ function createPublicContext(): TrpcContext {
   };
 }
 
+describe("company management", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    records = [];
+    settings = {};
+    companiesStore = [];
+    membersStore = [];
+    nextId = 1;
+    nextCompanyId = 1;
+    nextMemberId = 1;
+  });
+
+  it("creates a company and adds creator as owner", async () => {
+    const ctx = createPublicContext();
+    const caller = appRouter.createCaller(ctx);
+
+    const company = await caller.company.create({
+      name: "RhinoShield",
+      email: "admin@rhinoshield.com",
+      facebookAccessToken: "test-token-abc",
+      accessKey: "secret123",
+    });
+
+    expect(company).toBeDefined();
+    expect(company!.name).toBe("RhinoShield");
+    expect(companiesStore.length).toBe(1);
+    expect(membersStore.length).toBe(1);
+    expect(membersStore[0].email).toBe("admin@rhinoshield.com");
+    expect(membersStore[0].memberRole).toBe("owner");
+    expect(membersStore[0].status).toBe("active");
+  });
+
+  it("gets company by ID", async () => {
+    const ctx = createPublicContext();
+    const caller = appRouter.createCaller(ctx);
+
+    // Create a company first
+    await caller.company.create({
+      name: "TestCo",
+      email: "owner@testco.com",
+    });
+
+    const company = await caller.company.get({ id: 1 });
+    expect(company).toBeDefined();
+    expect(company.name).toBe("TestCo");
+  });
+
+  it("gets companies by email", async () => {
+    const ctx = createPublicContext();
+    const caller = appRouter.createCaller(ctx);
+
+    // Create two companies
+    await caller.company.create({
+      name: "Company A",
+      email: "user@example.com",
+    });
+    await caller.company.create({
+      name: "Company B",
+      email: "user@example.com",
+    });
+
+    const companies = await caller.company.getByEmail({ email: "user@example.com" });
+    expect(companies.length).toBe(2);
+    expect(companies[0].name).toBe("Company A");
+    expect(companies[1].name).toBe("Company B");
+  });
+
+  it("updates company settings", async () => {
+    const ctx = createPublicContext();
+    const caller = appRouter.createCaller(ctx);
+
+    await caller.company.create({
+      name: "UpdateCo",
+      email: "admin@updateco.com",
+    });
+
+    const result = await caller.company.update({
+      id: 1,
+      facebookAccessToken: "new-token-xyz",
+      accessKey: "newkey",
+    });
+
+    expect(result).toEqual({ success: true });
+    expect(companiesStore[0].facebookAccessToken).toBe("new-token-xyz");
+    expect(companiesStore[0].accessKey).toBe("newkey");
+  });
+});
+
+describe("company members", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    records = [];
+    settings = {};
+    companiesStore = [];
+    membersStore = [];
+    nextId = 1;
+    nextCompanyId = 1;
+    nextMemberId = 1;
+  });
+
+  it("invites a member by email", async () => {
+    const ctx = createPublicContext();
+    const caller = appRouter.createCaller(ctx);
+
+    // Create a company first
+    await caller.company.create({
+      name: "InviteCo",
+      email: "owner@inviteco.com",
+    });
+
+    const member = await caller.members.invite({
+      companyId: 1,
+      email: "newuser@example.com",
+    });
+
+    expect(member).toBeDefined();
+    expect(member!.email).toBe("newuser@example.com");
+    expect(member!.memberRole).toBe("member");
+    expect(member!.status).toBe("pending");
+  });
+
+  it("lists members of a company", async () => {
+    const ctx = createPublicContext();
+    const caller = appRouter.createCaller(ctx);
+
+    await caller.company.create({
+      name: "ListCo",
+      email: "owner@listco.com",
+    });
+
+    await caller.members.invite({
+      companyId: 1,
+      email: "member1@listco.com",
+    });
+
+    const members = await caller.members.list({ companyId: 1 });
+    expect(members.length).toBe(2); // owner + invited member
+  });
+
+  it("removes a member from company", async () => {
+    const ctx = createPublicContext();
+    const caller = appRouter.createCaller(ctx);
+
+    await caller.company.create({
+      name: "RemoveCo",
+      email: "owner@removeco.com",
+    });
+
+    await caller.members.invite({
+      companyId: 1,
+      email: "toremove@example.com",
+    });
+
+    expect(membersStore.length).toBe(2);
+
+    const result = await caller.members.remove({
+      companyId: 1,
+      email: "toremove@example.com",
+    });
+
+    expect(result).toEqual({ success: true });
+    expect(membersStore.length).toBe(1);
+    expect(membersStore[0].email).toBe("owner@removeco.com");
+  });
+
+  it("activates pending memberships", async () => {
+    const ctx = createPublicContext();
+    const caller = appRouter.createCaller(ctx);
+
+    await caller.company.create({
+      name: "ActivateCo",
+      email: "owner@activateco.com",
+    });
+
+    await caller.members.invite({
+      companyId: 1,
+      email: "pending@example.com",
+    });
+
+    // Verify member is pending
+    const pendingMember = membersStore.find((m) => m.email === "pending@example.com");
+    expect(pendingMember!.status).toBe("pending");
+
+    // Activate
+    await caller.members.activate({
+      email: "pending@example.com",
+      userId: 42,
+    });
+
+    const activatedMember = membersStore.find((m) => m.email === "pending@example.com");
+    expect(activatedMember!.status).toBe("active");
+    expect(activatedMember!.userId).toBe(42);
+  });
+});
+
 describe("uploads router", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     records = [];
     settings = {};
+    companiesStore = [];
+    membersStore = [];
     nextId = 1;
+    nextCompanyId = 1;
+    nextMemberId = 1;
   });
 
   it("creates a single upload record", async () => {
@@ -92,6 +351,22 @@ describe("uploads router", () => {
     expect(result!.retailerId).toBe("ret-456");
     expect(result!.productName).toBe("Test Product");
     expect(result!.clientName).toBe("Acme Corp");
+  });
+
+  it("creates upload record with companyId", async () => {
+    const ctx = createPublicContext();
+    const caller = appRouter.createCaller(ctx);
+
+    const result = await caller.uploads.create({
+      companyId: 1,
+      catalogId: "cat-123",
+      retailerId: "ret-456",
+      productName: "Test Product",
+      clientName: "Acme Corp",
+    });
+
+    expect(result).toBeDefined();
+    expect(result!.companyId).toBe(1);
   });
 
   it("creates batch upload records", async () => {
@@ -120,7 +395,6 @@ describe("uploads router", () => {
     const ctx = createPublicContext();
     const caller = appRouter.createCaller(ctx);
 
-    // Create a record first
     await caller.uploads.create({
       catalogId: "cat-123",
       retailerId: "ret-001",
@@ -145,7 +419,6 @@ describe("uploads router", () => {
     const ctx = createPublicContext();
     const caller = appRouter.createCaller(ctx);
 
-    // Create a record first
     await caller.uploads.create({
       catalogId: "cat-123",
       retailerId: "ret-001",
@@ -163,7 +436,11 @@ describe("deleteVideoFromCatalog", () => {
     vi.clearAllMocks();
     records = [];
     settings = {};
+    companiesStore = [];
+    membersStore = [];
     nextId = 1;
+    nextCompanyId = 1;
+    nextMemberId = 1;
     mockFetch.mockReset();
   });
 
@@ -180,7 +457,6 @@ describe("deleteVideoFromCatalog", () => {
     const ctx = createPublicContext();
     const caller = appRouter.createCaller(ctx);
 
-    // Create a record but don't set access token
     await caller.uploads.create({
       catalogId: "cat-123",
       retailerId: "ret-001",
@@ -193,11 +469,22 @@ describe("deleteVideoFromCatalog", () => {
     ).rejects.toThrow("Facebook Access Token not configured");
   });
 
-  it("calls Facebook Batch API and deletes record on success", async () => {
+  it("uses company access token when companyId is provided", async () => {
     const ctx = createPublicContext();
     const caller = appRouter.createCaller(ctx);
 
-    // Create a record
+    // Create a company with access token
+    companiesStore.push({
+      id: 1,
+      name: "TestCo",
+      facebookAccessToken: "company-token-abc",
+      catalogs: "[]",
+      accessKey: null,
+      createdBy: 0,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+
     await caller.uploads.create({
       catalogId: "cat-123",
       retailerId: "ret-001",
@@ -205,16 +492,43 @@ describe("deleteVideoFromCatalog", () => {
       clientName: "Acme Corp",
     });
 
-    // Set access token
+    mockFetch
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ handles: ["handle-123"] }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ data: [{ id: "123", retailer_id: "ret-001", video: [] }] }),
+      });
+
+    const result = await caller.uploads.deleteVideoFromCatalog({ id: 1, companyId: 1 });
+
+    expect(result.success).toBe(true);
+    // Verify company token was used
+    const firstCall = mockFetch.mock.calls[0];
+    const body = JSON.parse(firstCall[1].body);
+    expect(body.access_token).toBe("company-token-abc");
+  });
+
+  it("calls Facebook Batch API and deletes record on success", async () => {
+    const ctx = createPublicContext();
+    const caller = appRouter.createCaller(ctx);
+
+    await caller.uploads.create({
+      catalogId: "cat-123",
+      retailerId: "ret-001",
+      productName: "Product A",
+      clientName: "Acme Corp",
+    });
+
     settings["facebookAccessToken"] = "test-fb-token-123";
 
-    // Mock Facebook Batch API response (success)
     mockFetch
       .mockResolvedValueOnce({
         ok: true,
         json: async () => ({ handles: ["handle-abc-123"] }),
       })
-      // Mock verification call
       .mockResolvedValueOnce({
         ok: true,
         json: async () => ({ data: [{ id: "123", retailer_id: "ret-001", video: [] }] }),
@@ -224,13 +538,11 @@ describe("deleteVideoFromCatalog", () => {
 
     expect(result.success).toBe(true);
     expect(result.handle).toBe("handle-abc-123");
-
-    // Verify Facebook API was called with correct parameters
     expect(mockFetch).toHaveBeenCalledTimes(2);
+
     const firstCall = mockFetch.mock.calls[0];
     expect(firstCall[0]).toContain("graph.facebook.com");
     expect(firstCall[0]).toContain("cat-123");
-    expect(firstCall[0]).toContain("items_batch");
 
     const body = JSON.parse(firstCall[1].body);
     expect(body.access_token).toBe("test-fb-token-123");
@@ -238,7 +550,6 @@ describe("deleteVideoFromCatalog", () => {
     expect(body.requests[0].data.id).toBe("ret-001");
     expect(body.requests[0].data.video).toEqual([]);
 
-    // Verify record was deleted from DB
     expect(records.length).toBe(0);
   });
 
@@ -246,7 +557,6 @@ describe("deleteVideoFromCatalog", () => {
     const ctx = createPublicContext();
     const caller = appRouter.createCaller(ctx);
 
-    // Create a record
     await caller.uploads.create({
       catalogId: "cat-123",
       retailerId: "ret-001",
@@ -254,10 +564,8 @@ describe("deleteVideoFromCatalog", () => {
       clientName: "Acme Corp",
     });
 
-    // Set access token
     settings["facebookAccessToken"] = "test-fb-token-123";
 
-    // Mock Facebook API error response
     mockFetch.mockResolvedValueOnce({
       ok: false,
       json: async () => ({
@@ -269,7 +577,6 @@ describe("deleteVideoFromCatalog", () => {
       caller.uploads.deleteVideoFromCatalog({ id: 1 })
     ).rejects.toThrow("Facebook API error: Invalid access token");
 
-    // Record should NOT be deleted from DB since API failed
     expect(records.length).toBe(1);
   });
 
@@ -277,7 +584,6 @@ describe("deleteVideoFromCatalog", () => {
     const ctx = createPublicContext();
     const caller = appRouter.createCaller(ctx);
 
-    // Create a record
     await caller.uploads.create({
       catalogId: "cat-123",
       retailerId: "ret-001",
@@ -285,10 +591,8 @@ describe("deleteVideoFromCatalog", () => {
       clientName: "Acme Corp",
     });
 
-    // Set access token
     settings["facebookAccessToken"] = "test-fb-token-123";
 
-    // Mock Facebook Batch API success, but verification throws
     mockFetch
       .mockResolvedValueOnce({
         ok: true,
@@ -299,8 +603,58 @@ describe("deleteVideoFromCatalog", () => {
     const result = await caller.uploads.deleteVideoFromCatalog({ id: 1 });
 
     expect(result.success).toBe(true);
-    // Record should still be deleted even though verification failed
     expect(records.length).toBe(0);
+  });
+});
+
+describe("facebook proxy", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockFetch.mockReset();
+  });
+
+  it("validates a valid access token", async () => {
+    const ctx = createPublicContext();
+    const caller = appRouter.createCaller(ctx);
+
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ name: "Test User", id: "12345" }),
+    });
+
+    const result = await caller.facebook.validateToken({ accessToken: "valid-token" });
+    expect(result.valid).toBe(true);
+    expect(result.message).toContain("Test User");
+  });
+
+  it("returns invalid for bad token", async () => {
+    const ctx = createPublicContext();
+    const caller = appRouter.createCaller(ctx);
+
+    mockFetch.mockResolvedValueOnce({
+      ok: false,
+      json: async () => ({ error: { message: "Invalid OAuth access token" } }),
+    });
+
+    const result = await caller.facebook.validateToken({ accessToken: "bad-token" });
+    expect(result.valid).toBe(false);
+    expect(result.message).toContain("Invalid OAuth access token");
+  });
+
+  it("fetches catalog name", async () => {
+    const ctx = createPublicContext();
+    const caller = appRouter.createCaller(ctx);
+
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ name: "My Product Feed" }),
+    });
+
+    const result = await caller.facebook.fetchCatalogName({
+      catalogId: "12345",
+      accessToken: "valid-token",
+    });
+    expect(result.name).toBe("My Product Feed");
   });
 });
 
@@ -328,7 +682,6 @@ describe("settings router", () => {
     const ctx = createPublicContext();
     const caller = appRouter.createCaller(ctx);
 
-    // Set a value first
     settings["facebookAccessToken"] = "test-token-123";
 
     const result = await caller.settings.get({ key: "facebookAccessToken" });

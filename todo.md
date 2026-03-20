@@ -75,3 +75,12 @@
 
 ## Phase 14: 上傳檔案命名格式
 - [x] 上傳到 Google Drive 的檔案名稱改為 目錄ID_零售商ID_日期 格式
+
+## Phase 15: 公司/團隊共用設定系統
+- [x] 設計公司（Company）資料模型：公司名稱、專屬 access token、目錄設定
+- [x] 設計成員（Membership）資料模型：用戶與公司的關聯、角色（owner/member）
+- [x] 建立資料庫 schema 並遷移
+- [x] 實作後端 API：建立公司、邀請成員（透過 email）、共用設定
+- [x] 更新管理面板 UI：公司管理、成員邀請、共用設定顯示
+- [x] 更新 MainApp：使用公司層級的共用設定（access token、目錄）
+- [x] 撰寫測試並驗證所有流程（28/28 passed）

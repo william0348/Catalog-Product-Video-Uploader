@@ -10,7 +10,713 @@ interface AdminPanelProps {
     onBack: () => void;
 }
 
-// ==================== Settings Management Component ====================
+// ==================== tRPC helpers ====================
+const trpcMutate = async (path: string, input: any): Promise<any> => {
+    const response = await fetch(`/api/trpc/${path}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ json: input }),
+    });
+    const data = await response.json();
+    if (data?.error) {
+        throw new Error(data.error?.json?.message || data.error?.message || 'API error');
+    }
+    return data?.result?.data?.json;
+};
+
+const trpcQuery = async (path: string, input?: any): Promise<any> => {
+    let url = `/api/trpc/${path}`;
+    if (input !== undefined) {
+        url += `?input=${encodeURIComponent(JSON.stringify({ json: input }))}`;
+    }
+    const response = await fetch(url, { method: 'GET', credentials: 'include' });
+    const data = await response.json();
+    if (data?.error) {
+        throw new Error(data.error?.json?.message || data.error?.message || 'API error');
+    }
+    return data?.result?.data?.json;
+};
+
+// ==================== Company Management Component ====================
+interface CompanyData {
+    id: number;
+    name: string;
+    facebookAccessToken: string | null;
+    catalogs: string;
+    accessKey: string | null;
+    createdAt: string;
+}
+
+interface MemberData {
+    id: number;
+    companyId: number;
+    email: string;
+    memberRole: string;
+    status: string;
+    joinedAt: string;
+}
+
+const CompanyManager = ({ t }: { t: (key: string) => string }) => {
+    // Email state for loading companies
+    const [userEmail, setUserEmail] = useState(() => localStorage.getItem('cpv_user_email') || '');
+    const [emailSubmitted, setEmailSubmitted] = useState(false);
+
+    // Companies list
+    const [companies, setCompanies] = useState<CompanyData[]>([]);
+    const [isLoadingCompanies, setIsLoadingCompanies] = useState(false);
+
+    // Selected company
+    const [selectedCompanyId, setSelectedCompanyId] = useState<number | null>(null);
+    const [companyDetail, setCompanyDetail] = useState<CompanyData | null>(null);
+    const [companyMembers, setCompanyMembers] = useState<MemberData[]>([]);
+
+    // Create company form
+    const [showCreateForm, setShowCreateForm] = useState(false);
+    const [newCompanyName, setNewCompanyName] = useState('');
+    const [isCreating, setIsCreating] = useState(false);
+
+    // Company settings edit
+    const [editToken, setEditToken] = useState('');
+    const [editAccessKey, setEditAccessKey] = useState('');
+    const [showEditToken, setShowEditToken] = useState(false);
+    const [isSavingCompany, setIsSavingCompany] = useState(false);
+    const [companySaveMsg, setCompanySaveMsg] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+
+    // Token validation
+    const [isValidatingToken, setIsValidatingToken] = useState(false);
+    const [tokenStatus, setTokenStatus] = useState<{ type: 'success' | 'error' | null; message: string }>({ type: null, message: '' });
+
+    // Catalog management
+    const [newCatalogId, setNewCatalogId] = useState('');
+    const [isAddingCatalog, setIsAddingCatalog] = useState(false);
+    const [catalogError, setCatalogError] = useState<string | null>(null);
+    const [copiedCsvUrl, setCopiedCsvUrl] = useState<string | null>(null);
+
+    // Member invite
+    const [inviteEmail, setInviteEmail] = useState('');
+    const [isInviting, setIsInviting] = useState(false);
+    const [inviteMsg, setInviteMsg] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+
+    // Status messages
+    const [statusMsg, setStatusMsg] = useState<string | null>(null);
+
+    // Load companies by email
+    const loadCompanies = useCallback(async () => {
+        if (!userEmail) return;
+        setIsLoadingCompanies(true);
+        try {
+            const result = await trpcQuery('company.getByEmail', { email: userEmail.toLowerCase() });
+            setCompanies(Array.isArray(result) ? result : []);
+            localStorage.setItem('cpv_user_email', userEmail);
+            setEmailSubmitted(true);
+        } catch (e: any) {
+            console.error('Failed to load companies:', e);
+            setCompanies([]);
+        } finally {
+            setIsLoadingCompanies(false);
+        }
+    }, [userEmail]);
+
+    // Auto-load if email was saved
+    useEffect(() => {
+        if (userEmail && !emailSubmitted) {
+            loadCompanies();
+        }
+    }, []);
+
+    // Load company detail when selected
+    useEffect(() => {
+        if (selectedCompanyId === null) {
+            setCompanyDetail(null);
+            setCompanyMembers([]);
+            return;
+        }
+        const loadDetail = async () => {
+            try {
+                const detail = await trpcQuery('company.get', { id: selectedCompanyId });
+                setCompanyDetail(detail);
+                setEditToken(detail.facebookAccessTokenFull || '');
+                setEditAccessKey(detail.accessKey || '');
+                setTokenStatus({ type: null, message: '' });
+
+                const members = await trpcQuery('members.list', { companyId: selectedCompanyId });
+                setCompanyMembers(Array.isArray(members) ? members : []);
+            } catch (e: any) {
+                console.error('Failed to load company detail:', e);
+            }
+        };
+        loadDetail();
+    }, [selectedCompanyId]);
+
+    // Create company
+    const handleCreateCompany = async () => {
+        if (!newCompanyName.trim() || !userEmail) return;
+        setIsCreating(true);
+        try {
+            const company = await trpcMutate('company.create', {
+                name: newCompanyName.trim(),
+                email: userEmail.toLowerCase(),
+            });
+            setStatusMsg(t('companyCreated'));
+            setNewCompanyName('');
+            setShowCreateForm(false);
+            await loadCompanies();
+            setSelectedCompanyId(company.id);
+            setTimeout(() => setStatusMsg(null), 3000);
+        } catch (e: any) {
+            setStatusMsg(`Error: ${e.message}`);
+        } finally {
+            setIsCreating(false);
+        }
+    };
+
+    // Save company settings
+    const handleSaveCompanySettings = async () => {
+        if (!selectedCompanyId) return;
+        setIsSavingCompany(true);
+        setCompanySaveMsg(null);
+        try {
+            await trpcMutate('company.update', {
+                id: selectedCompanyId,
+                facebookAccessToken: editToken,
+                accessKey: editAccessKey,
+            });
+            setCompanySaveMsg({ type: 'success', message: t('companySaved') });
+            setTimeout(() => setCompanySaveMsg(null), 3000);
+        } catch (e: any) {
+            setCompanySaveMsg({ type: 'error', message: e.message });
+        } finally {
+            setIsSavingCompany(false);
+        }
+    };
+
+    // Validate token
+    const handleValidateToken = async () => {
+        if (!editToken) {
+            setTokenStatus({ type: 'error', message: t('tokenRequired') });
+            return;
+        }
+        setIsValidatingToken(true);
+        setTokenStatus({ type: null, message: '' });
+        try {
+            const result = await trpcMutate('facebook.validateToken', { accessToken: editToken });
+            setTokenStatus({ type: result.valid ? 'success' : 'error', message: result.message });
+        } catch (e: any) {
+            setTokenStatus({ type: 'error', message: e.message });
+        } finally {
+            setIsValidatingToken(false);
+        }
+    };
+
+    // Parse catalogs from company
+    const companyCatalogs: CatalogConfig[] = useMemo(() => {
+        if (!companyDetail?.catalogs) return [];
+        try {
+            return JSON.parse(companyDetail.catalogs);
+        } catch {
+            return [];
+        }
+    }, [companyDetail?.catalogs]);
+
+    // Add catalog to company
+    const handleAddCatalog = async () => {
+        const trimmedId = newCatalogId.trim();
+        if (!trimmedId) { setCatalogError(t('catalogIdRequired')); return; }
+        if (!editToken) { setCatalogError(t('tokenRequiredForCatalog')); return; }
+        if (companyCatalogs.some(c => c.id === trimmedId)) { setCatalogError(t('catalogAlreadyExists')); return; }
+
+        setIsAddingCatalog(true);
+        setCatalogError(null);
+        try {
+            const nameResult = await trpcMutate('facebook.fetchCatalogName', { catalogId: trimmedId, accessToken: editToken });
+            const newCatalog: CatalogConfig = { id: trimmedId, name: nameResult.name, addedAt: new Date().toISOString() };
+            const updatedCatalogs = [...companyCatalogs, newCatalog];
+
+            await trpcMutate('company.update', {
+                id: selectedCompanyId!,
+                catalogs: JSON.stringify(updatedCatalogs),
+            });
+
+            // Refresh detail
+            setCompanyDetail(prev => prev ? { ...prev, catalogs: JSON.stringify(updatedCatalogs) } : prev);
+            setNewCatalogId('');
+        } catch (e: any) {
+            setCatalogError(`${t('fetchCatalogFailed')}: ${e.message}`);
+        } finally {
+            setIsAddingCatalog(false);
+        }
+    };
+
+    // Remove catalog from company
+    const handleRemoveCatalog = async (catalogId: string) => {
+        const updatedCatalogs = companyCatalogs.filter(c => c.id !== catalogId);
+        try {
+            await trpcMutate('company.update', {
+                id: selectedCompanyId!,
+                catalogs: JSON.stringify(updatedCatalogs),
+            });
+            setCompanyDetail(prev => prev ? { ...prev, catalogs: JSON.stringify(updatedCatalogs) } : prev);
+        } catch (e: any) {
+            setCatalogError(e.message);
+        }
+    };
+
+    // Refresh catalog name
+    const handleRefreshCatalogName = async (catalogId: string) => {
+        if (!editToken) { setCatalogError(t('tokenRequiredForCatalog')); return; }
+        setCatalogError(null);
+        try {
+            const nameResult = await trpcMutate('facebook.fetchCatalogName', { catalogId, accessToken: editToken });
+            const updatedCatalogs = companyCatalogs.map(c => c.id === catalogId ? { ...c, name: nameResult.name } : c);
+            await trpcMutate('company.update', {
+                id: selectedCompanyId!,
+                catalogs: JSON.stringify(updatedCatalogs),
+            });
+            setCompanyDetail(prev => prev ? { ...prev, catalogs: JSON.stringify(updatedCatalogs) } : prev);
+        } catch (e: any) {
+            setCatalogError(`${t('refreshFailed')}: ${e.message}`);
+        }
+    };
+
+    const getCsvUrl = (catalogId: string) => `${window.location.origin}/api/export/csv/${catalogId}`;
+
+    const handleCopyCsvUrl = (catalogId: string) => {
+        navigator.clipboard.writeText(getCsvUrl(catalogId)).then(() => {
+            setCopiedCsvUrl(catalogId);
+            setTimeout(() => setCopiedCsvUrl(null), 2000);
+        });
+    };
+
+    // Invite member
+    const handleInviteMember = async () => {
+        if (!inviteEmail.trim() || !selectedCompanyId) return;
+        // Check if already a member
+        if (companyMembers.some(m => m.email === inviteEmail.toLowerCase())) {
+            setInviteMsg({ type: 'error', message: t('memberAlreadyExists') });
+            return;
+        }
+        setIsInviting(true);
+        setInviteMsg(null);
+        try {
+            await trpcMutate('members.invite', {
+                companyId: selectedCompanyId,
+                email: inviteEmail.trim(),
+            });
+            setInviteMsg({ type: 'success', message: t('inviteSuccess') });
+            setInviteEmail('');
+            // Refresh members
+            const members = await trpcQuery('members.list', { companyId: selectedCompanyId });
+            setCompanyMembers(Array.isArray(members) ? members : []);
+            setTimeout(() => setInviteMsg(null), 3000);
+        } catch (e: any) {
+            setInviteMsg({ type: 'error', message: e.message });
+        } finally {
+            setIsInviting(false);
+        }
+    };
+
+    // Remove member
+    const handleRemoveMember = async (email: string) => {
+        if (!selectedCompanyId) return;
+        try {
+            await trpcMutate('members.remove', { companyId: selectedCompanyId, email });
+            setCompanyMembers(prev => prev.filter(m => m.email !== email));
+        } catch (e: any) {
+            console.error('Failed to remove member:', e);
+        }
+    };
+
+    // ===== RENDER =====
+
+    // Step 1: Enter email
+    if (!emailSubmitted) {
+        return (
+            <div className="settings-manager">
+                <h2>{t('companyManagement')}</h2>
+                <p className="info-text">{t('enterEmailToStart')}</p>
+                <div className="settings-section">
+                    <div className="form-group">
+                        <label htmlFor="userEmail">{t('yourEmail')}</label>
+                        <div className="add-catalog-input-group">
+                            <input
+                                id="userEmail"
+                                type="email"
+                                value={userEmail}
+                                onChange={(e) => setUserEmail(e.target.value)}
+                                placeholder={t('yourEmailPlaceholder')}
+                                onKeyDown={(e) => { if (e.key === 'Enter') loadCompanies(); }}
+                            />
+                            <button
+                                onClick={loadCompanies}
+                                disabled={!userEmail || isLoadingCompanies}
+                                className="add-catalog-button"
+                            >
+                                {isLoadingCompanies ? <div className="loader-small"></div> : t('loadCompanies')}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
+    // Step 2: Company list (no company selected)
+    if (selectedCompanyId === null) {
+        return (
+            <div className="settings-manager">
+                <h2>{t('companyManagement')}</h2>
+                <p className="info-text">{t('companyManagementDesc')}</p>
+
+                {/* User email display */}
+                <div className="settings-section" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px' }}>
+                    <span style={{ fontSize: '14px', color: '#666' }}>📧 {userEmail}</span>
+                    <button
+                        onClick={() => { setEmailSubmitted(false); setCompanies([]); }}
+                        className="validate-token-button"
+                        style={{ padding: '4px 12px', fontSize: '13px' }}
+                    >
+                        {t('switchAccount')}
+                    </button>
+                </div>
+
+                {statusMsg && <p className="success-text" style={{ margin: '8px 0' }}>{statusMsg}</p>}
+
+                {/* Company list */}
+                <div className="settings-section">
+                    <h3>{t('myCompanies')}</h3>
+                    {companies.length === 0 ? (
+                        <p className="info-text empty-catalogs">{t('noCompaniesYet')}</p>
+                    ) : (
+                        <div className="catalogs-list">
+                            {companies.map(company => (
+                                <div
+                                    key={company.id}
+                                    className="company-card"
+                                    onClick={() => setSelectedCompanyId(company.id)}
+                                    style={{
+                                        padding: '16px',
+                                        margin: '8px 0',
+                                        borderRadius: '12px',
+                                        border: '1px solid #e0e0e0',
+                                        cursor: 'pointer',
+                                        transition: 'all 0.2s',
+                                        background: '#fafafa',
+                                    }}
+                                    onMouseEnter={(e) => { (e.currentTarget as HTMLDivElement).style.background = '#f0f0f0'; (e.currentTarget as HTMLDivElement).style.borderColor = '#007aff'; }}
+                                    onMouseLeave={(e) => { (e.currentTarget as HTMLDivElement).style.background = '#fafafa'; (e.currentTarget as HTMLDivElement).style.borderColor = '#e0e0e0'; }}
+                                >
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                        <div>
+                                            <strong style={{ fontSize: '16px' }}>{company.name}</strong>
+                                            <div style={{ fontSize: '13px', color: '#888', marginTop: '4px' }}>
+                                                ID: {company.id} · {t('accessToken')}: {company.facebookAccessToken ? '✓' : '✕'}
+                                            </div>
+                                        </div>
+                                        <span style={{ color: '#007aff', fontSize: '20px' }}>→</span>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+
+                    {/* Create company button/form */}
+                    {!showCreateForm ? (
+                        <button
+                            onClick={() => setShowCreateForm(true)}
+                            className="add-catalog-button"
+                            style={{ marginTop: '12px', width: 'auto' }}
+                        >
+                            + {t('createCompany')}
+                        </button>
+                    ) : (
+                        <div className="add-catalog-form" style={{ marginTop: '12px' }}>
+                            <div className="form-group">
+                                <label>{t('companyName')}</label>
+                                <div className="add-catalog-input-group">
+                                    <input
+                                        type="text"
+                                        value={newCompanyName}
+                                        onChange={(e) => setNewCompanyName(e.target.value)}
+                                        placeholder={t('companyNamePlaceholder')}
+                                        onKeyDown={(e) => { if (e.key === 'Enter') handleCreateCompany(); }}
+                                    />
+                                    <button
+                                        onClick={handleCreateCompany}
+                                        disabled={!newCompanyName.trim() || isCreating}
+                                        className="add-catalog-button"
+                                    >
+                                        {isCreating ? <div className="loader-small"></div> : t('createCompanyBtn')}
+                                    </button>
+                                </div>
+                            </div>
+                            <button
+                                onClick={() => setShowCreateForm(false)}
+                                className="validate-token-button"
+                                style={{ marginTop: '8px', padding: '4px 12px', fontSize: '13px' }}
+                            >
+                                {t('cancel')}
+                            </button>
+                        </div>
+                    )}
+                </div>
+            </div>
+        );
+    }
+
+    // Step 3: Company detail view
+    return (
+        <div className="settings-manager">
+            {/* Back to company list */}
+            <div style={{ marginBottom: '16px' }}>
+                <button
+                    onClick={() => { setSelectedCompanyId(null); setTokenStatus({ type: null, message: '' }); setCompanySaveMsg(null); setCatalogError(null); }}
+                    className="back-nav-button"
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                >
+                    ← {t('myCompanies')}
+                </button>
+            </div>
+
+            <h2>{companyDetail?.name || '...'}</h2>
+            <p className="info-text">{t('companyManagementDesc')}</p>
+
+            {companySaveMsg && (
+                <p className={companySaveMsg.type === 'success' ? 'success-text' : 'error-text'} style={{ margin: '8px 0' }}>
+                    {companySaveMsg.message}
+                </p>
+            )}
+
+            {/* Facebook Access Token Section */}
+            <div className="settings-section">
+                <h3>{t('fbAccessToken')}</h3>
+                <div className="form-group">
+                    <label htmlFor="companyFbToken">{t('accessToken')}</label>
+                    <div className="token-input-group">
+                        <input
+                            id="companyFbToken"
+                            type={showEditToken ? 'text' : 'password'}
+                            value={editToken}
+                            onChange={(e) => { setEditToken(e.target.value); setTokenStatus({ type: null, message: '' }); }}
+                            placeholder={t('enterAccessToken')}
+                            className="token-input"
+                        />
+                        <button
+                            onClick={() => setShowEditToken(!showEditToken)}
+                            className="toggle-visibility-button"
+                            title={showEditToken ? t('hideToken') : t('showToken')}
+                        >
+                            {showEditToken ? '🙈' : '👁️'}
+                        </button>
+                    </div>
+                    <div className="token-actions">
+                        <button onClick={handleSaveCompanySettings} disabled={isSavingCompany} className="save-token-button">
+                            {isSavingCompany ? <div className="loader-small"></div> : t('saveCompanySettings')}
+                        </button>
+                        <button onClick={handleValidateToken} disabled={isValidatingToken} className="validate-token-button">
+                            {isValidatingToken ? <div className="loader-small"></div> : t('validateToken')}
+                        </button>
+                    </div>
+                    {tokenStatus.type && (
+                        <p className={tokenStatus.type === 'success' ? 'success-text' : 'error-text'}>
+                            {tokenStatus.message}
+                        </p>
+                    )}
+                </div>
+            </div>
+
+            {/* Access Key Section */}
+            <div className="settings-section">
+                <h3>{t('companyAccessKey')}</h3>
+                <div className="form-group">
+                    <input
+                        type="text"
+                        value={editAccessKey}
+                        onChange={(e) => setEditAccessKey(e.target.value)}
+                        placeholder={t('companyAccessKeyPlaceholder')}
+                    />
+                </div>
+            </div>
+
+            {/* Catalog Management Section */}
+            <div className="settings-section">
+                <h3>{t('catalogManagement')}</h3>
+                <p className="info-text">{t('catalogManagementDesc')}</p>
+
+                <div className="add-catalog-form">
+                    <div className="form-group">
+                        <label htmlFor="companyCatalogId">{t('addNewCatalog')}</label>
+                        <div className="add-catalog-input-group">
+                            <input
+                                id="companyCatalogId"
+                                type="text"
+                                value={newCatalogId}
+                                onChange={(e) => { setNewCatalogId(e.target.value.trim()); setCatalogError(null); }}
+                                placeholder={t('enterCatalogId')}
+                                onKeyDown={(e) => { if (e.key === 'Enter') handleAddCatalog(); }}
+                            />
+                            <button onClick={handleAddCatalog} disabled={isAddingCatalog || !newCatalogId.trim()} className="add-catalog-button">
+                                {isAddingCatalog ? <div className="loader-small"></div> : `+ ${t('addCatalog')}`}
+                            </button>
+                        </div>
+                        {catalogError && <p className="error-text">{catalogError}</p>}
+                    </div>
+                </div>
+
+                <div className="catalogs-list">
+                    {companyCatalogs.length === 0 ? (
+                        <p className="info-text empty-catalogs">{t('noCatalogsConfigured')}</p>
+                    ) : (
+                        <table className="catalogs-table">
+                            <thead>
+                                <tr>
+                                    <th>{t('catalogId')}</th>
+                                    <th>{t('catalogName')}</th>
+                                    <th>CSV URL</th>
+                                    <th>{t('actions')}</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {companyCatalogs.map((catalog) => (
+                                    <tr key={catalog.id}>
+                                        <td><code>{catalog.id}</code></td>
+                                        <td>{catalog.name}</td>
+                                        <td className="csv-url-cell">
+                                            <div className="csv-url-group">
+                                                <input
+                                                    type="text"
+                                                    readOnly
+                                                    value={getCsvUrl(catalog.id)}
+                                                    className="csv-url-input"
+                                                    onClick={(e) => (e.target as HTMLInputElement).select()}
+                                                />
+                                                <button
+                                                    onClick={() => handleCopyCsvUrl(catalog.id)}
+                                                    className="copy-csv-btn"
+                                                    title="Copy CSV URL"
+                                                >
+                                                    {copiedCsvUrl === catalog.id ? '✓' : '📋'}
+                                                </button>
+                                            </div>
+                                        </td>
+                                        <td className="catalog-actions">
+                                            <button
+                                                onClick={() => handleRefreshCatalogName(catalog.id)}
+                                                className="refresh-catalog-button"
+                                                title={t('refreshName')}
+                                            >
+                                                ↻
+                                            </button>
+                                            <button
+                                                onClick={() => handleRemoveCatalog(catalog.id)}
+                                                className="remove-catalog-button"
+                                                title={t('removeCatalog')}
+                                            >
+                                                ✕
+                                            </button>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    )}
+                </div>
+            </div>
+
+            {/* Member Management Section */}
+            <div className="settings-section">
+                <h3>{t('memberManagement')}</h3>
+
+                {/* Invite form */}
+                <div className="add-catalog-form">
+                    <div className="form-group">
+                        <label>{t('inviteMember')}</label>
+                        <div className="add-catalog-input-group">
+                            <input
+                                type="email"
+                                value={inviteEmail}
+                                onChange={(e) => { setInviteEmail(e.target.value); setInviteMsg(null); }}
+                                placeholder={t('memberEmailPlaceholder')}
+                                onKeyDown={(e) => { if (e.key === 'Enter') handleInviteMember(); }}
+                            />
+                            <button
+                                onClick={handleInviteMember}
+                                disabled={!inviteEmail.trim() || isInviting}
+                                className="add-catalog-button"
+                            >
+                                {isInviting ? <div className="loader-small"></div> : t('invite')}
+                            </button>
+                        </div>
+                        {inviteMsg && (
+                            <p className={inviteMsg.type === 'success' ? 'success-text' : 'error-text'}>
+                                {inviteMsg.message}
+                            </p>
+                        )}
+                    </div>
+                </div>
+
+                {/* Members list */}
+                <div className="catalogs-list">
+                    {companyMembers.length === 0 ? (
+                        <p className="info-text empty-catalogs">{t('noMembers')}</p>
+                    ) : (
+                        <table className="catalogs-table">
+                            <thead>
+                                <tr>
+                                    <th>Email</th>
+                                    <th>{t('actions')}</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {companyMembers.map((member) => (
+                                    <tr key={member.id}>
+                                        <td>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                                <span>{member.email}</span>
+                                                <span style={{
+                                                    fontSize: '11px',
+                                                    padding: '2px 8px',
+                                                    borderRadius: '10px',
+                                                    background: member.memberRole === 'owner' ? '#007aff' : '#e0e0e0',
+                                                    color: member.memberRole === 'owner' ? '#fff' : '#666',
+                                                }}>
+                                                    {member.memberRole === 'owner' ? t('owner') : t('member')}
+                                                </span>
+                                                <span style={{
+                                                    fontSize: '11px',
+                                                    padding: '2px 8px',
+                                                    borderRadius: '10px',
+                                                    background: member.status === 'active' ? '#34c759' : '#ff9500',
+                                                    color: '#fff',
+                                                }}>
+                                                    {member.status === 'active' ? t('active') : t('pending')}
+                                                </span>
+                                            </div>
+                                        </td>
+                                        <td className="catalog-actions">
+                                            {member.memberRole !== 'owner' && (
+                                                <button
+                                                    onClick={() => handleRemoveMember(member.email)}
+                                                    className="remove-catalog-button"
+                                                    title={t('removeMember')}
+                                                >
+                                                    ✕
+                                                </button>
+                                            )}
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    )}
+                </div>
+            </div>
+        </div>
+    );
+};
+
+
+// ==================== Settings Management Component (Legacy/Global) ====================
 const SettingsManager = ({ t }: { t: (key: string) => string }) => {
     const [settings, setSettings] = useState<AppSettings>(loadSettings());
     const [newCatalogId, setNewCatalogId] = useState('');
@@ -58,32 +764,16 @@ const SettingsManager = ({ t }: { t: (key: string) => string }) => {
 
     const handleAddCatalog = async () => {
         const trimmedId = newCatalogId.trim();
-        if (!trimmedId) {
-            setCatalogError(t('catalogIdRequired'));
-            return;
-        }
-        if (!settings.facebookAccessToken) {
-            setCatalogError(t('tokenRequiredForCatalog'));
-            return;
-        }
-        if (settings.catalogs.some(c => c.id === trimmedId)) {
-            setCatalogError(t('catalogAlreadyExists'));
-            return;
-        }
+        if (!trimmedId) { setCatalogError(t('catalogIdRequired')); return; }
+        if (!settings.facebookAccessToken) { setCatalogError(t('tokenRequiredForCatalog')); return; }
+        if (settings.catalogs.some(c => c.id === trimmedId)) { setCatalogError(t('catalogAlreadyExists')); return; }
 
         setIsAddingCatalog(true);
         setCatalogError(null);
         try {
             const name = await fetchCatalogName(trimmedId, settings.facebookAccessToken);
-            const newCatalog: CatalogConfig = {
-                id: trimmedId,
-                name: name,
-                addedAt: new Date().toISOString(),
-            };
-            const updated = {
-                ...settings,
-                catalogs: [...settings.catalogs, newCatalog],
-            };
+            const newCatalog: CatalogConfig = { id: trimmedId, name, addedAt: new Date().toISOString() };
+            const updated = { ...settings, catalogs: [...settings.catalogs, newCatalog] };
             setSettings(updated);
             await saveSettings(updated);
             setNewCatalogId('');
@@ -95,28 +785,17 @@ const SettingsManager = ({ t }: { t: (key: string) => string }) => {
     };
 
     const handleRemoveCatalog = async (catalogId: string) => {
-        const updated = {
-            ...settings,
-            catalogs: settings.catalogs.filter(c => c.id !== catalogId),
-        };
+        const updated = { ...settings, catalogs: settings.catalogs.filter(c => c.id !== catalogId) };
         setSettings(updated);
         await saveSettings(updated);
     };
 
     const handleRefreshCatalogName = async (catalogId: string) => {
-        if (!settings.facebookAccessToken) {
-            setCatalogError(t('tokenRequiredForCatalog'));
-            return;
-        }
+        if (!settings.facebookAccessToken) { setCatalogError(t('tokenRequiredForCatalog')); return; }
         setCatalogError(null);
         try {
             const name = await fetchCatalogName(catalogId, settings.facebookAccessToken);
-            const updated = {
-                ...settings,
-                catalogs: settings.catalogs.map(c =>
-                    c.id === catalogId ? { ...c, name } : c
-                ),
-            };
+            const updated = { ...settings, catalogs: settings.catalogs.map(c => c.id === catalogId ? { ...c, name } : c) };
             setSettings(updated);
             await saveSettings(updated);
         } catch (e: any) {
@@ -124,13 +803,10 @@ const SettingsManager = ({ t }: { t: (key: string) => string }) => {
         }
     };
 
-    const getCsvUrl = (catalogId: string) => {
-        return `${window.location.origin}/api/export/csv/${catalogId}`;
-    };
+    const getCsvUrl = (catalogId: string) => `${window.location.origin}/api/export/csv/${catalogId}`;
 
     const handleCopyCsvUrl = (catalogId: string) => {
-        const url = getCsvUrl(catalogId);
-        navigator.clipboard.writeText(url).then(() => {
+        navigator.clipboard.writeText(getCsvUrl(catalogId)).then(() => {
             setCopiedCsvUrl(catalogId);
             setTimeout(() => setCopiedCsvUrl(null), 2000);
         });
@@ -350,13 +1026,13 @@ const VideoLog = ({ t }: { t: (key: string) => string }) => {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 credentials: 'include',
-                body: JSON.stringify({ "0": { json: { id } } }),
+                body: JSON.stringify({ json: { id } }),
             });
             const data = await response.json();
             
             // Check for errors in tRPC response
-            if (data?.[0]?.error) {
-                const errorMsg = data[0].error.json?.message || data[0].error.message || 'Unknown error';
+            if (data?.error) {
+                const errorMsg = data.error?.json?.message || data.error?.message || 'Unknown error';
                 throw new Error(errorMsg);
             }
             
@@ -732,7 +1408,7 @@ const VideoLog = ({ t }: { t: (key: string) => string }) => {
 
 // ==================== Main AdminPanel Component ====================
 export const AdminPanel = ({ onBack }: AdminPanelProps) => {
-    const [activeTab, setActiveTab] = useState<'settings' | 'log'>('log');
+    const [activeTab, setActiveTab] = useState<'log' | 'settings' | 'company'>('log');
     const { t } = useContext(LanguageContext);
 
     return (
@@ -759,6 +1435,12 @@ export const AdminPanel = ({ onBack }: AdminPanelProps) => {
                         📋 Video Log
                     </button>
                     <button
+                        className={`admin-tab ${activeTab === 'company' ? 'active' : ''}`}
+                        onClick={() => setActiveTab('company')}
+                    >
+                        🏢 {t('companyManagement')}
+                    </button>
+                    <button
                         className={`admin-tab ${activeTab === 'settings' ? 'active' : ''}`}
                         onClick={() => setActiveTab('settings')}
                     >
@@ -766,12 +1448,17 @@ export const AdminPanel = ({ onBack }: AdminPanelProps) => {
                     </button>
                 </div>
                 
-                {/* Log Tab (now default) */}
+                {/* Log Tab */}
                 {activeTab === 'log' && (
                     <VideoLog t={t} />
                 )}
 
-                {/* Settings Tab */}
+                {/* Company Management Tab */}
+                {activeTab === 'company' && (
+                    <CompanyManager t={t} />
+                )}
+
+                {/* Settings Tab (Legacy/Global) */}
                 {activeTab === 'settings' && (
                     <SettingsManager t={t} />
                 )}
