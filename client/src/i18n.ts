@@ -19,7 +19,7 @@ export const translations = {
         cancel: "Cancel",
         backToHome: "Back to Home",
         // Home Page
-        homeHeader: "Meta CPAS Video Uploader",
+        homeHeader: "Meta Video Uploader",
         homeSubheader: "The ultimate tool for managing video assets for your Facebook CPAS catalogs.",
         coreFeatures: "Core Features",
         featureFetch: "Fetch Products: Instantly load products from any Facebook Catalog using its ID.",
@@ -31,7 +31,7 @@ export const translations = {
         getStarted: "Get Started",
         // Input View
         inputHeader: "Select a catalog to begin.",
-        catalogIdLabel: "CPAS Catalog",
+        catalogIdLabel: "Select Catalog",
         catalogIdPlaceholder: "Select a catalog",
         clientNameLabel: "Client Name",
         clientNamePlaceholder: "e.g., Acme Corp",
@@ -148,7 +148,7 @@ export const translations = {
         cancel: "取消",
         backToHome: "回到首頁",
         // Home Page
-        homeHeader: "RhinoShield x Meta 影片上傳工具",
+        homeHeader: "Meta 影片上傳工具",
         homeSubheader: "管理您 Facebook 目錄影片資產的終極工具。",
         coreFeatures: "核心功能",
         featureFetch: "讀取商品：使用目錄 ID 即時載入任何 Facebook 目錄中的商品。",
@@ -160,7 +160,7 @@ export const translations = {
         getStarted: "開始使用",
         // Input View
         inputHeader: "選擇目錄以開始。",
-        catalogIdLabel: "CPAS 目錄",
+        catalogIdLabel: "選擇目錄",
         catalogIdPlaceholder: "選擇目錄",
         clientNameLabel: "客戶名稱",
         clientNamePlaceholder: "例如：Acme 公司",
