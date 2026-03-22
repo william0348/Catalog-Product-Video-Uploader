@@ -3,6 +3,8 @@ import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, router } from "./_core/trpc";
 import { z } from "zod";
+import { generateSlideshow, fetchCatalogProducts, type SlideshowOptions } from "./slideshow";
+import { storagePut } from "./storage";
 import {
   createUploadRecord,
   createUploadRecordsBatch,
@@ -382,6 +384,59 @@ export const appRouter = router({
           throw new Error(errorMsg);
         }
         return { name: data.name || `Catalog ${input.catalogId}` };
+      }),
+  }),
+
+  // ==================== Slideshow Video Generator ====================
+  slideshow: router({
+    // Fetch products from a Facebook Catalog for slideshow creation
+    fetchProducts: publicProcedure
+      .input(z.object({
+        catalogId: z.string(),
+        accessToken: z.string(),
+        limit: z.number().min(1).max(500).default(50),
+      }))
+      .query(async ({ input }) => {
+        return fetchCatalogProducts(input.catalogId, input.accessToken, input.limit);
+      }),
+
+    // Generate a slideshow video from selected images
+    generate: publicProcedure
+      .input(z.object({
+        images: z.array(z.object({
+          url: z.string().url(),
+          label: z.string().optional(),
+        })).min(1).max(30),
+        aspectRatio: z.enum(["4:5", "9:16"]),
+        durationPerImage: z.number().min(1).max(30).default(3),
+        transition: z.enum(["fade", "slideleft", "slideright", "slideup", "slidedown", "wipeleft", "wiperight", "none"]).default("fade"),
+        transitionDuration: z.number().min(0.1).max(5).default(0.5),
+        overlayText: z.string().optional(),
+        showProductName: z.boolean().default(false),
+        textPosition: z.enum(["top", "center", "bottom"]).default("bottom"),
+        fontSize: z.number().min(12).max(120).optional(),
+        backgroundColor: z.string().optional(),
+      }))
+      .mutation(async ({ input }) => {
+        console.log(`[Slideshow API] Generating slideshow: ${input.images.length} images, ${input.aspectRatio}, ${input.transition}`);
+        
+        const videoBuffer = await generateSlideshow(input as SlideshowOptions);
+        
+        // Upload to S3
+        const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+        const suffix = Math.random().toString(36).substring(2, 8);
+        const fileKey = `slideshow-videos/${timestamp}-${suffix}.mp4`;
+        
+        const { url } = await storagePut(fileKey, videoBuffer, "video/mp4");
+        
+        console.log(`[Slideshow API] Video uploaded to S3: ${url}`);
+        
+        return {
+          success: true,
+          videoUrl: url,
+          fileSize: videoBuffer.length,
+          duration: input.images.length * input.durationPerImage - (input.images.length - 1) * Math.min(input.transitionDuration, input.durationPerImage * 0.4),
+        };
       }),
   }),
 

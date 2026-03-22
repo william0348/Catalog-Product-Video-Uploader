@@ -4,6 +4,7 @@ import { AdminPanel } from "@/pages/AdminPanel";
 import { TermsOfServicePage } from "@/pages/TermsOfServicePage";
 import { HomePage } from "@/pages/HomePage";
 import { MainApp } from "@/pages/MainApp";
+import { SlideshowGenerator } from "@/pages/SlideshowGenerator";
 
 const PageRouter = () => {
     const { t } = useContext(LanguageContext);
@@ -30,6 +31,9 @@ const PageRouter = () => {
             case '#/home':
                 title = `${t('home')} - CPAS Video Uploader`;
                 break;
+            case '#/slideshow':
+                title = `${t('slideshowTitle') || 'Slideshow Generator'} - CPAS Video Uploader`;
+                break;
         }
         document.title = title;
     }, [hash, t]);
@@ -41,6 +45,8 @@ const PageRouter = () => {
             return <TermsOfServicePage />;
         case '#/home':
             return <HomePage />;
+        case '#/slideshow':
+            return <SlideshowGenerator />;
         case '#/app':
         case '#/':
         default:

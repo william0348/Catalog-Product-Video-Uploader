@@ -773,6 +773,9 @@ export const MainApp = () => {
                     <button onClick={() => { window.location.hash = '#/admin'; }} className="back-nav-button" style={{ background: 'var(--color-fill-tertiary)', color: 'var(--color-label-secondary)' }}>
                         ⚙️ {t('adminPanel')}
                     </button>
+                    <button onClick={() => { window.location.hash = '#/slideshow'; }} className="back-nav-button" style={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', color: '#fff', border: 'none' }}>
+                        🎬 {t('slideshowTitle') || 'Slideshow Generator'}
+                    </button>
                 </div>
                 <h1>{t('homeHeader')}</h1>
                 <p>{t('inputHeader')}</p>
