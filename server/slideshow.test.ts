@@ -182,7 +182,7 @@ describe("slideshow router", () => {
       ).rejects.toThrow();
     });
 
-    it("accepts valid 9:16 aspect ratio", async () => {
+    it("accepts valid 9:16 aspect ratio with audio params", async () => {
       const ctx = createPublicContext();
       const caller = appRouter.createCaller(ctx);
 
@@ -197,8 +197,145 @@ describe("slideshow router", () => {
           showProductName: true,
           textPosition: "top",
           fontSize: 48,
+          audioUrl: "https://example.com/music.mp3",
+          audioVolume: 0.7,
         })
       ).rejects.toThrow(); // Will throw because of download failure, not validation
+    });
+
+    it("rejects audioVolume above 1", async () => {
+      const ctx = createPublicContext();
+      const caller = appRouter.createCaller(ctx);
+
+      await expect(
+        caller.slideshow.generate({
+          images: [{ url: "https://example.com/img.jpg" }],
+          aspectRatio: "4:5",
+          durationPerImage: 3,
+          transition: "fade",
+          transitionDuration: 0.5,
+          showProductName: false,
+          textPosition: "bottom",
+          audioUrl: "https://example.com/music.mp3",
+          audioVolume: 1.5,
+        })
+      ).rejects.toThrow();
+    });
+
+    it("rejects audioVolume below 0", async () => {
+      const ctx = createPublicContext();
+      const caller = appRouter.createCaller(ctx);
+
+      await expect(
+        caller.slideshow.generate({
+          images: [{ url: "https://example.com/img.jpg" }],
+          aspectRatio: "4:5",
+          durationPerImage: 3,
+          transition: "fade",
+          transitionDuration: 0.5,
+          showProductName: false,
+          textPosition: "bottom",
+          audioUrl: "https://example.com/music.mp3",
+          audioVolume: -0.5,
+        })
+      ).rejects.toThrow();
+    });
+
+    it("rejects invalid audioUrl", async () => {
+      const ctx = createPublicContext();
+      const caller = appRouter.createCaller(ctx);
+
+      await expect(
+        caller.slideshow.generate({
+          images: [{ url: "https://example.com/img.jpg" }],
+          aspectRatio: "4:5",
+          durationPerImage: 3,
+          transition: "fade",
+          transitionDuration: 0.5,
+          showProductName: false,
+          textPosition: "bottom",
+          audioUrl: "not-a-url",
+        })
+      ).rejects.toThrow();
+    });
+  });
+
+  describe("slideshow.uploadImage", () => {
+    it("uploads image and returns URL", async () => {
+      const ctx = createPublicContext();
+      const caller = appRouter.createCaller(ctx);
+
+      const result = await caller.slideshow.uploadImage({
+        base64Data: "dGVzdA==",
+        fileName: "test.png",
+        mimeType: "image/png",
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.url).toBeDefined();
+      expect(result.url).toContain("slideshow-uploads");
+    });
+  });
+
+  describe("slideshow.uploadAudio", () => {
+    it("uploads audio and returns URL", async () => {
+      const ctx = createPublicContext();
+      const caller = appRouter.createCaller(ctx);
+
+      const result = await caller.slideshow.uploadAudio({
+        base64Data: "dGVzdA==",
+        fileName: "test.mp3",
+        mimeType: "audio/mpeg",
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.url).toBeDefined();
+      expect(result.url).toContain("slideshow-audio");
+    });
+  });
+
+  describe("slideshow.updateCatalogVideo input validation", () => {
+    it("rejects invalid videoUrl", async () => {
+      const ctx = createPublicContext();
+      const caller = appRouter.createCaller(ctx);
+
+      await expect(
+        caller.slideshow.updateCatalogVideo({
+          catalogId: "123",
+          accessToken: "test-token",
+          retailerId: "SKU-001",
+          videoUrl: "not-a-url",
+        })
+      ).rejects.toThrow();
+    });
+
+    it("returns success:false with invalid token", async () => {
+      const ctx = createPublicContext();
+      const caller = appRouter.createCaller(ctx);
+
+      const result = await caller.slideshow.updateCatalogVideo({
+        catalogId: "123",
+        accessToken: "test-token",
+        retailerId: "SKU-001",
+        videoUrl: "https://example.com/video.mp4",
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.error).toBeDefined();
+    });
+
+    it("returns error message for empty catalogId", async () => {
+      const ctx = createPublicContext();
+      const caller = appRouter.createCaller(ctx);
+
+      const result = await caller.slideshow.updateCatalogVideo({
+        catalogId: "",
+        accessToken: "test-token",
+        retailerId: "SKU-001",
+        videoUrl: "https://example.com/video.mp4",
+      });
+
+      expect(result.success).toBe(false);
     });
   });
 });

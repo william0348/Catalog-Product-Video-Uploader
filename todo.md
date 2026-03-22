@@ -94,6 +94,15 @@
 - [x] 支援每張圖片顯示秒數設定
 - [x] 支援轉場效果選擇（fade/crossfade/slide/wipe 等）
 - [x] 支援商品名稱和自訂文字疊加
-- [ ] 支援手動上傳額外圖片（未來功能）
-- [ ] 整合 Google Drive 上傳和 Catalog 更新（未來功能）
+- [x] 支援手動上傳額外圖片（Phase 17 完成）
+- [x] 整合 Google Drive 上傳和 Catalog 更新（Phase 17 完成）
 - [x] 撰寫測試並驗證（39/39 passed）
+
+## Phase 17: 幻燈片生成器增強功能
+- [x] 共用目錄設定：幻燈片生成器使用與主工具相同的目錄和存取設定（settingsStore）
+- [x] 手動上傳額外圖片：除了目錄商品圖片外，允許用戶上傳自訂圖片加入幻燈片
+- [x] 背景音樂功能：讓用戶選擇或上傳背景音樂搭配幻燈片影片
+- [x] Google Drive 上傳整合：生成的影片自動上傳到 Google Drive
+- [x] Catalog 更新整合：上傳後自動更新 Meta Catalog 商品影片
+- [x] 更新 i18n 翻譯
+- [x] 撰寫測試並驗證（47/47 passed）

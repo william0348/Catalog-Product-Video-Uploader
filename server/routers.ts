@@ -3,7 +3,7 @@ import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, router } from "./_core/trpc";
 import { z } from "zod";
-import { generateSlideshow, fetchCatalogProducts, type SlideshowOptions } from "./slideshow";
+import { generateSlideshow, fetchCatalogProducts, updateCatalogProductVideo, type SlideshowOptions } from "./slideshow";
 import { storagePut } from "./storage";
 import {
   createUploadRecord,
@@ -416,9 +416,11 @@ export const appRouter = router({
         textPosition: z.enum(["top", "center", "bottom"]).default("bottom"),
         fontSize: z.number().min(12).max(120).optional(),
         backgroundColor: z.string().optional(),
+        audioUrl: z.string().url().optional(),
+        audioVolume: z.number().min(0).max(1).optional(),
       }))
       .mutation(async ({ input }) => {
-        console.log(`[Slideshow API] Generating slideshow: ${input.images.length} images, ${input.aspectRatio}, ${input.transition}`);
+        console.log(`[Slideshow API] Generating slideshow: ${input.images.length} images, ${input.aspectRatio}, ${input.transition}, audio: ${input.audioUrl ? 'yes' : 'no'}`);
         
         const videoBuffer = await generateSlideshow(input as SlideshowOptions);
         
@@ -437,6 +439,56 @@ export const appRouter = router({
           fileSize: videoBuffer.length,
           duration: input.images.length * input.durationPerImage - (input.images.length - 1) * Math.min(input.transitionDuration, input.durationPerImage * 0.4),
         };
+      }),
+
+    // Upload a custom image (base64) to S3 for use in slideshow
+    uploadImage: publicProcedure
+      .input(z.object({
+        base64Data: z.string(),
+        fileName: z.string(),
+        mimeType: z.string().default("image/png"),
+      }))
+      .mutation(async ({ input }) => {
+        const buffer = Buffer.from(input.base64Data, "base64");
+        if (buffer.length > 10 * 1024 * 1024) {
+          throw new Error("Image file too large. Maximum 10MB.");
+        }
+        const suffix = Math.random().toString(36).substring(2, 8);
+        const ext = input.fileName.split(".").pop() || "png";
+        const fileKey = `slideshow-uploads/${Date.now()}-${suffix}.${ext}`;
+        const { url } = await storagePut(fileKey, buffer, input.mimeType);
+        return { success: true, url };
+      }),
+
+    // Upload a custom audio file (base64) to S3 for background music
+    uploadAudio: publicProcedure
+      .input(z.object({
+        base64Data: z.string(),
+        fileName: z.string(),
+        mimeType: z.string().default("audio/mpeg"),
+      }))
+      .mutation(async ({ input }) => {
+        const buffer = Buffer.from(input.base64Data, "base64");
+        if (buffer.length > 16 * 1024 * 1024) {
+          throw new Error("Audio file too large. Maximum 16MB.");
+        }
+        const suffix = Math.random().toString(36).substring(2, 8);
+        const ext = input.fileName.split(".").pop() || "mp3";
+        const fileKey = `slideshow-audio/${Date.now()}-${suffix}.${ext}`;
+        const { url } = await storagePut(fileKey, buffer, input.mimeType);
+        return { success: true, url };
+      }),
+
+    // Update a product's video in a Facebook Catalog
+    updateCatalogVideo: publicProcedure
+      .input(z.object({
+        catalogId: z.string(),
+        accessToken: z.string(),
+        retailerId: z.string(),
+        videoUrl: z.string().url(),
+      }))
+      .mutation(async ({ input }) => {
+        return updateCatalogProductVideo(input.catalogId, input.accessToken, input.retailerId, input.videoUrl);
       }),
   }),
 

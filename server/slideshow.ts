@@ -3,7 +3,8 @@
  * 
  * FFmpeg-based slideshow video generator.
  * Converts a sequence of product images into a slideshow video
- * with configurable transitions, text overlays, and aspect ratios.
+ * with configurable transitions, text overlays, aspect ratios,
+ * and optional background music.
  */
 import { execFile } from "child_process";
 import fs from "fs";
@@ -21,6 +22,8 @@ export interface SlideshowOptions {
   textPosition: "top" | "center" | "bottom";
   fontSize?: number;
   backgroundColor?: string; // hex color for padding, default white
+  audioUrl?: string; // optional background music URL
+  audioVolume?: number; // 0.0 to 1.0, default 0.5
 }
 
 interface Resolution {
@@ -33,9 +36,9 @@ function getResolution(aspectRatio: "4:5" | "9:16"): Resolution {
   return { width: 1080, height: 1350 }; // 4:5
 }
 
-async function downloadImage(url: string, destPath: string): Promise<void> {
+async function downloadFile(url: string, destPath: string): Promise<void> {
   const response = await fetch(url, { redirect: "follow" });
-  if (!response.ok) throw new Error(`Failed to download image: ${url} (${response.status})`);
+  if (!response.ok) throw new Error(`Failed to download file: ${url} (${response.status})`);
   const buffer = Buffer.from(await response.arrayBuffer());
   fs.writeFileSync(destPath, buffer);
 }
@@ -56,6 +59,22 @@ function runFFmpeg(args: string[]): Promise<string> {
 const FONT_PATH = "/usr/share/fonts/truetype/droid/DroidSansFallbackFull.ttf";
 
 /**
+ * Calculate the total video duration based on images and transitions.
+ */
+function calculateVideoDuration(
+  imageCount: number,
+  durationPerImage: number,
+  transition: string,
+  transitionDuration: number,
+): number {
+  if (imageCount <= 1 || transition === "none") {
+    return imageCount * durationPerImage;
+  }
+  const clampedTransDur = Math.min(transitionDuration, durationPerImage * 0.4);
+  return imageCount * durationPerImage - (imageCount - 1) * clampedTransDur;
+}
+
+/**
  * Generate a slideshow video from a list of images.
  * Returns a Buffer containing the MP4 video data.
  */
@@ -71,6 +90,8 @@ export async function generateSlideshow(options: SlideshowOptions): Promise<Buff
     textPosition,
     fontSize = 40,
     backgroundColor = "white",
+    audioUrl,
+    audioVolume = 0.5,
   } = options;
 
   if (images.length === 0) throw new Error("No images provided");
@@ -78,6 +99,7 @@ export async function generateSlideshow(options: SlideshowOptions): Promise<Buff
 
   const resolution = getResolution(aspectRatio);
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "slideshow-"));
+  const videoOnlyPath = path.join(tmpDir, "video_only.mp4");
   const outputPath = path.join(tmpDir, "output.mp4");
 
   try {
@@ -86,7 +108,7 @@ export async function generateSlideshow(options: SlideshowOptions): Promise<Buff
     const imagePaths: string[] = [];
     for (let i = 0; i < images.length; i++) {
       const imgPath = path.join(tmpDir, `img_${String(i).padStart(3, "0")}.png`);
-      await downloadImage(images[i].url, imgPath);
+      await downloadFile(images[i].url, imgPath);
       imagePaths.push(imgPath);
       console.log(`[Slideshow] Downloaded image ${i + 1}/${images.length}`);
     }
@@ -105,14 +127,41 @@ export async function generateSlideshow(options: SlideshowOptions): Promise<Buff
       processedPaths.push(processedPath);
     }
 
-    // 3. Generate video
+    // 3. Generate video (without audio first)
+    const videoTarget = audioUrl ? videoOnlyPath : outputPath;
     if (images.length === 1 || transition === "none") {
-      await generateSimpleSlideshow(processedPaths, outputPath, resolution, durationPerImage, images, overlayText, showProductName, textPosition, fontSize);
+      await generateSimpleSlideshow(processedPaths, videoTarget, resolution, durationPerImage, images, overlayText, showProductName, textPosition, fontSize);
     } else {
-      await generateTransitionSlideshow(processedPaths, outputPath, resolution, durationPerImage, transitionDuration, transition, images, overlayText, showProductName, textPosition, fontSize);
+      await generateTransitionSlideshow(processedPaths, videoTarget, resolution, durationPerImage, transitionDuration, transition, images, overlayText, showProductName, textPosition, fontSize);
     }
 
-    // 4. Read output
+    // 4. Add background music if provided
+    if (audioUrl) {
+      console.log(`[Slideshow] Adding background music...`);
+      const audioPath = path.join(tmpDir, "audio_input.mp3");
+      await downloadFile(audioUrl, audioPath);
+
+      const videoDuration = calculateVideoDuration(images.length, durationPerImage, transition, transitionDuration);
+      const vol = Math.max(0, Math.min(1, audioVolume));
+
+      // Merge audio with video: loop audio if shorter, trim to video length, apply volume
+      await runFFmpeg([
+        "-i", videoTarget,
+        "-stream_loop", "-1", "-i", audioPath,
+        "-filter_complex", `[1:a]volume=${vol},afade=t=out:st=${Math.max(0, videoDuration - 2)}:d=2[aout]`,
+        "-map", "0:v",
+        "-map", "[aout]",
+        "-c:v", "copy",
+        "-c:a", "aac",
+        "-b:a", "192k",
+        "-shortest",
+        "-movflags", "+faststart",
+        outputPath,
+      ]);
+      console.log(`[Slideshow] Background music added successfully.`);
+    }
+
+    // 5. Read output
     console.log(`[Slideshow] Video generated: ${outputPath}`);
     const videoBuffer = fs.readFileSync(outputPath);
     return videoBuffer;
@@ -337,4 +386,47 @@ export async function fetchCatalogProducts(
   }
 
   return products;
+}
+
+/**
+ * Update a product's video in a Facebook Catalog using the Batch API.
+ */
+export async function updateCatalogProductVideo(
+  catalogId: string,
+  accessToken: string,
+  retailerId: string,
+  videoUrl: string,
+): Promise<{ success: boolean; handle?: string; error?: string }> {
+  const batchUrl = `https://graph.facebook.com/v21.0/${catalogId}/items_batch`;
+  const batchPayload = {
+    access_token: accessToken,
+    item_type: "PRODUCT_ITEM",
+    requests: [
+      {
+        method: "UPDATE",
+        data: {
+          id: retailerId,
+          video: [{ url: videoUrl }],
+        },
+      },
+    ],
+  };
+
+  console.log(`[Slideshow] Updating catalog ${catalogId} product ${retailerId} with video URL`);
+
+  const response = await fetch(batchUrl, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(batchPayload),
+  });
+
+  const result = await response.json();
+
+  if (!response.ok) {
+    const errorMsg = result?.error?.message || "Unknown Facebook API error";
+    return { success: false, error: errorMsg };
+  }
+
+  const handle = result?.handles?.[0];
+  return { success: true, handle };
 }
