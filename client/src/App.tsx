@@ -15,7 +15,7 @@ const PageRouter = () => {
             setHash(window.location.hash.toLowerCase() || '#/');
         };
         window.addEventListener('hashchange', handleHashChange);
-        handleHashChange();
+        // Don't call handleHashChange() here - initial hash is already set via useState initializer
         return () => window.removeEventListener('hashchange', handleHashChange);
     }, []);
     
@@ -46,7 +46,7 @@ const PageRouter = () => {
         case '#/home':
             return <HomePage />;
         case '#/slideshow':
-            return <SlideshowGenerator />;
+            return <SlideshowGenerator key="slideshow" />;
         case '#/app':
         case '#/':
         default:

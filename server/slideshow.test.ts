@@ -201,7 +201,7 @@ describe("slideshow router", () => {
           audioVolume: 0.7,
         })
       ).rejects.toThrow(); // Will throw because of download failure, not validation
-    });
+    }, 15000);
 
     it("rejects audioVolume above 1", async () => {
       const ctx = createPublicContext();

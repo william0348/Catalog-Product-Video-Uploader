@@ -5,6 +5,8 @@ import { AppFooter } from "@/components/AppFooter";
 import {
   getCompaniesByEmail,
   loadCompanySettings,
+  loadSettings,
+  loadSettingsFromServer,
   getSelectedCompany,
   saveSelectedCompany,
   type CatalogConfig,
@@ -32,7 +34,7 @@ interface SelectedImage {
   url: string;
   label: string;
   productId: string;
-  isCustom?: boolean; // true if uploaded by user
+  isCustom?: boolean;
 }
 
 type TransitionType = "fade" | "slideleft" | "slideright" | "slideup" | "slidedown" | "wipeleft" | "wiperight" | "none";
@@ -45,7 +47,6 @@ const fileToBase64 = (file: File): Promise<string> => {
     const reader = new FileReader();
     reader.onload = () => {
       const result = reader.result as string;
-      // Remove data URL prefix (e.g., "data:image/png;base64,")
       const base64 = result.split(",")[1];
       resolve(base64);
     };
@@ -69,6 +70,15 @@ const trpcMutate = async (path: string, input: any): Promise<any> => {
   return data?.result?.data?.json;
 };
 
+// ===== Batch Generation Types =====
+interface BatchItem {
+  product: CatalogProduct;
+  status: "pending" | "generating" | "uploading" | "done" | "error";
+  videoUrl?: string;
+  driveLink?: string;
+  error?: string;
+}
+
 export const SlideshowGenerator = () => {
   const { t } = useContext(LanguageContext);
 
@@ -83,6 +93,7 @@ export const SlideshowGenerator = () => {
   const [selectedCompanyId, setSelectedCompanyId] = useState<number | null>(getSelectedCompany());
   const [configuredCatalogs, setConfiguredCatalogs] = useState<CatalogConfig[]>([]);
   const [fbAccessToken, setFbAccessToken] = useState("");
+  const [isLoadingSettings, setIsLoadingSettings] = useState(true);
 
   // Catalog & product state
   const [selectedCatalogId, setSelectedCatalogId] = useState("");
@@ -133,6 +144,77 @@ export const SlideshowGenerator = () => {
 
   // Step state
   const [currentStep, setCurrentStep] = useState<1 | 2 | 3>(1);
+
+  // Preview animation state
+  const [previewIndex, setPreviewIndex] = useState(0);
+  const [isPreviewPlaying, setIsPreviewPlaying] = useState(true);
+
+  // Batch generation state
+  const [batchMode, setBatchMode] = useState(false);
+  const [batchItems, setBatchItems] = useState<BatchItem[]>([]);
+  const [isBatchRunning, setIsBatchRunning] = useState(false);
+  const [batchUploadToDrive, setBatchUploadToDrive] = useState(false);
+  const [batchUpdateCatalog, setBatchUpdateCatalog] = useState(false);
+  const batchAbortRef = useRef(false);
+
+  // ===== Load settings on mount — direct fetch to avoid any caching issues =====
+  useEffect(() => {
+    // Use XMLHttpRequest instead of fetch — fetch has issues in some embedded environments
+    const xhr = new XMLHttpRequest();
+    xhr.open('GET', '/api/trpc/settings.getAll', true);
+    xhr.withCredentials = true;
+    xhr.onload = function() {
+      try {
+        const data = JSON.parse(xhr.responseText);
+        const result = data?.result?.data?.json;
+        if (result) {
+          const catalogs = result.catalogs ? JSON.parse(result.catalogs) : [];
+          const token = result.facebookAccessToken || '';
+          setConfiguredCatalogs(catalogs);
+          setFbAccessToken(token);
+        }
+      } catch (e) {
+        console.error('[Slideshow] Failed to parse settings:', e);
+        // Fallback to localStorage
+        const localSettings = loadSettings();
+        setConfiguredCatalogs(localSettings.catalogs);
+        setFbAccessToken(localSettings.facebookAccessToken);
+      }
+      setIsLoadingSettings(false);
+    };
+    xhr.onerror = function() {
+      console.error('[Slideshow] XHR error loading settings');
+      // Fallback to company settings or localStorage
+      const savedCompanyId = getSelectedCompany();
+      if (savedCompanyId) {
+        loadCompanySettings(savedCompanyId)
+          .then(companySettings => {
+            setConfiguredCatalogs(companySettings.catalogs);
+            setFbAccessToken(companySettings.facebookAccessToken);
+          })
+          .catch(() => {
+            const localSettings = loadSettings();
+            setConfiguredCatalogs(localSettings.catalogs);
+            setFbAccessToken(localSettings.facebookAccessToken);
+          })
+          .finally(() => setIsLoadingSettings(false));
+      } else {
+        const localSettings = loadSettings();
+        setConfiguredCatalogs(localSettings.catalogs);
+        setFbAccessToken(localSettings.facebookAccessToken);
+        setIsLoadingSettings(false);
+      }
+    };
+    xhr.timeout = 15000;
+    xhr.ontimeout = function() {
+      console.error('[Slideshow] XHR timeout loading settings');
+      const localSettings = loadSettings();
+      setConfiguredCatalogs(localSettings.catalogs);
+      setFbAccessToken(localSettings.facebookAccessToken);
+      setIsLoadingSettings(false);
+    };
+    xhr.send();
+  }, []);
 
   // ===== Google Auth =====
   useEffect(() => {
@@ -222,7 +304,7 @@ export const SlideshowGenerator = () => {
     })();
   }, [userEmail]);
 
-  // ===== Load company settings when company changes =====
+  // ===== Load company settings when company changes (from user selection) =====
   useEffect(() => {
     if (!selectedCompanyId) return;
     (async () => {
@@ -235,7 +317,7 @@ export const SlideshowGenerator = () => {
     })();
   }, [selectedCompanyId]);
 
-  // ===== Fetch products when catalog changes =====
+  // ===== Fetch products =====
   const handleFetchProducts = useCallback(async () => {
     if (!selectedCatalogId || !fbAccessToken) return;
     setIsLoadingProducts(true);
@@ -297,6 +379,20 @@ export const SlideshowGenerator = () => {
 
   const removeSelectedImage = (index: number) => {
     setSelectedImages((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  // Select all images from a product
+  const selectAllFromProduct = (product: CatalogProduct) => {
+    const allImages = [product.imageUrl, ...product.additionalImages].filter(Boolean);
+    const newSelections: SelectedImage[] = [];
+    for (const imgUrl of allImages) {
+      if (!selectedImages.some((img) => img.url === imgUrl)) {
+        newSelections.push({ url: imgUrl, label: product.name, productId: product.id });
+      }
+    }
+    if (newSelections.length > 0) {
+      setSelectedImages((prev) => [...prev, ...newSelections]);
+    }
   };
 
   // ===== Manual Image Upload =====
@@ -381,7 +477,21 @@ export const SlideshowGenerator = () => {
     setAudioFileName(null);
   };
 
-  // ===== Generate slideshow =====
+  // ===== Preview Animation =====
+  useEffect(() => {
+    if (!isPreviewPlaying || selectedImages.length <= 1 || currentStep !== 2) return;
+    const interval = setInterval(() => {
+      setPreviewIndex((prev) => (prev + 1) % selectedImages.length);
+    }, durationPerImage * 1000);
+    return () => clearInterval(interval);
+  }, [isPreviewPlaying, selectedImages.length, durationPerImage, currentStep]);
+
+  // Reset preview index when images change
+  useEffect(() => {
+    setPreviewIndex(0);
+  }, [selectedImages.length]);
+
+  // ===== Generate slideshow (single) =====
   const handleGenerate = async () => {
     if (selectedImages.length === 0) return;
     setIsGenerating(true);
@@ -426,9 +536,11 @@ export const SlideshowGenerator = () => {
       } else {
         const errMsg = data?.error?.json?.message || "Failed to generate video";
         setGenerationError(errMsg);
+        setCurrentStep(3);
       }
     } catch (e: any) {
       setGenerationError(e.message || "Failed to generate video");
+      setCurrentStep(3);
     } finally {
       setIsGenerating(false);
     }
@@ -446,7 +558,6 @@ export const SlideshowGenerator = () => {
       gapi.client.setToken({ access_token: googleAccessToken });
       const folderId = await getDriveFolderId();
 
-      // Download the video from S3 URL
       const videoResponse = await fetch(generatedVideoUrl);
       const videoBlob = await videoResponse.blob();
 
@@ -456,7 +567,6 @@ export const SlideshowGenerator = () => {
 
       const metadata = { name: fileName, mimeType: "video/mp4", parents: [folderId] };
 
-      // Initiate resumable upload
       const initRes = await fetch("https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable", {
         method: "POST",
         headers: {
@@ -466,27 +576,21 @@ export const SlideshowGenerator = () => {
         body: JSON.stringify(metadata),
       });
 
-      if (!initRes.ok) {
-        throw new Error(`Failed to initiate upload: ${initRes.statusText}`);
-      }
+      if (!initRes.ok) throw new Error(`Failed to initiate upload: ${initRes.statusText}`);
 
       const location = initRes.headers.get("Location");
       if (!location) throw new Error("Could not get resumable upload URL.");
 
-      // Upload the video
       const uploadRes = await fetch(location, {
         method: "PUT",
         headers: { "Content-Type": "video/mp4" },
         body: videoBlob,
       });
 
-      if (!uploadRes.ok) {
-        throw new Error(`Upload failed: ${uploadRes.statusText}`);
-      }
+      if (!uploadRes.ok) throw new Error(`Upload failed: ${uploadRes.statusText}`);
 
       const uploadedFile = await uploadRes.json();
 
-      // Set permissions to anyone with link
       await gapi.client.drive.permissions.create({
         fileId: uploadedFile.id,
         resource: { role: "reader", type: "anyone" },
@@ -512,7 +616,6 @@ export const SlideshowGenerator = () => {
     setCatalogUpdateResult(null);
 
     try {
-      // Use the Google Drive download link if available, otherwise use S3 URL
       const videoUrlForCatalog = driveUploadResult?.downloadLink || generatedVideoUrl;
 
       const result = await trpcMutate("slideshow.updateCatalogVideo", {
@@ -536,6 +639,159 @@ export const SlideshowGenerator = () => {
     }
   };
 
+  // ===== Upload a single video to Drive (for batch) =====
+  const uploadVideoToDrive = async (videoUrl: string, productName: string): Promise<string | null> => {
+    if (!googleAccessToken) return null;
+    try {
+      gapi.client.setToken({ access_token: googleAccessToken });
+      const folderId = await getDriveFolderId();
+      const videoResponse = await fetch(videoUrl);
+      const videoBlob = await videoResponse.blob();
+      const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, "");
+      const suffix = Math.random().toString(36).substring(2, 6);
+      const safeName = productName.replace(/[^a-zA-Z0-9_\-\u4e00-\u9fff]/g, "_").substring(0, 50);
+      const fileName = `slideshow_${safeName}_${dateStr}_${suffix}.mp4`;
+      const metadata = { name: fileName, mimeType: "video/mp4", parents: [folderId] };
+
+      const initRes = await fetch("https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${googleAccessToken}`,
+          "Content-Type": "application/json; charset=UTF-8",
+        },
+        body: JSON.stringify(metadata),
+      });
+      if (!initRes.ok) return null;
+      const location = initRes.headers.get("Location");
+      if (!location) return null;
+
+      const uploadRes = await fetch(location, {
+        method: "PUT",
+        headers: { "Content-Type": "video/mp4" },
+        body: videoBlob,
+      });
+      if (!uploadRes.ok) return null;
+      const uploadedFile = await uploadRes.json();
+
+      await gapi.client.drive.permissions.create({
+        fileId: uploadedFile.id,
+        resource: { role: "reader", type: "anyone" },
+      });
+
+      return `https://drive.google.com/uc?export=download&id=${uploadedFile.id}`;
+    } catch {
+      return null;
+    }
+  };
+
+  // ===== Batch Generation =====
+  const handleBatchGenerate = async () => {
+    if (batchItems.length === 0) return;
+    setIsBatchRunning(true);
+    batchAbortRef.current = false;
+
+    for (let i = 0; i < batchItems.length; i++) {
+      if (batchAbortRef.current) break;
+
+      const item = batchItems[i];
+      if (item.status === "done") continue;
+
+      // Update status to generating
+      setBatchItems(prev => prev.map((b, idx) => idx === i ? { ...b, status: "generating" as const, error: undefined } : b));
+
+      try {
+        // Collect all images for this product
+        const productImages = [item.product.imageUrl, ...item.product.additionalImages].filter(Boolean);
+
+        const payload = {
+          json: {
+            images: productImages.map((url) => ({
+              url,
+              label: showProductName ? item.product.name : undefined,
+            })),
+            aspectRatio,
+            durationPerImage,
+            transition,
+            transitionDuration,
+            overlayText: overlayText.trim() || undefined,
+            showProductName,
+            textPosition,
+            fontSize,
+            audioUrl: audioUrl || undefined,
+            audioVolume: audioUrl ? audioVolume : undefined,
+          },
+        };
+
+        const res = await fetch("/api/trpc/slideshow.generate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify(payload),
+        });
+
+        const data = await res.json();
+        if (!data?.result?.data?.json?.success) {
+          throw new Error(data?.error?.json?.message || "Generation failed");
+        }
+
+        const videoUrl = data.result.data.json.videoUrl;
+        let driveLink: string | undefined;
+
+        // Upload to Drive if enabled
+        if (batchUploadToDrive && googleAccessToken) {
+          setBatchItems(prev => prev.map((b, idx) => idx === i ? { ...b, status: "uploading" as const, videoUrl } : b));
+          const link = await uploadVideoToDrive(videoUrl, item.product.name);
+          if (link) driveLink = link;
+        }
+
+        // Update catalog if enabled
+        if (batchUpdateCatalog && fbAccessToken && selectedCatalogId && item.product.retailerId) {
+          const catalogVideoUrl = driveLink || videoUrl;
+          try {
+            await trpcMutate("slideshow.updateCatalogVideo", {
+              catalogId: selectedCatalogId,
+              accessToken: fbAccessToken,
+              retailerId: item.product.retailerId,
+              videoUrl: catalogVideoUrl,
+            });
+          } catch (e) {
+            console.warn(`[Batch] Catalog update failed for ${item.product.retailerId}:`, e);
+          }
+        }
+
+        setBatchItems(prev => prev.map((b, idx) => idx === i ? { ...b, status: "done" as const, videoUrl, driveLink } : b));
+      } catch (e: any) {
+        setBatchItems(prev => prev.map((b, idx) => idx === i ? { ...b, status: "error" as const, error: e.message } : b));
+      }
+    }
+
+    setIsBatchRunning(false);
+  };
+
+  const handleStopBatch = () => {
+    batchAbortRef.current = true;
+  };
+
+  // Add products to batch
+  const addProductToBatch = (product: CatalogProduct) => {
+    if (batchItems.some(b => b.product.id === product.id)) return;
+    setBatchItems(prev => [...prev, { product, status: "pending" }]);
+  };
+
+  const removeProductFromBatch = (productId: string) => {
+    setBatchItems(prev => prev.filter(b => b.product.id !== productId));
+  };
+
+  const addAllProductsToBatch = () => {
+    const newItems: BatchItem[] = [];
+    for (const product of filteredProducts) {
+      if (!batchItems.some(b => b.product.id === product.id)) {
+        newItems.push({ product, status: "pending" });
+      }
+    }
+    setBatchItems(prev => [...prev, ...newItems]);
+  };
+
   // ===== Estimated video duration =====
   const estimatedDuration = useMemo(() => {
     if (selectedImages.length === 0) return 0;
@@ -546,7 +802,7 @@ export const SlideshowGenerator = () => {
     return selectedImages.length * durationPerImage - (selectedImages.length - 1) * clampedTrans;
   }, [selectedImages.length, durationPerImage, transition, transitionDuration]);
 
-  // Get unique product retailer IDs from selected images (for catalog update dropdown)
+  // Get unique product retailer IDs from selected images
   const selectedProductRetailerIds = useMemo(() => {
     const ids = new Set<string>();
     selectedImages.forEach((img) => {
@@ -568,6 +824,15 @@ export const SlideshowGenerator = () => {
     { value: "wiperight", label: "Wipe Right" },
     { value: "none", label: t("slideshowNoTransition") || "None" },
   ];
+
+  // Batch stats
+  const batchStats = useMemo(() => {
+    const done = batchItems.filter(b => b.status === "done").length;
+    const error = batchItems.filter(b => b.status === "error").length;
+    const pending = batchItems.filter(b => b.status === "pending").length;
+    const running = batchItems.filter(b => b.status === "generating" || b.status === "uploading").length;
+    return { done, error, pending, running, total: batchItems.length };
+  }, [batchItems]);
 
   return (
     <main className="container" style={{ maxWidth: 1200, margin: "0 auto", padding: "20px" }}>
@@ -631,365 +896,1344 @@ export const SlideshowGenerator = () => {
           </div>
         </header>
 
-        {/* Step Indicator */}
+        {/* Mode Toggle */}
         <div style={{
           display: "flex",
           justifyContent: "center",
-          gap: 0,
-          padding: "20px 32px 0",
-          borderBottom: "1px solid #f0f0f0",
-          paddingBottom: 16,
+          gap: 8,
+          padding: "16px 32px 0",
         }}>
-          {[
-            { step: 1, label: t("slideshowStep1") || "Select Images" },
-            { step: 2, label: t("slideshowStep2") || "Configure Settings" },
-            { step: 3, label: t("slideshowStep3") || "Generate & Download" },
-          ].map(({ step, label }) => (
-            <div
-              key={step}
-              onClick={() => {
-                if (step === 1) setCurrentStep(1);
-                else if (step === 2 && selectedImages.length > 0) setCurrentStep(2);
-                else if (step === 3 && generatedVideoUrl) setCurrentStep(3);
-              }}
-              style={{
-                flex: 1,
-                textAlign: "center",
-                padding: "12px 8px",
-                cursor: step <= currentStep || (step === 2 && selectedImages.length > 0) ? "pointer" : "default",
-                borderBottom: `3px solid ${currentStep === step ? "#667eea" : "transparent"}`,
-                transition: "all 0.2s",
-              }}
-            >
-              <div style={{
-                display: "inline-flex",
-                alignItems: "center",
-                justifyContent: "center",
-                width: 28,
-                height: 28,
-                borderRadius: "50%",
-                background: currentStep >= step ? "#667eea" : "#e0e0e0",
-                color: currentStep >= step ? "#fff" : "#999",
-                fontSize: 13,
-                fontWeight: 700,
-                marginBottom: 4,
-              }}>
-                {step}
-              </div>
-              <div style={{
-                fontSize: 13,
-                fontWeight: currentStep === step ? 600 : 400,
-                color: currentStep === step ? "#333" : "#999",
-              }}>
-                {label}
-              </div>
-            </div>
-          ))}
+          <button
+            onClick={() => setBatchMode(false)}
+            style={{
+              padding: "8px 20px",
+              borderRadius: 20,
+              border: `2px solid ${!batchMode ? "#667eea" : "#e0e0e0"}`,
+              background: !batchMode ? "#667eea" : "#fff",
+              color: !batchMode ? "#fff" : "#666",
+              fontWeight: 600,
+              cursor: "pointer",
+              fontSize: 13,
+            }}
+          >
+            🎬 {t("slideshowSingleMode") || "Single Video"}
+          </button>
+          <button
+            onClick={() => setBatchMode(true)}
+            style={{
+              padding: "8px 20px",
+              borderRadius: 20,
+              border: `2px solid ${batchMode ? "#667eea" : "#e0e0e0"}`,
+              background: batchMode ? "#667eea" : "#fff",
+              color: batchMode ? "#fff" : "#666",
+              fontWeight: 600,
+              cursor: "pointer",
+              fontSize: 13,
+            }}
+          >
+            📦 {t("slideshowBatchMode") || "Batch Generation"}
+          </button>
         </div>
 
-        <div style={{ padding: "24px 32px 32px" }}>
-          {/* ===== STEP 1: Select Images ===== */}
-          {currentStep === 1 && (
-            <div>
-              {/* Company & Catalog Selection */}
-              <div style={{ display: "flex", gap: 16, marginBottom: 20, flexWrap: "wrap" }}>
-                {userCompanies.length > 0 && (
-                  <div style={{ flex: "1 1 200px" }}>
-                    <label style={{ display: "block", fontSize: 13, fontWeight: 600, color: "#555", marginBottom: 6 }}>
-                      {t("selectCompany")}
-                    </label>
-                    <select
-                      value={selectedCompanyId || ""}
-                      onChange={(e) => {
-                        const id = parseInt(e.target.value);
-                        setSelectedCompanyId(id);
-                        saveSelectedCompany(id);
-                        setProducts([]);
-                        setSelectedImages([]);
-                      }}
-                      style={selectStyle}
-                    >
-                      {userCompanies.map((c) => (
-                        <option key={c.id} value={c.id}>{c.name}</option>
-                      ))}
-                    </select>
-                  </div>
-                )}
-                <div style={{ flex: "1 1 200px" }}>
-                  <label style={{ display: "block", fontSize: 13, fontWeight: 600, color: "#555", marginBottom: 6 }}>
-                    {t("selectCatalog")}
-                  </label>
-                  <select
-                    value={selectedCatalogId}
-                    onChange={(e) => {
-                      setSelectedCatalogId(e.target.value);
-                      setProducts([]);
-                      setSelectedImages([]);
-                    }}
-                    style={selectStyle}
-                  >
-                    <option value="">{t("catalogIdPlaceholder")}</option>
-                    {configuredCatalogs.map((c) => (
-                      <option key={c.id} value={c.id}>{c.name || c.id}</option>
-                    ))}
-                  </select>
-                </div>
-                <div style={{ flex: "0 0 auto", display: "flex", alignItems: "flex-end" }}>
-                  <button
-                    onClick={handleFetchProducts}
-                    disabled={!selectedCatalogId || !fbAccessToken || isLoadingProducts}
-                    style={{
-                      ...buttonStyle,
-                      background: !selectedCatalogId || !fbAccessToken ? "#ccc" : "#667eea",
-                      cursor: !selectedCatalogId || !fbAccessToken ? "not-allowed" : "pointer",
-                    }}
-                  >
-                    {isLoadingProducts ? (t("loadingProducts") || "Loading...") : (t("fetchProducts"))}
-                  </button>
-                </div>
-              </div>
-
-              {/* Search */}
-              {products.length > 0 && (
-                <div style={{ marginBottom: 16 }}>
-                  <input
-                    type="text"
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    placeholder={t("searchPlaceholder") || "Search products..."}
-                    style={inputStyle}
-                  />
-                </div>
-              )}
-
-              {/* Error */}
-              {productError && (
-                <div style={{
-                  background: "#fff5f5",
-                  border: "1px solid #fed7d7",
-                  borderRadius: 8,
-                  padding: "12px 16px",
-                  color: "#c53030",
-                  fontSize: 14,
-                  marginBottom: 16,
-                }}>
-                  {productError}
-                </div>
-              )}
-
-              {/* Product Grid */}
-              {filteredProducts.length > 0 && (
-                <>
-                  <div style={{ fontSize: 13, color: "#888", marginBottom: 12 }}>
-                    {t("slideshowProductCount") || "Products"}: {filteredProducts.length}
-                    {selectedImages.length > 0 && (
-                      <span style={{ marginLeft: 16, color: "#667eea", fontWeight: 600 }}>
-                        {t("slideshowSelectedCount") || "Selected"}: {selectedImages.length} {t("slideshowImages") || "images"}
-                      </span>
-                    )}
-                  </div>
-                  <div style={{
-                    display: "grid",
-                    gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))",
-                    gap: 12,
-                    maxHeight: 500,
-                    overflowY: "auto",
-                    padding: 4,
-                  }}>
-                    {filteredProducts.map((product) => (
-                      <ProductImageCard
-                        key={product.id}
-                        product={product}
-                        isSelected={isImageSelected}
-                        onToggle={toggleImageSelection}
-                      />
-                    ))}
-                  </div>
-                </>
-              )}
-
-              {/* Manual Image Upload Section */}
-              <div style={{
-                marginTop: 24,
-                padding: "16px 20px",
-                background: "#f8f9ff",
-                borderRadius: 12,
-                border: "1px dashed #667eea",
-              }}>
-                <h4 style={{ margin: "0 0 8px", fontSize: 14, fontWeight: 600, color: "#444" }}>
-                  📤 {t("slideshowUploadCustomImages") || "Upload Custom Images"}
-                </h4>
-                <p style={{ margin: "0 0 12px", fontSize: 13, color: "#777" }}>
-                  {t("slideshowUploadCustomImagesDesc") || "Add your own images to the slideshow (max 10MB per image)"}
-                </p>
-                <input
-                  ref={imageInputRef}
-                  type="file"
-                  accept="image/*"
-                  multiple
-                  onChange={handleImageUpload}
-                  style={{ display: "none" }}
-                />
-                <button
-                  onClick={() => imageInputRef.current?.click()}
-                  disabled={isUploadingImage}
+        {/* ===== SINGLE MODE ===== */}
+        {!batchMode && (
+          <>
+            {/* Step Indicator */}
+            <div style={{
+              display: "flex",
+              justifyContent: "center",
+              gap: 0,
+              padding: "16px 32px 0",
+              borderBottom: "1px solid #f0f0f0",
+              paddingBottom: 16,
+            }}>
+              {[
+                { step: 1, label: t("slideshowStep1") || "Select Images" },
+                { step: 2, label: t("slideshowStep2") || "Configure Settings" },
+                { step: 3, label: t("slideshowStep3") || "Generate & Download" },
+              ].map(({ step, label }) => (
+                <div
+                  key={step}
+                  onClick={() => {
+                    if (step === 1) setCurrentStep(1);
+                    else if (step === 2 && selectedImages.length > 0) setCurrentStep(2);
+                    else if (step === 3 && generatedVideoUrl) setCurrentStep(3);
+                  }}
                   style={{
-                    ...buttonStyle,
-                    background: isUploadingImage ? "#aaa" : "#667eea",
-                    cursor: isUploadingImage ? "not-allowed" : "pointer",
-                    fontSize: 13,
-                    padding: "8px 20px",
+                    flex: 1,
+                    textAlign: "center",
+                    padding: "12px 8px",
+                    cursor: step <= currentStep || (step === 2 && selectedImages.length > 0) ? "pointer" : "default",
+                    borderBottom: `3px solid ${currentStep === step ? "#667eea" : "transparent"}`,
+                    transition: "all 0.2s",
                   }}
                 >
-                  {isUploadingImage
-                    ? (t("slideshowUploading") || "Uploading...")
-                    : (t("slideshowChooseImages") || "Choose Images")}
-                </button>
-              </div>
-
-              {/* Selected Images Preview */}
-              {selectedImages.length > 0 && (
-                <div style={{ marginTop: 24 }}>
-                  <h3 style={{ fontSize: 16, fontWeight: 600, marginBottom: 12, color: "#333" }}>
-                    {t("slideshowSelectedImages") || "Selected Images"} ({selectedImages.length})
-                  </h3>
                   <div style={{
-                    display: "flex",
-                    gap: 8,
-                    overflowX: "auto",
-                    padding: "8px 0",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    width: 28,
+                    height: 28,
+                    borderRadius: "50%",
+                    background: currentStep >= step ? "#667eea" : "#e0e0e0",
+                    color: currentStep >= step ? "#fff" : "#999",
+                    fontSize: 13,
+                    fontWeight: 700,
+                    marginBottom: 4,
                   }}>
-                    {selectedImages.map((img, idx) => (
-                      <div key={`${img.url}-${idx}`} style={{
-                        flex: "0 0 100px",
-                        position: "relative",
-                        borderRadius: 8,
-                        overflow: "hidden",
-                        border: img.isCustom ? "2px solid #38a169" : "2px solid #667eea",
-                      }}>
-                        <img
-                          src={img.url}
-                          alt={img.label}
-                          style={{ width: 100, height: 100, objectFit: "cover" }}
-                        />
-                        <div style={{
-                          position: "absolute",
-                          top: 0,
-                          left: 0,
-                          right: 0,
-                          display: "flex",
-                          justifyContent: "space-between",
-                          padding: 2,
-                        }}>
-                          <span style={{
-                            background: img.isCustom ? "#38a169" : "#667eea",
-                            color: "#fff",
-                            fontSize: 10,
-                            fontWeight: 700,
-                            borderRadius: 4,
-                            padding: "1px 5px",
-                          }}>
-                            {idx + 1}{img.isCustom ? " ✦" : ""}
-                          </span>
+                    {step}
+                  </div>
+                  <div style={{
+                    fontSize: 13,
+                    fontWeight: currentStep === step ? 600 : 400,
+                    color: currentStep === step ? "#333" : "#999",
+                  }}>
+                    {label}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div style={{ padding: "24px 32px 32px" }}>
+              {/* ===== STEP 1: Select Images ===== */}
+              {currentStep === 1 && (
+                <div>
+                  {/* Company & Catalog Selection */}
+                  <div style={{ display: "flex", gap: 16, marginBottom: 20, flexWrap: "wrap" }}>
+                    {userCompanies.length > 0 && (
+                      <div style={{ flex: "1 1 200px" }}>
+                        <label style={{ display: "block", fontSize: 13, fontWeight: 600, color: "#555", marginBottom: 6 }}>
+                          {t("selectCompany")}
+                        </label>
+                        <select
+                          value={selectedCompanyId || ""}
+                          onChange={(e) => {
+                            const id = parseInt(e.target.value);
+                            setSelectedCompanyId(id);
+                            saveSelectedCompany(id);
+                            setProducts([]);
+                            setSelectedImages([]);
+                          }}
+                          style={selectStyle}
+                        >
+                          {userCompanies.map((c) => (
+                            <option key={c.id} value={c.id}>{c.name}</option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+                    <div style={{ flex: "1 1 200px" }}>
+                      <label style={{ display: "block", fontSize: 13, fontWeight: 600, color: "#555", marginBottom: 6 }}>
+                        {t("selectCatalog")}
+                      </label>
+                      <select
+                        value={selectedCatalogId}
+                        onChange={(e) => {
+                          setSelectedCatalogId(e.target.value);
+                          setProducts([]);
+                          setSelectedImages([]);
+                        }}
+                        style={selectStyle}
+                      >
+                        <option value="">{t("catalogIdPlaceholder") || "Select Catalog"}</option>
+                        {configuredCatalogs.map((c) => (
+                          <option key={c.id} value={c.id}>{c.name || c.id}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div style={{ flex: "0 0 auto", display: "flex", alignItems: "flex-end" }}>
+                      <button
+                        onClick={handleFetchProducts}
+                        disabled={!selectedCatalogId || !fbAccessToken || isLoadingProducts}
+                        style={{
+                          ...buttonStyle,
+                          background: !selectedCatalogId || !fbAccessToken ? "#ccc" : "#667eea",
+                          cursor: !selectedCatalogId || !fbAccessToken ? "not-allowed" : "pointer",
+                        }}
+                      >
+                        {isLoadingProducts ? (t("loadingProducts") || "Loading...") : (t("fetchProducts"))}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* No catalogs warning / loading */}
+                  {isLoadingSettings && configuredCatalogs.length === 0 && (
+                    <div style={{
+                      background: "#eff6ff",
+                      border: "1px solid #bfdbfe",
+                      borderRadius: 8,
+                      padding: "12px 16px",
+                      color: "#1e40af",
+                      fontSize: 14,
+                      marginBottom: 16,
+                    }}>
+                      ⏳ {t("loadingSettings") || "Loading catalog settings..."}
+                    </div>
+                  )}
+                  {!isLoadingSettings && configuredCatalogs.length === 0 && (
+                    <div style={{
+                      background: "#fffbeb",
+                      border: "1px solid #fde68a",
+                      borderRadius: 8,
+                      padding: "12px 16px",
+                      color: "#92400e",
+                      fontSize: 14,
+                      marginBottom: 16,
+                    }}>
+                      ⚠️ {t("slideshowNoCatalogs") || "No catalogs configured. Please set up catalogs in the main tool settings first."}
+                    </div>
+                  )}
+
+                  {/* Search */}
+                  {products.length > 0 && (
+                    <div style={{ marginBottom: 16 }}>
+                      <input
+                        type="text"
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        placeholder={t("searchPlaceholder") || "Search products..."}
+                        style={inputStyle}
+                      />
+                    </div>
+                  )}
+
+                  {/* Error */}
+                  {productError && (
+                    <div style={{
+                      background: "#fff5f5",
+                      border: "1px solid #fed7d7",
+                      borderRadius: 8,
+                      padding: "12px 16px",
+                      color: "#c53030",
+                      fontSize: 14,
+                      marginBottom: 16,
+                    }}>
+                      {productError}
+                    </div>
+                  )}
+
+                  {/* Product Grid */}
+                  {filteredProducts.length > 0 && (
+                    <>
+                      <div style={{ fontSize: 13, color: "#888", marginBottom: 12, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                        <div>
+                          {t("slideshowProductCount") || "Products"}: {filteredProducts.length}
+                          {selectedImages.length > 0 && (
+                            <span style={{ marginLeft: 16, color: "#667eea", fontWeight: 600 }}>
+                              {t("slideshowSelectedCount") || "Selected"}: {selectedImages.length} {t("slideshowImages") || "images"}
+                            </span>
+                          )}
+                        </div>
+                        <div style={{ display: "flex", gap: 8 }}>
                           <button
-                            onClick={() => removeSelectedImage(idx)}
-                            style={{
-                              background: "rgba(220,38,38,0.85)",
-                              color: "#fff",
-                              border: "none",
-                              borderRadius: 4,
-                              width: 18,
-                              height: 18,
-                              fontSize: 11,
-                              cursor: "pointer",
-                              display: "flex",
-                              alignItems: "center",
-                              justifyContent: "center",
-                            }}
+                            onClick={() => setSelectedImages([])}
+                            style={{ ...miniActionBtn, color: "#ef4444", borderColor: "#fecaca" }}
                           >
-                            ✕
+                            {t("slideshowClearAll") || "Clear All"}
                           </button>
                         </div>
+                      </div>
+                      <div style={{
+                        display: "grid",
+                        gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))",
+                        gap: 12,
+                        maxHeight: 500,
+                        overflowY: "auto",
+                        padding: 4,
+                      }}>
+                        {filteredProducts.map((product) => (
+                          <ProductImageCard
+                            key={product.id}
+                            product={product}
+                            isSelected={isImageSelected}
+                            onToggle={toggleImageSelection}
+                            onSelectAll={selectAllFromProduct}
+                            t={t}
+                          />
+                        ))}
+                      </div>
+                    </>
+                  )}
+
+                  {/* Manual Image Upload Section */}
+                  <div style={{
+                    marginTop: 24,
+                    padding: "16px 20px",
+                    background: "#f8f9ff",
+                    borderRadius: 12,
+                    border: "1px dashed #667eea",
+                  }}>
+                    <h4 style={{ margin: "0 0 8px", fontSize: 14, fontWeight: 600, color: "#444" }}>
+                      📤 {t("slideshowUploadCustomImages") || "Upload Custom Images"}
+                    </h4>
+                    <p style={{ margin: "0 0 12px", fontSize: 13, color: "#777" }}>
+                      {t("slideshowUploadCustomImagesDesc") || "Add your own images to the slideshow (max 10MB per image)"}
+                    </p>
+                    <input
+                      ref={imageInputRef}
+                      type="file"
+                      accept="image/*"
+                      multiple
+                      onChange={handleImageUpload}
+                      style={{ display: "none" }}
+                    />
+                    <button
+                      onClick={() => imageInputRef.current?.click()}
+                      disabled={isUploadingImage}
+                      style={{
+                        ...buttonStyle,
+                        background: isUploadingImage ? "#aaa" : "#667eea",
+                        cursor: isUploadingImage ? "not-allowed" : "pointer",
+                        fontSize: 13,
+                        padding: "8px 20px",
+                      }}
+                    >
+                      {isUploadingImage
+                        ? (t("slideshowUploading") || "Uploading...")
+                        : (t("slideshowChooseImages") || "Choose Images")}
+                    </button>
+                  </div>
+
+                  {/* Selected Images Preview */}
+                  {selectedImages.length > 0 && (
+                    <div style={{ marginTop: 24 }}>
+                      <h3 style={{ fontSize: 16, fontWeight: 600, marginBottom: 12, color: "#333" }}>
+                        {t("slideshowSelectedImages") || "Selected Images"} ({selectedImages.length})
+                      </h3>
+                      <div style={{
+                        display: "flex",
+                        gap: 8,
+                        overflowX: "auto",
+                        padding: "8px 0",
+                      }}>
+                        {selectedImages.map((img, idx) => (
+                          <div key={`${img.url}-${idx}`} style={{
+                            flex: "0 0 100px",
+                            position: "relative",
+                            borderRadius: 8,
+                            overflow: "hidden",
+                            border: img.isCustom ? "2px solid #38a169" : "2px solid #667eea",
+                          }}>
+                            <img
+                              src={img.url}
+                              alt={img.label}
+                              style={{ width: 100, height: 100, objectFit: "cover" }}
+                            />
+                            <div style={{
+                              position: "absolute",
+                              top: 0,
+                              left: 0,
+                              right: 0,
+                              display: "flex",
+                              justifyContent: "space-between",
+                              padding: 2,
+                            }}>
+                              <span style={{
+                                background: img.isCustom ? "#38a169" : "#667eea",
+                                color: "#fff",
+                                fontSize: 10,
+                                fontWeight: 700,
+                                borderRadius: 4,
+                                padding: "1px 5px",
+                              }}>
+                                {idx + 1}{img.isCustom ? " ✦" : ""}
+                              </span>
+                              <button
+                                onClick={() => removeSelectedImage(idx)}
+                                style={{
+                                  background: "rgba(220,38,38,0.85)",
+                                  color: "#fff",
+                                  border: "none",
+                                  borderRadius: 4,
+                                  width: 18,
+                                  height: 18,
+                                  fontSize: 11,
+                                  cursor: "pointer",
+                                  display: "flex",
+                                  alignItems: "center",
+                                  justifyContent: "center",
+                                }}
+                              >
+                                ✕
+                              </button>
+                            </div>
+                            <div style={{
+                              position: "absolute",
+                              bottom: 0,
+                              left: 0,
+                              right: 0,
+                              display: "flex",
+                              justifyContent: "center",
+                              gap: 2,
+                              padding: 2,
+                            }}>
+                              {idx > 0 && (
+                                <button onClick={() => moveImage(idx, "up")} style={miniBtn}>◀</button>
+                              )}
+                              {idx < selectedImages.length - 1 && (
+                                <button onClick={() => moveImage(idx, "down")} style={miniBtn}>▶</button>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Next Button */}
+                  <div style={{ marginTop: 24, display: "flex", justifyContent: "flex-end" }}>
+                    <button
+                      onClick={() => setCurrentStep(2)}
+                      disabled={selectedImages.length === 0}
+                      style={{
+                        ...buttonStyle,
+                        background: selectedImages.length === 0 ? "#ccc" : "#667eea",
+                        cursor: selectedImages.length === 0 ? "not-allowed" : "pointer",
+                        padding: "12px 32px",
+                        fontSize: 15,
+                      }}
+                    >
+                      {t("next")} →
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* ===== STEP 2: Configure Settings ===== */}
+              {currentStep === 2 && (
+                <div>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 24 }}>
+                    {/* Left: Settings */}
+                    <div>
+                      <h3 style={{ fontSize: 16, fontWeight: 600, marginBottom: 16, color: "#333" }}>
+                        {t("slideshowVideoSettings") || "Video Settings"}
+                      </h3>
+
+                      {/* Aspect Ratio */}
+                      <div style={{ marginBottom: 16 }}>
+                        <label style={labelStyle}>{t("slideshowAspectRatio") || "Aspect Ratio"}</label>
+                        <div style={{ display: "flex", gap: 8 }}>
+                          {(["4:5", "9:16"] as AspectRatio[]).map((ratio) => (
+                            <button
+                              key={ratio}
+                              onClick={() => setAspectRatio(ratio)}
+                              style={{
+                                flex: 1,
+                                padding: "10px 16px",
+                                borderRadius: 8,
+                                border: `2px solid ${aspectRatio === ratio ? "#667eea" : "#e0e0e0"}`,
+                                background: aspectRatio === ratio ? "#f0f0ff" : "#fff",
+                                color: aspectRatio === ratio ? "#667eea" : "#666",
+                                fontWeight: 600,
+                                cursor: "pointer",
+                                fontSize: 14,
+                              }}
+                            >
+                              {ratio === "4:5" ? "4:5 (1080×1350)" : "9:16 (1080×1920)"}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Duration Per Image */}
+                      <div style={{ marginBottom: 16 }}>
+                        <label style={labelStyle}>
+                          {t("slideshowDuration") || "Duration Per Image"}: {durationPerImage}s
+                        </label>
+                        <input
+                          type="range"
+                          min={1}
+                          max={15}
+                          step={0.5}
+                          value={durationPerImage}
+                          onChange={(e) => setDurationPerImage(parseFloat(e.target.value))}
+                          style={{ width: "100%" }}
+                        />
+                        <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: "#999" }}>
+                          <span>1s</span><span>15s</span>
+                        </div>
+                      </div>
+
+                      {/* Transition */}
+                      <div style={{ marginBottom: 16 }}>
+                        <label style={labelStyle}>{t("slideshowTransition") || "Transition Effect"}</label>
+                        <select
+                          value={transition}
+                          onChange={(e) => setTransition(e.target.value as TransitionType)}
+                          style={selectStyle}
+                        >
+                          {transitions.map((tr) => (
+                            <option key={tr.value} value={tr.value}>{tr.label}</option>
+                          ))}
+                        </select>
+                      </div>
+
+                      {/* Transition Duration */}
+                      {transition !== "none" && (
+                        <div style={{ marginBottom: 16 }}>
+                          <label style={labelStyle}>
+                            {t("slideshowTransDuration") || "Transition Duration"}: {transitionDuration}s
+                          </label>
+                          <input
+                            type="range"
+                            min={0.2}
+                            max={3}
+                            step={0.1}
+                            value={transitionDuration}
+                            onChange={(e) => setTransitionDuration(parseFloat(e.target.value))}
+                            style={{ width: "100%" }}
+                          />
+                        </div>
+                      )}
+
+                      {/* Text Overlay */}
+                      <div style={{ marginBottom: 16 }}>
+                        <label style={labelStyle}>{t("slideshowOverlayText") || "Text Overlay"}</label>
+                        <input
+                          type="text"
+                          value={overlayText}
+                          onChange={(e) => setOverlayText(e.target.value)}
+                          placeholder={t("slideshowOverlayPlaceholder") || "Optional: Add text overlay on all frames"}
+                          style={inputStyle}
+                        />
+                      </div>
+
+                      {/* Show Product Name */}
+                      <div style={{ marginBottom: 16 }}>
+                        <label style={{ ...labelStyle, display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
+                          <input
+                            type="checkbox"
+                            checked={showProductName}
+                            onChange={(e) => setShowProductName(e.target.checked)}
+                            style={{ width: 16, height: 16 }}
+                          />
+                          {t("slideshowShowProductName") || "Show Product Name on Each Image"}
+                        </label>
+                      </div>
+
+                      {/* Text Position */}
+                      {(overlayText || showProductName) && (
+                        <div style={{ marginBottom: 16 }}>
+                          <label style={labelStyle}>{t("slideshowTextPosition") || "Text Position"}</label>
+                          <div style={{ display: "flex", gap: 8 }}>
+                            {(["top", "center", "bottom"] as TextPosition[]).map((pos) => (
+                              <button
+                                key={pos}
+                                onClick={() => setTextPosition(pos)}
+                                style={{
+                                  flex: 1,
+                                  padding: "8px 12px",
+                                  borderRadius: 8,
+                                  border: `2px solid ${textPosition === pos ? "#667eea" : "#e0e0e0"}`,
+                                  background: textPosition === pos ? "#f0f0ff" : "#fff",
+                                  color: textPosition === pos ? "#667eea" : "#666",
+                                  fontWeight: 500,
+                                  cursor: "pointer",
+                                  fontSize: 13,
+                                  textTransform: "capitalize",
+                                }}
+                              >
+                                {pos === "top" ? (t("slideshowTop") || "Top") : pos === "center" ? (t("slideshowCenter") || "Center") : (t("slideshowBottom") || "Bottom")}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Font Size */}
+                      {(overlayText || showProductName) && (
+                        <div style={{ marginBottom: 16 }}>
+                          <label style={labelStyle}>
+                            {t("slideshowFontSize") || "Font Size"}: {fontSize}px
+                          </label>
+                          <input
+                            type="range"
+                            min={16}
+                            max={80}
+                            step={2}
+                            value={fontSize}
+                            onChange={(e) => setFontSize(parseInt(e.target.value))}
+                            style={{ width: "100%" }}
+                          />
+                        </div>
+                      )}
+
+                      {/* ===== Background Music Section ===== */}
+                      <div style={{
+                        marginTop: 8,
+                        padding: "16px",
+                        background: "#fefce8",
+                        borderRadius: 10,
+                        border: "1px solid #fde68a",
+                      }}>
+                        <h4 style={{ margin: "0 0 10px", fontSize: 14, fontWeight: 600, color: "#92400e" }}>
+                          🎵 {t("slideshowBackgroundMusic") || "Background Music"}
+                        </h4>
+
+                        {audioUrl ? (
+                          <div>
+                            <div style={{
+                              display: "flex",
+                              alignItems: "center",
+                              gap: 10,
+                              marginBottom: 12,
+                              background: "#fff",
+                              padding: "8px 12px",
+                              borderRadius: 8,
+                              border: "1px solid #e5e7eb",
+                            }}>
+                              <span style={{ fontSize: 20 }}>🎶</span>
+                              <span style={{ flex: 1, fontSize: 13, fontWeight: 500, color: "#333", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                                {audioFileName}
+                              </span>
+                              <button
+                                onClick={removeAudio}
+                                style={{
+                                  background: "#ef4444",
+                                  color: "#fff",
+                                  border: "none",
+                                  borderRadius: 6,
+                                  padding: "4px 10px",
+                                  fontSize: 12,
+                                  cursor: "pointer",
+                                  fontWeight: 600,
+                                }}
+                              >
+                                ✕ {t("slideshowRemove") || "Remove"}
+                              </button>
+                            </div>
+
+                            <div>
+                              <label style={{ ...labelStyle, color: "#92400e" }}>
+                                {t("slideshowVolume") || "Volume"}: {Math.round(audioVolume * 100)}%
+                              </label>
+                              <input
+                                type="range"
+                                min={0}
+                                max={1}
+                                step={0.05}
+                                value={audioVolume}
+                                onChange={(e) => setAudioVolume(parseFloat(e.target.value))}
+                                style={{ width: "100%" }}
+                              />
+                              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: "#999" }}>
+                                <span>0%</span><span>100%</span>
+                              </div>
+                            </div>
+                          </div>
+                        ) : (
+                          <div>
+                            <input
+                              ref={audioInputRef}
+                              type="file"
+                              accept="audio/*"
+                              onChange={handleAudioUpload}
+                              style={{ display: "none" }}
+                            />
+                            <button
+                              onClick={() => audioInputRef.current?.click()}
+                              disabled={isUploadingAudio}
+                              style={{
+                                ...buttonStyle,
+                                background: isUploadingAudio ? "#aaa" : "#d97706",
+                                cursor: isUploadingAudio ? "not-allowed" : "pointer",
+                                fontSize: 13,
+                                padding: "8px 20px",
+                              }}
+                            >
+                              {isUploadingAudio
+                                ? (t("slideshowUploading") || "Uploading...")
+                                : (t("slideshowChooseAudio") || "Choose Audio File")}
+                            </button>
+                            <p style={{ margin: "8px 0 0", fontSize: 12, color: "#999" }}>
+                              {t("slideshowAudioFormats") || "Supports MP3, WAV, OGG (max 16MB)"}
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Right: Animated Preview */}
+                    <div>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+                        <h3 style={{ fontSize: 16, fontWeight: 600, color: "#333", margin: 0 }}>
+                          {t("slideshowPreview") || "Preview"}
+                        </h3>
+                        {selectedImages.length > 1 && (
+                          <button
+                            onClick={() => setIsPreviewPlaying(!isPreviewPlaying)}
+                            style={{
+                              ...miniActionBtn,
+                              color: isPreviewPlaying ? "#ef4444" : "#22c55e",
+                              borderColor: isPreviewPlaying ? "#fecaca" : "#bbf7d0",
+                            }}
+                          >
+                            {isPreviewPlaying ? "⏸ Pause" : "▶ Play"}
+                          </button>
+                        )}
+                      </div>
+                      <div style={{
+                        background: "#f8f8f8",
+                        borderRadius: 12,
+                        padding: 16,
+                        border: "1px solid #e8e8e8",
+                      }}>
+                        {/* Animated preview */}
                         <div style={{
-                          position: "absolute",
-                          bottom: 0,
-                          left: 0,
-                          right: 0,
-                          display: "flex",
-                          justifyContent: "center",
-                          gap: 2,
-                          padding: 2,
+                          width: "100%",
+                          maxWidth: aspectRatio === "4:5" ? 240 : 180,
+                          aspectRatio: aspectRatio === "4:5" ? "4/5" : "9/16",
+                          margin: "0 auto",
+                          background: "#000",
+                          borderRadius: 8,
+                          overflow: "hidden",
+                          position: "relative",
                         }}>
-                          {idx > 0 && (
-                            <button onClick={() => moveImage(idx, "up")} style={miniBtn}>◀</button>
+                          {selectedImages.length > 0 && (
+                            <>
+                              <img
+                                key={previewIndex}
+                                src={selectedImages[previewIndex]?.url}
+                                alt="Preview"
+                                style={{
+                                  width: "100%",
+                                  height: "100%",
+                                  objectFit: "contain",
+                                  background: "#fff",
+                                  animation: transition !== "none" ? "fadeIn 0.5s ease-in-out" : undefined,
+                                }}
+                              />
+                              {/* Image counter */}
+                              <div style={{
+                                position: "absolute",
+                                top: 8,
+                                right: 8,
+                                background: "rgba(0,0,0,0.6)",
+                                color: "#fff",
+                                fontSize: 11,
+                                fontWeight: 600,
+                                borderRadius: 12,
+                                padding: "2px 8px",
+                              }}>
+                                {previewIndex + 1}/{selectedImages.length}
+                              </div>
+                            </>
                           )}
-                          {idx < selectedImages.length - 1 && (
-                            <button onClick={() => moveImage(idx, "down")} style={miniBtn}>▶</button>
+                          {overlayText && (
+                            <div style={{
+                              position: "absolute",
+                              left: 0,
+                              right: 0,
+                              textAlign: "center",
+                              color: "#fff",
+                              textShadow: "0 1px 4px rgba(0,0,0,0.8)",
+                              fontSize: Math.max(10, fontSize * 0.3),
+                              fontWeight: 700,
+                              padding: "4px 8px",
+                              ...(textPosition === "top" ? { top: "5%" } : textPosition === "bottom" ? { bottom: "5%" } : { top: "50%", transform: "translateY(-50%)" }),
+                            }}>
+                              {overlayText}
+                            </div>
+                          )}
+                          {showProductName && selectedImages[previewIndex] && (
+                            <div style={{
+                              position: "absolute",
+                              left: 0,
+                              right: 0,
+                              textAlign: "center",
+                              color: "#fff",
+                              textShadow: "0 1px 3px rgba(0,0,0,0.7)",
+                              fontSize: Math.max(8, fontSize * 0.25),
+                              fontWeight: 500,
+                              padding: "4px 8px",
+                              ...(textPosition === "top" ? { top: "12%" } : textPosition === "bottom" ? { bottom: "12%" } : { top: "55%" }),
+                            }}>
+                              {selectedImages[previewIndex].label}
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Image dots navigation */}
+                        {selectedImages.length > 1 && (
+                          <div style={{ display: "flex", justifyContent: "center", gap: 4, marginTop: 12, flexWrap: "wrap" }}>
+                            {selectedImages.map((_, idx) => (
+                              <button
+                                key={idx}
+                                onClick={() => { setPreviewIndex(idx); setIsPreviewPlaying(false); }}
+                                style={{
+                                  width: idx === previewIndex ? 20 : 8,
+                                  height: 8,
+                                  borderRadius: 4,
+                                  border: "none",
+                                  background: idx === previewIndex ? "#667eea" : "#d0d0d0",
+                                  cursor: "pointer",
+                                  transition: "all 0.2s",
+                                  padding: 0,
+                                }}
+                              />
+                            ))}
+                          </div>
+                        )}
+
+                        {/* Summary */}
+                        <div style={{ marginTop: 16, fontSize: 13, color: "#666" }}>
+                          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
+                            <span>{t("slideshowImageCount") || "Images"}:</span>
+                            <strong>{selectedImages.length}</strong>
+                          </div>
+                          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
+                            <span>{t("slideshowEstDuration") || "Est. Duration"}:</span>
+                            <strong>{estimatedDuration.toFixed(1)}s</strong>
+                          </div>
+                          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
+                            <span>{t("slideshowResolution") || "Resolution"}:</span>
+                            <strong>{aspectRatio === "4:5" ? "1080×1350" : "1080×1920"}</strong>
+                          </div>
+                          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
+                            <span>{t("slideshowTransition") || "Transition"}:</span>
+                            <strong>{transitions.find((tr) => tr.value === transition)?.label}</strong>
+                          </div>
+                          {audioUrl && (
+                            <div style={{ display: "flex", justifyContent: "space-between" }}>
+                              <span>🎵 {t("slideshowBackgroundMusic") || "Music"}:</span>
+                              <strong style={{ maxWidth: 120, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                                {audioFileName}
+                              </strong>
+                            </div>
                           )}
                         </div>
                       </div>
-                    ))}
+                    </div>
+                  </div>
+
+                  {/* Navigation */}
+                  <div style={{ marginTop: 24, display: "flex", justifyContent: "space-between" }}>
+                    <button onClick={() => setCurrentStep(1)} style={{ ...buttonStyle, background: "#888" }}>
+                      ← {t("back")}
+                    </button>
+                    <button
+                      onClick={handleGenerate}
+                      disabled={isGenerating || selectedImages.length === 0}
+                      style={{
+                        ...buttonStyle,
+                        background: isGenerating ? "#aaa" : "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+                        cursor: isGenerating ? "not-allowed" : "pointer",
+                        padding: "12px 32px",
+                        fontSize: 15,
+                      }}
+                    >
+                      {isGenerating ? (
+                        <>{t("slideshowGenerating") || "Generating..."} ⏳</>
+                      ) : (
+                        <>🎬 {t("slideshowGenerate") || "Generate Video"}</>
+                      )}
+                    </button>
                   </div>
                 </div>
               )}
 
-              {/* Next Button */}
-              <div style={{ marginTop: 24, display: "flex", justifyContent: "flex-end" }}>
+              {/* ===== STEP 3: Result ===== */}
+              {currentStep === 3 && (
+                <div>
+                  {generationError && (
+                    <div style={{
+                      background: "#fff5f5",
+                      border: "1px solid #fed7d7",
+                      borderRadius: 12,
+                      padding: "20px",
+                      color: "#c53030",
+                      marginBottom: 24,
+                      textAlign: "center",
+                    }}>
+                      <strong>Error:</strong> {generationError}
+                      <br />
+                      <button
+                        onClick={() => { setCurrentStep(2); setGenerationError(null); }}
+                        style={{ ...buttonStyle, background: "#c53030", marginTop: 12 }}
+                      >
+                        {t("back")} → {t("slideshowStep2") || "Settings"}
+                      </button>
+                    </div>
+                  )}
+
+                  {generatedVideoUrl && (
+                    <div>
+                      <div style={{
+                        background: "#f0fff4",
+                        border: "1px solid #c6f6d5",
+                        borderRadius: 12,
+                        padding: "20px",
+                        marginBottom: 24,
+                        textAlign: "center",
+                      }}>
+                        <div style={{ fontSize: 48, marginBottom: 8 }}>✅</div>
+                        <h3 style={{ fontSize: 18, fontWeight: 600, color: "#22543d", marginBottom: 4 }}>
+                          {t("slideshowSuccess") || "Video Generated Successfully!"}
+                        </h3>
+                        <p style={{ fontSize: 13, color: "#276749" }}>
+                          {t("slideshowSuccessDesc") || "Your slideshow video is ready to download."}
+                        </p>
+                      </div>
+
+                      {/* Video Player */}
+                      <div style={{
+                        maxWidth: aspectRatio === "4:5" ? 400 : 300,
+                        margin: "0 auto 24px",
+                        borderRadius: 12,
+                        overflow: "hidden",
+                        boxShadow: "0 4px 20px rgba(0,0,0,0.1)",
+                      }}>
+                        <video
+                          src={generatedVideoUrl}
+                          controls
+                          autoPlay
+                          style={{ width: "100%", display: "block" }}
+                        />
+                      </div>
+
+                      {/* Primary Actions */}
+                      <div style={{ display: "flex", justifyContent: "center", gap: 12, flexWrap: "wrap", marginBottom: 24 }}>
+                        <a
+                          href={generatedVideoUrl}
+                          download="slideshow.mp4"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          style={{
+                            ...buttonStyle,
+                            background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+                            textDecoration: "none",
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: 8,
+                            padding: "12px 24px",
+                          }}
+                        >
+                          ⬇️ {t("slideshowDownload") || "Download Video"}
+                        </a>
+                        <button
+                          onClick={() => {
+                            navigator.clipboard.writeText(generatedVideoUrl);
+                            alert(t("slideshowUrlCopied") || "URL copied to clipboard!");
+                          }}
+                          style={{ ...buttonStyle, background: "#38a169" }}
+                        >
+                          📋 {t("slideshowCopyUrl") || "Copy URL"}
+                        </button>
+                        <button
+                          onClick={() => {
+                            setGeneratedVideoUrl(null);
+                            setCurrentStep(1);
+                            setSelectedImages([]);
+                            setDriveUploadResult(null);
+                            setCatalogUpdateResult(null);
+                            setAudioUrl(null);
+                            setAudioFileName(null);
+                          }}
+                          style={{ ...buttonStyle, background: "#888" }}
+                        >
+                          🔄 {t("slideshowCreateNew") || "Create New"}
+                        </button>
+                      </div>
+
+                      {/* Google Drive Upload Section */}
+                      <div style={{
+                        padding: "20px",
+                        background: "#f0f9ff",
+                        borderRadius: 12,
+                        border: "1px solid #bae6fd",
+                        marginBottom: 16,
+                      }}>
+                        <h4 style={{ margin: "0 0 12px", fontSize: 15, fontWeight: 600, color: "#0369a1" }}>
+                          📁 {t("slideshowUploadToDrive") || "Upload to Google Drive"}
+                        </h4>
+
+                        {driveUploadResult ? (
+                          <div style={{
+                            background: "#ecfdf5",
+                            border: "1px solid #a7f3d0",
+                            borderRadius: 8,
+                            padding: "12px 16px",
+                          }}>
+                            <p style={{ margin: "0 0 8px", fontSize: 13, color: "#065f46", fontWeight: 600 }}>
+                              ✅ {t("slideshowDriveUploadSuccess") || "Uploaded to Google Drive!"}
+                            </p>
+                            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                              <a href={driveUploadResult.downloadLink} target="_blank" rel="noopener noreferrer"
+                                style={{ fontSize: 12, color: "#0369a1", textDecoration: "underline" }}>
+                                {t("slideshowDriveDownloadLink") || "Download Link"}
+                              </a>
+                              <a href={driveUploadResult.embedLink} target="_blank" rel="noopener noreferrer"
+                                style={{ fontSize: 12, color: "#0369a1", textDecoration: "underline" }}>
+                                {t("slideshowDrivePreviewLink") || "Preview Link"}
+                              </a>
+                            </div>
+                          </div>
+                        ) : (
+                          <div>
+                            {!googleAccessToken ? (
+                              <p style={{ margin: 0, fontSize: 13, color: "#666" }}>
+                                {t("slideshowLoginForDrive") || "Please login with Google to upload to Drive."}
+                              </p>
+                            ) : (
+                              <button
+                                onClick={handleUploadToDrive}
+                                disabled={isUploadingToDrive}
+                                style={{
+                                  ...buttonStyle,
+                                  background: isUploadingToDrive ? "#aaa" : "#0284c7",
+                                  cursor: isUploadingToDrive ? "not-allowed" : "pointer",
+                                  fontSize: 14,
+                                }}
+                              >
+                                {isUploadingToDrive
+                                  ? (t("slideshowUploadingToDrive") || "Uploading to Drive...")
+                                  : (t("slideshowUploadToDriveBtn") || "Upload to Google Drive")}
+                              </button>
+                            )}
+                            {driveUploadError && (
+                              <p style={{ margin: "8px 0 0", fontSize: 13, color: "#c53030" }}>
+                                {driveUploadError}
+                              </p>
+                            )}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Catalog Update Section */}
+                      {selectedCatalogId && fbAccessToken && selectedProductRetailerIds.length > 0 && (
+                        <div style={{
+                          padding: "20px",
+                          background: "#fffbeb",
+                          borderRadius: 12,
+                          border: "1px solid #fde68a",
+                        }}>
+                          <h4 style={{ margin: "0 0 12px", fontSize: 15, fontWeight: 600, color: "#92400e" }}>
+                            📦 {t("slideshowUpdateCatalog") || "Update Catalog Product Video"}
+                          </h4>
+
+                          {catalogUpdateResult ? (
+                            <div style={{
+                              background: "#ecfdf5",
+                              border: "1px solid #a7f3d0",
+                              borderRadius: 8,
+                              padding: "12px 16px",
+                            }}>
+                              <p style={{ margin: 0, fontSize: 13, color: "#065f46", fontWeight: 600 }}>
+                                ✅ {catalogUpdateResult}
+                              </p>
+                            </div>
+                          ) : (
+                            <div>
+                              <p style={{ margin: "0 0 10px", fontSize: 13, color: "#78716c" }}>
+                                {t("slideshowCatalogUpdateDesc") || "Select a product to update its video in the Meta Catalog."}
+                              </p>
+                              <div style={{ display: "flex", gap: 10, alignItems: "flex-end", flexWrap: "wrap" }}>
+                                <div style={{ flex: "1 1 200px" }}>
+                                  <label style={{ ...labelStyle, color: "#92400e" }}>
+                                    {t("slideshowSelectProduct") || "Select Product (Retailer ID)"}
+                                  </label>
+                                  <select
+                                    value={selectedProductForCatalog}
+                                    onChange={(e) => setSelectedProductForCatalog(e.target.value)}
+                                    style={selectStyle}
+                                  >
+                                    <option value="">{t("slideshowSelectProductPlaceholder") || "-- Select Product --"}</option>
+                                    {selectedProductRetailerIds.map((rid) => (
+                                      <option key={rid} value={rid}>{rid}</option>
+                                    ))}
+                                  </select>
+                                </div>
+                                <button
+                                  onClick={handleUpdateCatalog}
+                                  disabled={isUpdatingCatalog || !selectedProductForCatalog}
+                                  style={{
+                                    ...buttonStyle,
+                                    background: isUpdatingCatalog || !selectedProductForCatalog ? "#aaa" : "#d97706",
+                                    cursor: isUpdatingCatalog || !selectedProductForCatalog ? "not-allowed" : "pointer",
+                                    fontSize: 14,
+                                  }}
+                                >
+                                  {isUpdatingCatalog
+                                    ? (t("slideshowUpdatingCatalog") || "Updating...")
+                                    : (t("slideshowUpdateCatalogBtn") || "Update Catalog")}
+                                </button>
+                              </div>
+                              {catalogUpdateError && (
+                                <p style={{ margin: "8px 0 0", fontSize: 13, color: "#c53030" }}>
+                                  {catalogUpdateError}
+                                </p>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {isGenerating && (
+                    <div style={{ padding: "40px 0", textAlign: "center" }}>
+                      <div style={{ fontSize: 48, marginBottom: 16 }}>⏳</div>
+                      <h3 style={{ fontSize: 18, fontWeight: 600, color: "#333", marginBottom: 8 }}>
+                        {t("slideshowGenerating") || "Generating Video..."}
+                      </h3>
+                      <p style={{ fontSize: 14, color: "#666" }}>
+                        {t("slideshowPleaseWait") || "This may take a minute depending on the number of images."}
+                      </p>
+                      <div style={{
+                        width: 200,
+                        height: 4,
+                        background: "#e0e0e0",
+                        borderRadius: 2,
+                        margin: "16px auto",
+                        overflow: "hidden",
+                      }}>
+                        <div style={{
+                          width: "60%",
+                          height: "100%",
+                          background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+                          borderRadius: 2,
+                          animation: "pulse 1.5s ease-in-out infinite",
+                        }} />
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </>
+        )}
+
+        {/* ===== BATCH MODE ===== */}
+        {batchMode && (
+          <div style={{ padding: "24px 32px 32px" }}>
+            {/* Catalog Selection (same as single mode) */}
+            <div style={{ display: "flex", gap: 16, marginBottom: 20, flexWrap: "wrap" }}>
+              {userCompanies.length > 0 && (
+                <div style={{ flex: "1 1 200px" }}>
+                  <label style={{ display: "block", fontSize: 13, fontWeight: 600, color: "#555", marginBottom: 6 }}>
+                    {t("selectCompany")}
+                  </label>
+                  <select
+                    value={selectedCompanyId || ""}
+                    onChange={(e) => {
+                      const id = parseInt(e.target.value);
+                      setSelectedCompanyId(id);
+                      saveSelectedCompany(id);
+                      setProducts([]);
+                      setBatchItems([]);
+                    }}
+                    style={selectStyle}
+                  >
+                    {userCompanies.map((c) => (
+                      <option key={c.id} value={c.id}>{c.name}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+              <div style={{ flex: "1 1 200px" }}>
+                <label style={{ display: "block", fontSize: 13, fontWeight: 600, color: "#555", marginBottom: 6 }}>
+                  {t("selectCatalog")}
+                </label>
+                <select
+                  value={selectedCatalogId}
+                  onChange={(e) => {
+                    setSelectedCatalogId(e.target.value);
+                    setProducts([]);
+                    setBatchItems([]);
+                  }}
+                  style={selectStyle}
+                >
+                  <option value="">{t("catalogIdPlaceholder") || "Select Catalog"}</option>
+                  {configuredCatalogs.map((c) => (
+                    <option key={c.id} value={c.id}>{c.name || c.id}</option>
+                  ))}
+                </select>
+              </div>
+              <div style={{ flex: "0 0 auto", display: "flex", alignItems: "flex-end" }}>
                 <button
-                  onClick={() => setCurrentStep(2)}
-                  disabled={selectedImages.length === 0}
+                  onClick={handleFetchProducts}
+                  disabled={!selectedCatalogId || !fbAccessToken || isLoadingProducts}
                   style={{
                     ...buttonStyle,
-                    background: selectedImages.length === 0 ? "#ccc" : "#667eea",
-                    cursor: selectedImages.length === 0 ? "not-allowed" : "pointer",
-                    padding: "12px 32px",
-                    fontSize: 15,
+                    background: !selectedCatalogId || !fbAccessToken ? "#ccc" : "#667eea",
+                    cursor: !selectedCatalogId || !fbAccessToken ? "not-allowed" : "pointer",
                   }}
                 >
-                  {t("next")} →
+                  {isLoadingProducts ? (t("loadingProducts") || "Loading...") : (t("fetchProducts"))}
                 </button>
               </div>
             </div>
-          )}
 
-          {/* ===== STEP 2: Configure Settings ===== */}
-          {currentStep === 2 && (
-            <div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 24 }}>
-                {/* Left: Settings */}
-                <div>
-                  <h3 style={{ fontSize: 16, fontWeight: 600, marginBottom: 16, color: "#333" }}>
-                    {t("slideshowVideoSettings") || "Video Settings"}
-                  </h3>
+            {/* No catalogs warning / loading */}
+            {isLoadingSettings && configuredCatalogs.length === 0 && (
+              <div style={{
+                background: "#eff6ff",
+                border: "1px solid #bfdbfe",
+                borderRadius: 8,
+                padding: "12px 16px",
+                color: "#1e40af",
+                fontSize: 14,
+                marginBottom: 16,
+              }}>
+                ⏳ {t("loadingSettings") || "Loading catalog settings..."}
+              </div>
+            )}
+            {!isLoadingSettings && configuredCatalogs.length === 0 && (
+              <div style={{
+                background: "#fffbeb",
+                border: "1px solid #fde68a",
+                borderRadius: 8,
+                padding: "12px 16px",
+                color: "#92400e",
+                fontSize: 14,
+                marginBottom: 16,
+              }}>
+                ⚠️ {t("slideshowNoCatalogs") || "No catalogs configured. Please set up catalogs in the main tool settings first."}
+              </div>
+            )}
 
-                  {/* Aspect Ratio */}
-                  <div style={{ marginBottom: 16 }}>
+            {/* Search */}
+            {products.length > 0 && (
+              <div style={{ marginBottom: 16 }}>
+                <input
+                  type="text"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  placeholder={t("searchPlaceholder") || "Search products..."}
+                  style={inputStyle}
+                />
+              </div>
+            )}
+
+            {/* Product list for batch selection */}
+            {filteredProducts.length > 0 && (
+              <div style={{ marginBottom: 20 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+                  <span style={{ fontSize: 13, color: "#888" }}>
+                    {t("slideshowProductCount") || "Products"}: {filteredProducts.length}
+                    {batchItems.length > 0 && (
+                      <span style={{ marginLeft: 16, color: "#667eea", fontWeight: 600 }}>
+                        {t("slideshowBatchSelected") || "In batch"}: {batchItems.length}
+                      </span>
+                    )}
+                  </span>
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <button
+                      onClick={addAllProductsToBatch}
+                      disabled={isBatchRunning}
+                      style={{ ...miniActionBtn, color: "#667eea", borderColor: "#c7d2fe" }}
+                    >
+                      {t("slideshowAddAll") || "Add All"}
+                    </button>
+                    <button
+                      onClick={() => setBatchItems([])}
+                      disabled={isBatchRunning}
+                      style={{ ...miniActionBtn, color: "#ef4444", borderColor: "#fecaca" }}
+                    >
+                      {t("slideshowClearAll") || "Clear All"}
+                    </button>
+                  </div>
+                </div>
+
+                <div style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))",
+                  gap: 10,
+                  maxHeight: 350,
+                  overflowY: "auto",
+                  padding: 4,
+                }}>
+                  {filteredProducts.map((product) => {
+                    const inBatch = batchItems.some(b => b.product.id === product.id);
+                    const batchItem = batchItems.find(b => b.product.id === product.id);
+                    return (
+                      <div
+                        key={product.id}
+                        onClick={() => !isBatchRunning && (inBatch ? removeProductFromBatch(product.id) : addProductToBatch(product))}
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 10,
+                          padding: "8px 12px",
+                          borderRadius: 8,
+                          border: `2px solid ${inBatch ? "#667eea" : "#e8e8e8"}`,
+                          background: inBatch ? "#f0f0ff" : "#fff",
+                          cursor: isBatchRunning ? "default" : "pointer",
+                          transition: "all 0.15s",
+                        }}
+                      >
+                        <img
+                          src={product.imageUrl}
+                          alt={product.name}
+                          style={{ width: 40, height: 40, borderRadius: 6, objectFit: "cover", flexShrink: 0 }}
+                        />
+                        <div style={{ flex: 1, overflow: "hidden" }}>
+                          <div style={{ fontSize: 12, fontWeight: 600, color: "#333", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                            {product.name}
+                          </div>
+                          <div style={{ fontSize: 11, color: "#999" }}>
+                            {product.retailerId} · {1 + product.additionalImages.length} {t("slideshowImages") || "images"}
+                          </div>
+                        </div>
+                        {batchItem && (
+                          <span style={{
+                            fontSize: 10,
+                            fontWeight: 700,
+                            padding: "2px 6px",
+                            borderRadius: 4,
+                            background: batchItem.status === "done" ? "#dcfce7" : batchItem.status === "error" ? "#fef2f2" : batchItem.status === "generating" || batchItem.status === "uploading" ? "#dbeafe" : "#f3f4f6",
+                            color: batchItem.status === "done" ? "#166534" : batchItem.status === "error" ? "#991b1b" : batchItem.status === "generating" || batchItem.status === "uploading" ? "#1e40af" : "#6b7280",
+                          }}>
+                            {batchItem.status === "done" ? "✅" : batchItem.status === "error" ? "❌" : batchItem.status === "generating" ? "⏳" : batchItem.status === "uploading" ? "📤" : "⏸"}
+                          </span>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Batch Settings */}
+            {batchItems.length > 0 && (
+              <div style={{
+                padding: "20px",
+                background: "#f8f9ff",
+                borderRadius: 12,
+                border: "1px solid #e0e7ff",
+                marginBottom: 20,
+              }}>
+                <h4 style={{ margin: "0 0 16px", fontSize: 15, fontWeight: 600, color: "#333" }}>
+                  ⚙️ {t("slideshowBatchSettings") || "Batch Settings"}
+                </h4>
+
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 16 }}>
+                  <div>
                     <label style={labelStyle}>{t("slideshowAspectRatio") || "Aspect Ratio"}</label>
                     <div style={{ display: "flex", gap: 8 }}>
                       {(["4:5", "9:16"] as AspectRatio[]).map((ratio) => (
                         <button
                           key={ratio}
                           onClick={() => setAspectRatio(ratio)}
+                          disabled={isBatchRunning}
                           style={{
                             flex: 1,
-                            padding: "10px 16px",
+                            padding: "8px",
                             borderRadius: 8,
                             border: `2px solid ${aspectRatio === ratio ? "#667eea" : "#e0e0e0"}`,
                             background: aspectRatio === ratio ? "#f0f0ff" : "#fff",
                             color: aspectRatio === ratio ? "#667eea" : "#666",
                             fontWeight: 600,
-                            cursor: "pointer",
-                            fontSize: 14,
+                            cursor: isBatchRunning ? "not-allowed" : "pointer",
+                            fontSize: 13,
                           }}
                         >
-                          {ratio === "4:5" ? "4:5 (1080×1350)" : "9:16 (1080×1920)"}
+                          {ratio}
                         </button>
                       ))}
                     </div>
                   </div>
-
-                  {/* Duration Per Image */}
-                  <div style={{ marginBottom: 16 }}>
+                  <div>
                     <label style={labelStyle}>
                       {t("slideshowDuration") || "Duration Per Image"}: {durationPerImage}s
                     </label>
@@ -1001,603 +2245,209 @@ export const SlideshowGenerator = () => {
                       value={durationPerImage}
                       onChange={(e) => setDurationPerImage(parseFloat(e.target.value))}
                       style={{ width: "100%" }}
+                      disabled={isBatchRunning}
                     />
-                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: "#999" }}>
-                      <span>1s</span><span>15s</span>
-                    </div>
                   </div>
+                </div>
 
-                  {/* Transition */}
-                  <div style={{ marginBottom: 16 }}>
-                    <label style={labelStyle}>{t("slideshowTransition") || "Transition Effect"}</label>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 16 }}>
+                  <div>
+                    <label style={labelStyle}>{t("slideshowTransition") || "Transition"}</label>
                     <select
                       value={transition}
                       onChange={(e) => setTransition(e.target.value as TransitionType)}
                       style={selectStyle}
+                      disabled={isBatchRunning}
                     >
                       {transitions.map((tr) => (
                         <option key={tr.value} value={tr.value}>{tr.label}</option>
                       ))}
                     </select>
                   </div>
-
-                  {/* Transition Duration */}
-                  {transition !== "none" && (
-                    <div style={{ marginBottom: 16 }}>
-                      <label style={labelStyle}>
-                        {t("slideshowTransDuration") || "Transition Duration"}: {transitionDuration}s
-                      </label>
-                      <input
-                        type="range"
-                        min={0.2}
-                        max={3}
-                        step={0.1}
-                        value={transitionDuration}
-                        onChange={(e) => setTransitionDuration(parseFloat(e.target.value))}
-                        style={{ width: "100%" }}
-                      />
-                    </div>
-                  )}
-
-                  {/* Text Overlay */}
-                  <div style={{ marginBottom: 16 }}>
-                    <label style={labelStyle}>{t("slideshowOverlayText") || "Text Overlay"}</label>
-                    <input
-                      type="text"
-                      value={overlayText}
-                      onChange={(e) => setOverlayText(e.target.value)}
-                      placeholder={t("slideshowOverlayPlaceholder") || "Optional: Add text overlay on all frames"}
-                      style={inputStyle}
-                    />
-                  </div>
-
-                  {/* Show Product Name */}
-                  <div style={{ marginBottom: 16 }}>
-                    <label style={{ ...labelStyle, display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
+                  <div>
+                    <label style={{ ...labelStyle, display: "flex", alignItems: "center", gap: 8 }}>
                       <input
                         type="checkbox"
                         checked={showProductName}
                         onChange={(e) => setShowProductName(e.target.checked)}
+                        disabled={isBatchRunning}
                         style={{ width: 16, height: 16 }}
                       />
-                      {t("slideshowShowProductName") || "Show Product Name on Each Image"}
+                      {t("slideshowShowProductName") || "Show Product Name"}
                     </label>
                   </div>
-
-                  {/* Text Position */}
-                  {(overlayText || showProductName) && (
-                    <div style={{ marginBottom: 16 }}>
-                      <label style={labelStyle}>{t("slideshowTextPosition") || "Text Position"}</label>
-                      <div style={{ display: "flex", gap: 8 }}>
-                        {(["top", "center", "bottom"] as TextPosition[]).map((pos) => (
-                          <button
-                            key={pos}
-                            onClick={() => setTextPosition(pos)}
-                            style={{
-                              flex: 1,
-                              padding: "8px 12px",
-                              borderRadius: 8,
-                              border: `2px solid ${textPosition === pos ? "#667eea" : "#e0e0e0"}`,
-                              background: textPosition === pos ? "#f0f0ff" : "#fff",
-                              color: textPosition === pos ? "#667eea" : "#666",
-                              fontWeight: 500,
-                              cursor: "pointer",
-                              fontSize: 13,
-                              textTransform: "capitalize",
-                            }}
-                          >
-                            {pos === "top" ? (t("slideshowTop") || "Top") : pos === "center" ? (t("slideshowCenter") || "Center") : (t("slideshowBottom") || "Bottom")}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Font Size */}
-                  {(overlayText || showProductName) && (
-                    <div style={{ marginBottom: 16 }}>
-                      <label style={labelStyle}>
-                        {t("slideshowFontSize") || "Font Size"}: {fontSize}px
-                      </label>
-                      <input
-                        type="range"
-                        min={16}
-                        max={80}
-                        step={2}
-                        value={fontSize}
-                        onChange={(e) => setFontSize(parseInt(e.target.value))}
-                        style={{ width: "100%" }}
-                      />
-                    </div>
-                  )}
-
-                  {/* ===== Background Music Section ===== */}
-                  <div style={{
-                    marginTop: 8,
-                    padding: "16px",
-                    background: "#fefce8",
-                    borderRadius: 10,
-                    border: "1px solid #fde68a",
-                  }}>
-                    <h4 style={{ margin: "0 0 10px", fontSize: 14, fontWeight: 600, color: "#92400e" }}>
-                      🎵 {t("slideshowBackgroundMusic") || "Background Music"}
-                    </h4>
-
-                    {audioUrl ? (
-                      <div>
-                        <div style={{
-                          display: "flex",
-                          alignItems: "center",
-                          gap: 10,
-                          marginBottom: 12,
-                          background: "#fff",
-                          padding: "8px 12px",
-                          borderRadius: 8,
-                          border: "1px solid #e5e7eb",
-                        }}>
-                          <span style={{ fontSize: 20 }}>🎶</span>
-                          <span style={{ flex: 1, fontSize: 13, fontWeight: 500, color: "#333", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                            {audioFileName}
-                          </span>
-                          <button
-                            onClick={removeAudio}
-                            style={{
-                              background: "#ef4444",
-                              color: "#fff",
-                              border: "none",
-                              borderRadius: 6,
-                              padding: "4px 10px",
-                              fontSize: 12,
-                              cursor: "pointer",
-                              fontWeight: 600,
-                            }}
-                          >
-                            ✕ {t("slideshowRemove") || "Remove"}
-                          </button>
-                        </div>
-
-                        {/* Volume Control */}
-                        <div>
-                          <label style={{ ...labelStyle, color: "#92400e" }}>
-                            {t("slideshowVolume") || "Volume"}: {Math.round(audioVolume * 100)}%
-                          </label>
-                          <input
-                            type="range"
-                            min={0}
-                            max={1}
-                            step={0.05}
-                            value={audioVolume}
-                            onChange={(e) => setAudioVolume(parseFloat(e.target.value))}
-                            style={{ width: "100%" }}
-                          />
-                          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: "#999" }}>
-                            <span>🔇 0%</span><span>🔊 100%</span>
-                          </div>
-                        </div>
-                      </div>
-                    ) : (
-                      <div>
-                        <input
-                          ref={audioInputRef}
-                          type="file"
-                          accept="audio/*"
-                          onChange={handleAudioUpload}
-                          style={{ display: "none" }}
-                        />
-                        <button
-                          onClick={() => audioInputRef.current?.click()}
-                          disabled={isUploadingAudio}
-                          style={{
-                            ...buttonStyle,
-                            background: isUploadingAudio ? "#aaa" : "#d97706",
-                            cursor: isUploadingAudio ? "not-allowed" : "pointer",
-                            fontSize: 13,
-                            padding: "8px 20px",
-                          }}
-                        >
-                          {isUploadingAudio
-                            ? (t("slideshowUploading") || "Uploading...")
-                            : (t("slideshowChooseAudio") || "Choose Audio File")}
-                        </button>
-                        <p style={{ margin: "8px 0 0", fontSize: 12, color: "#999" }}>
-                          {t("slideshowAudioFormats") || "Supports MP3, WAV, OGG (max 16MB)"}
-                        </p>
-                      </div>
-                    )}
-                  </div>
                 </div>
 
-                {/* Right: Preview */}
-                <div>
-                  <h3 style={{ fontSize: 16, fontWeight: 600, marginBottom: 16, color: "#333" }}>
-                    {t("slideshowPreview") || "Preview"}
-                  </h3>
-                  <div style={{
-                    background: "#f8f8f8",
-                    borderRadius: 12,
-                    padding: 16,
-                    border: "1px solid #e8e8e8",
-                  }}>
-                    {/* Aspect ratio preview */}
-                    <div style={{
-                      width: "100%",
-                      maxWidth: aspectRatio === "4:5" ? 240 : 180,
-                      aspectRatio: aspectRatio === "4:5" ? "4/5" : "9/16",
-                      margin: "0 auto",
-                      background: "#000",
-                      borderRadius: 8,
-                      overflow: "hidden",
-                      position: "relative",
-                    }}>
-                      {selectedImages.length > 0 && (
-                        <img
-                          src={selectedImages[0].url}
-                          alt="Preview"
-                          style={{ width: "100%", height: "100%", objectFit: "contain", background: "#fff" }}
-                        />
-                      )}
-                      {overlayText && (
-                        <div style={{
-                          position: "absolute",
-                          left: 0,
-                          right: 0,
-                          textAlign: "center",
-                          color: "#fff",
-                          textShadow: "0 1px 4px rgba(0,0,0,0.8)",
-                          fontSize: Math.max(10, fontSize * 0.3),
-                          fontWeight: 700,
-                          padding: "4px 8px",
-                          ...(textPosition === "top" ? { top: "5%" } : textPosition === "bottom" ? { bottom: "5%" } : { top: "50%", transform: "translateY(-50%)" }),
-                        }}>
-                          {overlayText}
-                        </div>
-                      )}
-                      {showProductName && selectedImages[0] && (
-                        <div style={{
-                          position: "absolute",
-                          left: 0,
-                          right: 0,
-                          textAlign: "center",
-                          color: "#fff",
-                          textShadow: "0 1px 3px rgba(0,0,0,0.7)",
-                          fontSize: Math.max(8, fontSize * 0.25),
-                          fontWeight: 500,
-                          padding: "4px 8px",
-                          ...(textPosition === "top" ? { top: "12%" } : textPosition === "bottom" ? { bottom: "12%" } : { top: "55%" }),
-                        }}>
-                          {selectedImages[0].label}
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Summary */}
-                    <div style={{ marginTop: 16, fontSize: 13, color: "#666" }}>
-                      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
-                        <span>{t("slideshowImageCount") || "Images"}:</span>
-                        <strong>{selectedImages.length}</strong>
-                      </div>
-                      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
-                        <span>{t("slideshowEstDuration") || "Est. Duration"}:</span>
-                        <strong>{estimatedDuration.toFixed(1)}s</strong>
-                      </div>
-                      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
-                        <span>{t("slideshowResolution") || "Resolution"}:</span>
-                        <strong>{aspectRatio === "4:5" ? "1080×1350" : "1080×1920"}</strong>
-                      </div>
-                      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
-                        <span>{t("slideshowTransition") || "Transition"}:</span>
-                        <strong>{transitions.find((tr) => tr.value === transition)?.label}</strong>
-                      </div>
-                      {audioUrl && (
-                        <div style={{ display: "flex", justifyContent: "space-between" }}>
-                          <span>🎵 {t("slideshowBackgroundMusic") || "Music"}:</span>
-                          <strong style={{ maxWidth: 120, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                            {audioFileName}
-                          </strong>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Navigation */}
-              <div style={{ marginTop: 24, display: "flex", justifyContent: "space-between" }}>
-                <button onClick={() => setCurrentStep(1)} style={{ ...buttonStyle, background: "#888" }}>
-                  ← {t("back")}
-                </button>
-                <button
-                  onClick={handleGenerate}
-                  disabled={isGenerating || selectedImages.length === 0}
-                  style={{
-                    ...buttonStyle,
-                    background: isGenerating ? "#aaa" : "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
-                    cursor: isGenerating ? "not-allowed" : "pointer",
-                    padding: "12px 32px",
-                    fontSize: 15,
-                  }}
-                >
-                  {isGenerating ? (
-                    <>{t("slideshowGenerating") || "Generating..."} ⏳</>
-                  ) : (
-                    <>🎬 {t("slideshowGenerate") || "Generate Video"}</>
-                  )}
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* ===== STEP 3: Result ===== */}
-          {currentStep === 3 && (
-            <div>
-              {generationError && (
-                <div style={{
-                  background: "#fff5f5",
-                  border: "1px solid #fed7d7",
-                  borderRadius: 12,
-                  padding: "20px",
-                  color: "#c53030",
-                  marginBottom: 24,
-                  textAlign: "center",
-                }}>
-                  <strong>Error:</strong> {generationError}
-                  <br />
-                  <button
-                    onClick={() => { setCurrentStep(2); setGenerationError(null); }}
-                    style={{ ...buttonStyle, background: "#c53030", marginTop: 12 }}
-                  >
-                    {t("back")} → {t("slideshowStep2") || "Settings"}
-                  </button>
-                </div>
-              )}
-
-              {generatedVideoUrl && (
-                <div>
-                  <div style={{
-                    background: "#f0fff4",
-                    border: "1px solid #c6f6d5",
-                    borderRadius: 12,
-                    padding: "20px",
-                    marginBottom: 24,
-                    textAlign: "center",
-                  }}>
-                    <div style={{ fontSize: 48, marginBottom: 8 }}>✅</div>
-                    <h3 style={{ fontSize: 18, fontWeight: 600, color: "#22543d", marginBottom: 4 }}>
-                      {t("slideshowSuccess") || "Video Generated Successfully!"}
-                    </h3>
-                    <p style={{ fontSize: 13, color: "#276749" }}>
-                      {t("slideshowSuccessDesc") || "Your slideshow video is ready to download."}
-                    </p>
-                  </div>
-
-                  {/* Video Player */}
-                  <div style={{
-                    maxWidth: aspectRatio === "4:5" ? 400 : 300,
-                    margin: "0 auto 24px",
-                    borderRadius: 12,
-                    overflow: "hidden",
-                    boxShadow: "0 4px 20px rgba(0,0,0,0.1)",
-                  }}>
-                    <video
-                      src={generatedVideoUrl}
-                      controls
-                      autoPlay
-                      style={{ width: "100%", display: "block" }}
+                {/* Batch options */}
+                <div style={{ display: "flex", gap: 20, flexWrap: "wrap" }}>
+                  <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, fontWeight: 500, color: "#555", cursor: "pointer" }}>
+                    <input
+                      type="checkbox"
+                      checked={batchUploadToDrive}
+                      onChange={(e) => setBatchUploadToDrive(e.target.checked)}
+                      disabled={isBatchRunning || !googleAccessToken}
+                      style={{ width: 16, height: 16 }}
                     />
-                  </div>
+                    📁 {t("slideshowBatchUploadDrive") || "Upload to Google Drive"}
+                    {!googleAccessToken && <span style={{ fontSize: 11, color: "#999" }}>({t("slideshowLoginRequired") || "login required"})</span>}
+                  </label>
+                  <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, fontWeight: 500, color: "#555", cursor: "pointer" }}>
+                    <input
+                      type="checkbox"
+                      checked={batchUpdateCatalog}
+                      onChange={(e) => setBatchUpdateCatalog(e.target.checked)}
+                      disabled={isBatchRunning}
+                      style={{ width: 16, height: 16 }}
+                    />
+                    📦 {t("slideshowBatchUpdateCatalog") || "Update Catalog Videos"}
+                  </label>
+                </div>
+              </div>
+            )}
 
-                  {/* Primary Actions */}
-                  <div style={{ display: "flex", justifyContent: "center", gap: 12, flexWrap: "wrap", marginBottom: 24 }}>
-                    <a
-                      href={generatedVideoUrl}
-                      download="slideshow.mp4"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      style={{
-                        ...buttonStyle,
-                        background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
-                        textDecoration: "none",
-                        display: "inline-flex",
-                        alignItems: "center",
-                        gap: 8,
-                        padding: "12px 24px",
-                      }}
-                    >
-                      ⬇️ {t("slideshowDownload") || "Download Video"}
-                    </a>
-                    <button
-                      onClick={() => {
-                        navigator.clipboard.writeText(generatedVideoUrl);
-                        alert(t("slideshowUrlCopied") || "URL copied to clipboard!");
-                      }}
-                      style={{ ...buttonStyle, background: "#38a169" }}
-                    >
-                      📋 {t("slideshowCopyUrl") || "Copy URL"}
-                    </button>
-                    <button
-                      onClick={() => {
-                        setGeneratedVideoUrl(null);
-                        setCurrentStep(1);
-                        setSelectedImages([]);
-                        setDriveUploadResult(null);
-                        setCatalogUpdateResult(null);
-                        setAudioUrl(null);
-                        setAudioFileName(null);
-                      }}
-                      style={{ ...buttonStyle, background: "#888" }}
-                    >
-                      🔄 {t("slideshowCreateNew") || "Create New"}
-                    </button>
-                  </div>
-
-                  {/* ===== Google Drive Upload Section ===== */}
-                  <div style={{
-                    padding: "20px",
-                    background: "#f0f9ff",
-                    borderRadius: 12,
-                    border: "1px solid #bae6fd",
-                    marginBottom: 16,
-                  }}>
-                    <h4 style={{ margin: "0 0 12px", fontSize: 15, fontWeight: 600, color: "#0369a1" }}>
-                      📁 {t("slideshowUploadToDrive") || "Upload to Google Drive"}
-                    </h4>
-
-                    {driveUploadResult ? (
-                      <div style={{
-                        background: "#ecfdf5",
-                        border: "1px solid #a7f3d0",
-                        borderRadius: 8,
-                        padding: "12px 16px",
-                      }}>
-                        <p style={{ margin: "0 0 8px", fontSize: 13, color: "#065f46", fontWeight: 600 }}>
-                          ✅ {t("slideshowDriveUploadSuccess") || "Uploaded to Google Drive!"}
-                        </p>
-                        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                          <a href={driveUploadResult.downloadLink} target="_blank" rel="noopener noreferrer"
-                            style={{ fontSize: 12, color: "#0369a1", textDecoration: "underline" }}>
-                            {t("slideshowDriveDownloadLink") || "Download Link"}
-                          </a>
-                          <a href={driveUploadResult.embedLink} target="_blank" rel="noopener noreferrer"
-                            style={{ fontSize: 12, color: "#0369a1", textDecoration: "underline" }}>
-                            {t("slideshowDrivePreviewLink") || "Preview Link"}
-                          </a>
-                        </div>
-                      </div>
-                    ) : (
-                      <div>
-                        {!googleAccessToken ? (
-                          <p style={{ margin: 0, fontSize: 13, color: "#666" }}>
-                            {t("slideshowLoginForDrive") || "Please login with Google to upload to Drive."}
-                          </p>
-                        ) : (
-                          <button
-                            onClick={handleUploadToDrive}
-                            disabled={isUploadingToDrive}
-                            style={{
-                              ...buttonStyle,
-                              background: isUploadingToDrive ? "#aaa" : "#0284c7",
-                              cursor: isUploadingToDrive ? "not-allowed" : "pointer",
-                              fontSize: 14,
-                            }}
-                          >
-                            {isUploadingToDrive
-                              ? (t("slideshowUploadingToDrive") || "Uploading to Drive...")
-                              : (t("slideshowUploadToDriveBtn") || "Upload to Google Drive")}
-                          </button>
-                        )}
-                        {driveUploadError && (
-                          <p style={{ margin: "8px 0 0", fontSize: 13, color: "#c53030" }}>
-                            {driveUploadError}
-                          </p>
-                        )}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* ===== Catalog Update Section ===== */}
-                  {selectedCatalogId && fbAccessToken && selectedProductRetailerIds.length > 0 && (
-                    <div style={{
-                      padding: "20px",
-                      background: "#fffbeb",
-                      borderRadius: 12,
-                      border: "1px solid #fde68a",
-                    }}>
-                      <h4 style={{ margin: "0 0 12px", fontSize: 15, fontWeight: 600, color: "#92400e" }}>
-                        📦 {t("slideshowUpdateCatalog") || "Update Catalog Product Video"}
-                      </h4>
-
-                      {catalogUpdateResult ? (
-                        <div style={{
-                          background: "#ecfdf5",
-                          border: "1px solid #a7f3d0",
-                          borderRadius: 8,
-                          padding: "12px 16px",
-                        }}>
-                          <p style={{ margin: 0, fontSize: 13, color: "#065f46", fontWeight: 600 }}>
-                            ✅ {catalogUpdateResult}
-                          </p>
-                        </div>
-                      ) : (
-                        <div>
-                          <p style={{ margin: "0 0 10px", fontSize: 13, color: "#78716c" }}>
-                            {t("slideshowCatalogUpdateDesc") || "Select a product to update its video in the Meta Catalog."}
-                          </p>
-                          <div style={{ display: "flex", gap: 10, alignItems: "flex-end", flexWrap: "wrap" }}>
-                            <div style={{ flex: "1 1 200px" }}>
-                              <label style={{ ...labelStyle, color: "#92400e" }}>
-                                {t("slideshowSelectProduct") || "Select Product (Retailer ID)"}
-                              </label>
-                              <select
-                                value={selectedProductForCatalog}
-                                onChange={(e) => setSelectedProductForCatalog(e.target.value)}
-                                style={selectStyle}
-                              >
-                                <option value="">{t("slideshowSelectProductPlaceholder") || "-- Select Product --"}</option>
-                                {selectedProductRetailerIds.map((rid) => (
-                                  <option key={rid} value={rid}>{rid}</option>
-                                ))}
-                              </select>
-                            </div>
-                            <button
-                              onClick={handleUpdateCatalog}
-                              disabled={isUpdatingCatalog || !selectedProductForCatalog}
-                              style={{
-                                ...buttonStyle,
-                                background: isUpdatingCatalog || !selectedProductForCatalog ? "#aaa" : "#d97706",
-                                cursor: isUpdatingCatalog || !selectedProductForCatalog ? "not-allowed" : "pointer",
-                                fontSize: 14,
-                              }}
-                            >
-                              {isUpdatingCatalog
-                                ? (t("slideshowUpdatingCatalog") || "Updating...")
-                                : (t("slideshowUpdateCatalogBtn") || "Update Catalog")}
-                            </button>
-                          </div>
-                          {catalogUpdateError && (
-                            <p style={{ margin: "8px 0 0", fontSize: 13, color: "#c53030" }}>
-                              {catalogUpdateError}
-                            </p>
-                          )}
-                        </div>
-                      )}
-                    </div>
+            {/* Batch Progress */}
+            {batchItems.length > 0 && (batchStats.done > 0 || batchStats.running > 0) && (
+              <div style={{
+                padding: "16px 20px",
+                background: "#f0fdf4",
+                borderRadius: 12,
+                border: "1px solid #bbf7d0",
+                marginBottom: 20,
+              }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                  <span style={{ fontSize: 14, fontWeight: 600, color: "#166534" }}>
+                    {t("slideshowBatchProgress") || "Progress"}: {batchStats.done}/{batchStats.total}
+                  </span>
+                  {batchStats.error > 0 && (
+                    <span style={{ fontSize: 12, color: "#dc2626" }}>
+                      {batchStats.error} {t("slideshowBatchErrors") || "errors"}
+                    </span>
                   )}
                 </div>
-              )}
-
-              {isGenerating && (
-                <div style={{ padding: "40px 0", textAlign: "center" }}>
-                  <div style={{ fontSize: 48, marginBottom: 16 }}>⏳</div>
-                  <h3 style={{ fontSize: 18, fontWeight: 600, color: "#333", marginBottom: 8 }}>
-                    {t("slideshowGenerating") || "Generating Video..."}
-                  </h3>
-                  <p style={{ fontSize: 14, color: "#666" }}>
-                    {t("slideshowPleaseWait") || "This may take a minute depending on the number of images."}
-                  </p>
+                <div style={{
+                  width: "100%",
+                  height: 8,
+                  background: "#e5e7eb",
+                  borderRadius: 4,
+                  overflow: "hidden",
+                }}>
                   <div style={{
-                    width: 200,
-                    height: 4,
-                    background: "#e0e0e0",
-                    borderRadius: 2,
-                    margin: "16px auto",
-                    overflow: "hidden",
-                  }}>
-                    <div style={{
-                      width: "60%",
-                      height: "100%",
-                      background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
-                      borderRadius: 2,
-                      animation: "pulse 1.5s ease-in-out infinite",
-                    }} />
-                  </div>
+                    width: `${(batchStats.done / batchStats.total) * 100}%`,
+                    height: "100%",
+                    background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+                    borderRadius: 4,
+                    transition: "width 0.3s",
+                  }} />
                 </div>
-              )}
-            </div>
-          )}
-        </div>
+              </div>
+            )}
+
+            {/* Batch Action Buttons */}
+            {batchItems.length > 0 && (
+              <div style={{ display: "flex", justifyContent: "center", gap: 12 }}>
+                {!isBatchRunning ? (
+                  <button
+                    onClick={handleBatchGenerate}
+                    disabled={batchItems.length === 0}
+                    style={{
+                      ...buttonStyle,
+                      background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+                      padding: "12px 32px",
+                      fontSize: 15,
+                    }}
+                  >
+                    🚀 {t("slideshowStartBatch") || "Start Batch Generation"} ({batchItems.filter(b => b.status !== "done").length} {t("slideshowBatchItems") || "items"})
+                  </button>
+                ) : (
+                  <button
+                    onClick={handleStopBatch}
+                    style={{
+                      ...buttonStyle,
+                      background: "#ef4444",
+                      padding: "12px 32px",
+                      fontSize: 15,
+                    }}
+                  >
+                    ⏹ {t("slideshowStopBatch") || "Stop Batch"}
+                  </button>
+                )}
+              </div>
+            )}
+
+            {/* Batch Results Table */}
+            {batchItems.some(b => b.status === "done") && (
+              <div style={{ marginTop: 24 }}>
+                <h4 style={{ fontSize: 15, fontWeight: 600, color: "#333", marginBottom: 12 }}>
+                  📋 {t("slideshowBatchResults") || "Batch Results"}
+                </h4>
+                <div style={{ overflowX: "auto" }}>
+                  <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                    <thead>
+                      <tr style={{ background: "#f8f9fa", borderBottom: "2px solid #e0e0e0" }}>
+                        <th style={thStyle}>{t("slideshowBatchProduct") || "Product"}</th>
+                        <th style={thStyle}>{t("slideshowBatchStatus") || "Status"}</th>
+                        <th style={thStyle}>{t("slideshowBatchVideo") || "Video"}</th>
+                        <th style={thStyle}>{t("slideshowBatchDrive") || "Drive"}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {batchItems.filter(b => b.status === "done" || b.status === "error").map((item, idx) => (
+                        <tr key={idx} style={{ borderBottom: "1px solid #f0f0f0" }}>
+                          <td style={tdStyle}>
+                            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                              <img src={item.product.imageUrl} alt="" style={{ width: 28, height: 28, borderRadius: 4, objectFit: "cover" }} />
+                              <div>
+                                <div style={{ fontWeight: 600, maxWidth: 200, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.product.name}</div>
+                                <div style={{ fontSize: 11, color: "#999" }}>{item.product.retailerId}</div>
+                              </div>
+                            </div>
+                          </td>
+                          <td style={tdStyle}>
+                            <span style={{
+                              padding: "2px 8px",
+                              borderRadius: 4,
+                              fontSize: 11,
+                              fontWeight: 600,
+                              background: item.status === "done" ? "#dcfce7" : "#fef2f2",
+                              color: item.status === "done" ? "#166534" : "#991b1b",
+                            }}>
+                              {item.status === "done" ? "✅ Done" : `❌ ${item.error || "Error"}`}
+                            </span>
+                          </td>
+                          <td style={tdStyle}>
+                            {item.videoUrl && (
+                              <a href={item.videoUrl} target="_blank" rel="noopener noreferrer" style={{ color: "#667eea", fontSize: 12 }}>
+                                ⬇️ Download
+                              </a>
+                            )}
+                          </td>
+                          <td style={tdStyle}>
+                            {item.driveLink && (
+                              <a href={item.driveLink} target="_blank" rel="noopener noreferrer" style={{ color: "#0369a1", fontSize: 12 }}>
+                                📁 Drive
+                              </a>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
 
         <AppFooter />
       </div>
+
+      {/* CSS animation for preview */}
+      <style>{`
+        @keyframes fadeIn {
+          from { opacity: 0; }
+          to { opacity: 1; }
+        }
+      `}</style>
     </main>
   );
 };
@@ -1607,10 +2457,14 @@ const ProductImageCard = ({
   product,
   isSelected,
   onToggle,
+  onSelectAll,
+  t,
 }: {
   product: CatalogProduct;
   isSelected: (url: string) => boolean;
   onToggle: (product: CatalogProduct, imageUrl: string) => void;
+  onSelectAll: (product: CatalogProduct) => void;
+  t: (key: string) => string;
 }) => {
   const allImages = [product.imageUrl, ...product.additionalImages].filter(Boolean);
 
@@ -1679,6 +2533,26 @@ const ProductImageCard = ({
         <div style={{ fontSize: 11, color: "#999", marginTop: 2 }}>
           {product.retailerId}
         </div>
+
+        {/* Select All button */}
+        {allImages.length > 1 && (
+          <button
+            onClick={(e) => { e.stopPropagation(); onSelectAll(product); }}
+            style={{
+              marginTop: 4,
+              fontSize: 11,
+              color: "#667eea",
+              background: "none",
+              border: "none",
+              cursor: "pointer",
+              padding: 0,
+              fontWeight: 600,
+              textDecoration: "underline",
+            }}
+          >
+            {t("slideshowSelectAll") || "Select all"} ({allImages.length})
+          </button>
+        )}
 
         {/* Additional images */}
         {product.additionalImages.length > 0 && (
@@ -1764,4 +2638,27 @@ const miniBtn: React.CSSProperties = {
   display: "flex",
   alignItems: "center",
   justifyContent: "center",
+};
+
+const miniActionBtn: React.CSSProperties = {
+  padding: "4px 12px",
+  borderRadius: 6,
+  border: "1px solid #e0e0e0",
+  background: "#fff",
+  fontSize: 12,
+  fontWeight: 600,
+  cursor: "pointer",
+};
+
+const thStyle: React.CSSProperties = {
+  padding: "10px 12px",
+  textAlign: "left",
+  fontWeight: 600,
+  color: "#555",
+  fontSize: 12,
+};
+
+const tdStyle: React.CSSProperties = {
+  padding: "10px 12px",
+  verticalAlign: "middle",
 };
