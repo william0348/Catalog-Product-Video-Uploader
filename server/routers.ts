@@ -423,7 +423,6 @@ export const appRouter = router({
         transition: z.enum(["fade", "slideleft", "slideright", "slideup", "slidedown", "wipeleft", "wiperight", "none"]).default("fade"),
         transitionDuration: z.number().min(0.1).max(5).default(0.5),
         overlayText: z.string().optional(),
-        showProductName: z.boolean().default(false),
         textPosition: z.enum(["top", "center", "bottom"]).default("bottom"),
         fontSize: z.number().min(12).max(120).optional(),
         fontColor: z.string().optional(),
@@ -432,6 +431,10 @@ export const appRouter = router({
         imageScale: z.number().min(0.1).max(2.0).optional(),
         imageOffsetX: z.number().min(-50).max(50).optional(),
         imageOffsetY: z.number().min(-50).max(50).optional(),
+        overlayImageUrl: z.string().url().optional(),
+        overlayImageScale: z.number().min(0.05).max(1.0).optional(),
+        overlayImageX: z.number().min(-50).max(50).optional(),
+        overlayImageY: z.number().min(-50).max(50).optional(),
         audioUrl: z.string().url().optional(),
         audioVolume: z.number().min(0).max(1).optional(),
       }))

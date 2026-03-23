@@ -180,7 +180,6 @@ export const SlideshowGenerator = () => {
   const [transition, setTransition] = useState<TransitionType>("fade");
   const [transitionDuration, setTransitionDuration] = useState(0.5);
   const [overlayText, setOverlayText] = useState("");
-  const [showProductName, setShowProductName] = useState(false);
   const [textPosition, setTextPosition] = useState<TextPosition>("bottom");
   const [fontSize, setFontSize] = useState(40);
   const [fontFamily, setFontFamily] = useState<FontFamily>("noto-sans-cjk");
@@ -191,6 +190,15 @@ export const SlideshowGenerator = () => {
   const [imageScale, setImageScale] = useState(1.0);
   const [imageOffsetX, setImageOffsetX] = useState(0);
   const [imageOffsetY, setImageOffsetY] = useState(0);
+
+  // Overlay image (logo, watermark, etc.)
+  const [overlayImageUrl, setOverlayImageUrl] = useState<string | null>(null);
+  const [overlayImageFileName, setOverlayImageFileName] = useState<string | null>(null);
+  const [overlayImageScale, setOverlayImageScale] = useState(0.2);
+  const [overlayImageX, setOverlayImageX] = useState(0);
+  const [overlayImageY, setOverlayImageY] = useState(0);
+  const [isUploadingOverlayImage, setIsUploadingOverlayImage] = useState(false);
+  const overlayImageInputRef = useRef<HTMLInputElement>(null);
 
   // Background music
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
@@ -593,7 +601,7 @@ export const SlideshowGenerator = () => {
         durationPerImage,
         transition,
         transitionDuration: Math.round(transitionDuration * 100),
-        showProductName: showProductName ? 1 : 0,
+        showProductName: 0,
         textPosition,
         fontSize,
         fontFamily,
@@ -617,7 +625,6 @@ export const SlideshowGenerator = () => {
     setDurationPerImage(tmpl.durationPerImage);
     setTransition(tmpl.transition as TransitionType);
     setTransitionDuration(tmpl.transitionDuration / 100);
-    setShowProductName(tmpl.showProductName === 1);
     setTextPosition(tmpl.textPosition as TextPosition);
     setFontSize(tmpl.fontSize);
     setFontFamily(tmpl.fontFamily as FontFamily);
@@ -638,7 +645,7 @@ export const SlideshowGenerator = () => {
         durationPerImage,
         transition,
         transitionDuration: Math.round(transitionDuration * 100),
-        showProductName: showProductName ? 1 : 0,
+        showProductName: 0,
         textPosition,
         fontSize,
         fontFamily,
@@ -682,14 +689,13 @@ export const SlideshowGenerator = () => {
       const result = await trpcMutate("slideshow.generate", {
         images: selectedImages.map((img) => ({
           url: img.url,
-          label: showProductName ? img.label : undefined,
+          label: img.label,
         })),
         aspectRatio,
         durationPerImage,
         transition,
         transitionDuration,
         overlayText: overlayText.trim() || undefined,
-        showProductName,
         textPosition,
         fontSize,
         fontFamily,
@@ -698,6 +704,10 @@ export const SlideshowGenerator = () => {
         imageScale,
         imageOffsetX,
         imageOffsetY,
+        overlayImageUrl: overlayImageUrl || undefined,
+        overlayImageScale: overlayImageUrl ? overlayImageScale : undefined,
+        overlayImageX: overlayImageUrl ? overlayImageX : undefined,
+        overlayImageY: overlayImageUrl ? overlayImageY : undefined,
         audioUrl: audioUrl || undefined,
         audioVolume: audioUrl ? audioVolume : undefined,
       });
@@ -810,14 +820,13 @@ export const SlideshowGenerator = () => {
         const result = await trpcMutate("slideshow.generate", {
           images: productImages.map((url) => ({
             url,
-            label: showProductName ? items[i].product.name : undefined,
+            label: items[i].product.name,
           })),
           aspectRatio,
           durationPerImage,
           transition,
           transitionDuration,
           overlayText: overlayText.trim() || undefined,
-          showProductName,
           textPosition,
           fontSize,
           fontFamily,
@@ -826,6 +835,10 @@ export const SlideshowGenerator = () => {
           imageScale,
           imageOffsetX,
           imageOffsetY,
+          overlayImageUrl: overlayImageUrl || undefined,
+          overlayImageScale: overlayImageUrl ? overlayImageScale : undefined,
+          overlayImageX: overlayImageUrl ? overlayImageX : undefined,
+          overlayImageY: overlayImageUrl ? overlayImageY : undefined,
           audioUrl: audioUrl || undefined,
           audioVolume: audioUrl ? audioVolume : undefined,
         });
@@ -1324,17 +1337,8 @@ export const SlideshowGenerator = () => {
                   </div>
                 )}
 
-                {/* Show Product Name */}
-                <div style={{ marginBottom: 16 }}>
-                  <label style={{ ...labelStyle, display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
-                    <input type="checkbox" checked={showProductName} onChange={(e) => setShowProductName(e.target.checked)} style={{ width: 16, height: 16 }} />
-                    {t("slideshowShowProductName") || "Show Product Name"}
-                  </label>
-                </div>
-
-                {/* Text Settings (shown when showProductName or overlayText) */}
-                {(showProductName || overlayText.trim()) && (
-                  <div style={{ padding: 16, background: "#f8f9ff", borderRadius: 10, border: "1px solid #e0e7ff", marginBottom: 16 }}>
+                {/* Text Settings */}
+                <div style={{ padding: 16, background: "#f8f9ff", borderRadius: 10, border: "1px solid #e0e7ff", marginBottom: 16 }}>
                     <h4 style={{ margin: "0 0 12px", fontSize: 14, fontWeight: 600, color: "#555" }}>
                       🔤 {isZh ? "文字設定" : "Text Settings"}
                     </h4>
@@ -1397,8 +1401,7 @@ export const SlideshowGenerator = () => {
                         ))}
                       </div>
                     </div>
-                  </div>
-                )}
+                </div>
 
                 {/* Overlay Text */}
                 <div style={{ marginBottom: 16 }}>
@@ -1509,6 +1512,123 @@ export const SlideshowGenerator = () => {
                   </div>
                 </div>
 
+                {/* Overlay Image (Logo, Watermark, etc.) */}
+                <div style={{ padding: 16, background: "#f8f9ff", borderRadius: 10, border: "1px solid #e0e7ff", marginBottom: 16 }}>
+                  <h4 style={{ margin: "0 0 12px", fontSize: 14, fontWeight: 600, color: "#555" }}>
+                    🖼️ {isZh ? "疊加圖片" : "Overlay Image"}
+                  </h4>
+                  <p style={{ margin: "0 0 10px", fontSize: 12, color: "#888" }}>
+                    {isZh ? "上傳自訂圖片（如 Logo、浮水印）疊加在幻燈片上方" : "Upload a custom image (logo, watermark) to overlay on slides"}
+                  </p>
+                  {overlayImageUrl ? (
+                    <div>
+                      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
+                        <img src={overlayImageUrl} alt="overlay" style={{ width: 48, height: 48, objectFit: "contain", borderRadius: 6, border: "1px solid #ddd" }} />
+                        <span style={{ fontSize: 13, color: "#333", flex: 1 }}>{overlayImageFileName}</span>
+                        <button onClick={() => { setOverlayImageUrl(null); setOverlayImageFileName(null); setOverlayImageScale(0.2); setOverlayImageX(0); setOverlayImageY(0); }} style={{ ...miniActionBtn, color: "#e53e3e", borderColor: "#fca5a5" }}>✕ {isZh ? "移除" : "Remove"}</button>
+                      </div>
+
+                      {/* Overlay Image Scale */}
+                      <div style={{ marginBottom: 12 }}>
+                        <label style={labelStyle}>{isZh ? "疊加圖片大小" : "Overlay Size"}: {Math.round(overlayImageScale * 100)}%</label>
+                        <input
+                          type="range" min={5} max={100} step={1}
+                          value={Math.round(overlayImageScale * 100)}
+                          onChange={(e) => setOverlayImageScale(parseInt(e.target.value) / 100)}
+                          style={{ width: "100%" }}
+                        />
+                        <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: "#999" }}>
+                          <span>5%</span>
+                          <button onClick={() => setOverlayImageScale(0.2)} style={{ background: "none", border: "1px solid #ddd", borderRadius: 4, padding: "1px 8px", fontSize: 11, color: "#667eea", cursor: "pointer" }}>
+                            {isZh ? "重置" : "Reset"}
+                          </button>
+                          <span>100%</span>
+                        </div>
+                      </div>
+
+                      {/* Overlay Image Position X */}
+                      <div style={{ marginBottom: 12 }}>
+                        <label style={labelStyle}>{isZh ? "水平位置" : "Horizontal"}: {overlayImageX > 0 ? "+" : ""}{overlayImageX}%</label>
+                        <input
+                          type="range" min={-50} max={50} step={1}
+                          value={overlayImageX}
+                          onChange={(e) => setOverlayImageX(parseInt(e.target.value))}
+                          style={{ width: "100%" }}
+                        />
+                        <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: "#999" }}>
+                          <span>← {isZh ? "左" : "Left"}</span>
+                          <button onClick={() => setOverlayImageX(0)} style={{ background: "none", border: "1px solid #ddd", borderRadius: 4, padding: "1px 8px", fontSize: 11, color: "#667eea", cursor: "pointer" }}>
+                            {isZh ? "置中" : "Center"}
+                          </button>
+                          <span>{isZh ? "右" : "Right"} →</span>
+                        </div>
+                      </div>
+
+                      {/* Overlay Image Position Y */}
+                      <div style={{ marginBottom: 4 }}>
+                        <label style={labelStyle}>{isZh ? "垂直位置" : "Vertical"}: {overlayImageY > 0 ? "+" : ""}{overlayImageY}%</label>
+                        <input
+                          type="range" min={-50} max={50} step={1}
+                          value={overlayImageY}
+                          onChange={(e) => setOverlayImageY(parseInt(e.target.value))}
+                          style={{ width: "100%" }}
+                        />
+                        <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: "#999" }}>
+                          <span>↑ {isZh ? "上" : "Up"}</span>
+                          <button onClick={() => setOverlayImageY(0)} style={{ background: "none", border: "1px solid #ddd", borderRadius: 4, padding: "1px 8px", fontSize: 11, color: "#667eea", cursor: "pointer" }}>
+                            {isZh ? "置中" : "Center"}
+                          </button>
+                          <span>{isZh ? "下" : "Down"} ↓</span>
+                        </div>
+                      </div>
+
+                      {/* Reset Overlay Position */}
+                      <div style={{ textAlign: "center", marginTop: 10 }}>
+                        <button
+                          onClick={() => { setOverlayImageScale(0.2); setOverlayImageX(0); setOverlayImageY(0); }}
+                          style={{ ...miniActionBtn, color: "#667eea", borderColor: "#667eea" }}
+                        >
+                          🔄 {isZh ? "重置疊加圖片位置" : "Reset Overlay Position"}
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      <input ref={overlayImageInputRef} type="file" accept="image/*" onChange={async (e) => {
+                        const file = e.target.files?.[0];
+                        if (!file) return;
+                        if (file.size > 10 * 1024 * 1024) { alert(isZh ? "圖片大小不能超過 10MB" : "Image must be under 10MB"); return; }
+                        setIsUploadingOverlayImage(true);
+                        try {
+                          const reader = new FileReader();
+                          const base64 = await new Promise<string>((resolve) => {
+                            reader.onload = () => resolve((reader.result as string).split(",")[1]);
+                            reader.readAsDataURL(file);
+                          });
+                          const result = await trpcMutate("slideshow.uploadImage", {
+                            base64Data: base64,
+                            fileName: file.name,
+                            mimeType: file.type || "image/png",
+                          });
+                          if (result?.url) {
+                            setOverlayImageUrl(result.url);
+                            setOverlayImageFileName(file.name);
+                          }
+                        } catch (err: any) {
+                          alert(err.message || "Upload failed");
+                        } finally {
+                          setIsUploadingOverlayImage(false);
+                          if (overlayImageInputRef.current) overlayImageInputRef.current.value = "";
+                        }
+                      }} style={{ display: "none" }} />
+                      <button onClick={() => overlayImageInputRef.current?.click()} disabled={isUploadingOverlayImage} style={{ ...buttonStyle, background: "#764ba2", fontSize: 13, padding: "8px 16px" }}>
+                        {isUploadingOverlayImage ? "⏳ Uploading..." : `🖼️ ${isZh ? "上傳疊加圖片" : "Upload Overlay Image"}`}
+                      </button>
+                      <p style={{ margin: "6px 0 0", fontSize: 11, color: "#999" }}>{isZh ? "支援 PNG, JPG, WebP（最大 10MB，建議使用透明背景 PNG）" : "Supports PNG, JPG, WebP (max 10MB, transparent PNG recommended)"}</p>
+                    </>
+                  )}
+                </div>
+
                 {/* Background Music */}
                 <div style={{ padding: 16, background: "#f8f9ff", borderRadius: 10, border: "1px solid #e0e7ff", marginBottom: 16 }}>
                   <h4 style={{ margin: "0 0 10px", fontSize: 14, fontWeight: 600, color: "#555" }}>
@@ -1570,16 +1690,10 @@ export const SlideshowGenerator = () => {
                         />
                       </div>
                       {/* Text overlay preview - proportionally scaled to match actual video */}
-                      {(showProductName || overlayText.trim()) && (() => {
-                        // The preview container maxHeight is 450px.
-                        // Actual video canvas: 4:5 = 1350px height, 9:16 = 1920px height.
-                        // Scale factor = previewHeight / canvasHeight
-                        // For 4:5: preview ~360px wide (450 * 4/5), height ~450px → scale = 450/1350 ≈ 0.333
-                        // For 9:16: preview ~253px wide (450 * 9/16), height ~450px → scale = 450/1920 ≈ 0.234
+                      {overlayText.trim() && (() => {
                         const canvasHeight = aspectRatio === "4:5" ? 1350 : 1920;
                         const previewScale = 450 / canvasHeight;
                         const previewFontSize = Math.max(8, Math.round(fontSize * previewScale));
-                        const previewProductFontSize = Math.max(6, Math.round(fontSize * 0.75 * previewScale));
                         return (
                           <div style={{
                             position: "absolute", left: 0, right: 0, padding: `${Math.round(12 * previewScale)}px ${Math.round(16 * previewScale)}px`,
@@ -1592,10 +1706,33 @@ export const SlideshowGenerator = () => {
                               textShadow: "1px 1px 3px rgba(0,0,0,0.7)",
                               lineHeight: 1.3,
                             }}>
-                              {overlayText.trim() && <div>{overlayText}</div>}
-                              {showProductName && <div style={{ fontSize: previewProductFontSize, marginTop: overlayText.trim() ? 2 : 0 }}>{selectedImages[previewIndex % selectedImages.length]?.label}</div>}
+                              <div>{overlayText}</div>
                             </div>
                           </div>
+                        );
+                      })()}
+                      {/* Overlay image preview */}
+                      {overlayImageUrl && (() => {
+                        const canvasWidth = aspectRatio === "4:5" ? 1080 : 1080;
+                        const canvasHeight = aspectRatio === "4:5" ? 1350 : 1920;
+                        const previewScale = 450 / canvasHeight;
+                        const ovWidthPercent = overlayImageScale * 100;
+                        return (
+                          <img
+                            src={overlayImageUrl}
+                            alt="overlay preview"
+                            style={{
+                              position: "absolute",
+                              width: `${ovWidthPercent}%`,
+                              height: "auto",
+                              left: `${50 + overlayImageX}%`,
+                              top: `${50 + overlayImageY}%`,
+                              transform: "translate(-50%, -50%)",
+                              pointerEvents: "none",
+                              objectFit: "contain",
+                              transition: "all 0.2s",
+                            }}
+                          />
                         );
                       })()}
                       {/* Preview controls */}

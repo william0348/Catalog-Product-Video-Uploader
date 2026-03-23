@@ -156,3 +156,12 @@
 - [x] 範本載入後自動填入所有設定（比例、轉場、字型、背景色、圖片大小/位置等）
 - [x] 更新 i18n 翻譯（中英文完整）
 - [x] 測試並驗證（47/47 passed）
+
+## Phase 23: 自訂圖片疊加 + 移除商品名稱
+- [x] 後端 FFmpeg 支援疊加圖片（下載 overlay → 縮放至目標寬度 → 疊加到每張處理後的圖片）
+- [x] 更新 routers.ts 接受 overlayImageUrl, overlayImageScale, overlayImageX, overlayImageY 參數
+- [x] 前端新增疊加圖片上傳 UI（上傳自訂圖片如 logo/浮水印，支援 PNG/JPG/WebP）
+- [x] 前端新增疊加圖片位置/大小調整控制（5%-100% 縮放，水平/垂直 -50%~+50% 偏移）
+- [x] 移除「顯示商品名稱」功能（showProductName）
+- [x] 更新 i18n 翻譯（中英文完整）
+- [x] 測試並驗證（47/47 passed）

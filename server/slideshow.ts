@@ -51,7 +51,6 @@ export interface SlideshowOptions {
   transition: "fade" | "slideleft" | "slideright" | "slideup" | "slidedown" | "wipeleft" | "wiperight" | "none";
   transitionDuration: number;
   overlayText?: string;
-  showProductName: boolean;
   textPosition: "top" | "center" | "bottom";
   fontSize?: number;
   fontColor?: string; // hex color e.g. "#FFFFFF"
@@ -60,6 +59,10 @@ export interface SlideshowOptions {
   imageScale?: number; // 0.1 to 2.0, default 1.0 (100%)
   imageOffsetX?: number; // -50 to 50 (percentage of canvas width), default 0
   imageOffsetY?: number; // -50 to 50 (percentage of canvas height), default 0
+  overlayImageUrl?: string; // URL of custom overlay image (logo, watermark, etc.)
+  overlayImageScale?: number; // 0.05 to 1.0, default 0.2 (20% of canvas width)
+  overlayImageX?: number; // -50 to 50 (percentage of canvas width), default 0 (center)
+  overlayImageY?: number; // -50 to 50 (percentage of canvas height), default 0 (center)
   audioUrl?: string;
   audioVolume?: number;
 }
@@ -128,7 +131,6 @@ function toFFmpegColor(hexColor?: string): string {
 interface TextFilterOptions {
   images: { url: string; label?: string }[];
   overlayText?: string;
-  showProductName: boolean;
   textPosition: "top" | "center" | "bottom";
   fontSize: number;
   fontColor: string; // FFmpeg color string
@@ -138,7 +140,7 @@ interface TextFilterOptions {
 }
 
 function buildTextFilters(opts: TextFilterOptions): string[] {
-  const { images, overlayText, showProductName, textPosition, fontSize, fontColor, fontPath, durationPerImage, transitionDuration } = opts;
+  const { overlayText, textPosition, fontSize, fontColor, fontPath } = opts;
   const filters: string[] = [];
 
   // Determine border color based on font color brightness
@@ -151,21 +153,6 @@ function buildTextFilters(opts: TextFilterOptions): string[] {
     filters.push(
       `drawtext=text='${escaped}':fontfile='${fontPath}':fontsize=${fontSize}:fontcolor=${fontColor}:borderw=3:bordercolor=${borderColor}:x=(w-text_w)/2:y=${yPos}`
     );
-  }
-
-  // Per-image product name (timed with enable)
-  if (showProductName) {
-    for (let i = 0; i < images.length; i++) {
-      const label = images[i].label;
-      if (!label) continue;
-      const escaped = escapeDrawtext(label);
-      const startTime = i * (durationPerImage - transitionDuration);
-      const endTime = startTime + durationPerImage;
-      const yPos = textPosition === "top" ? "h*0.12" : textPosition === "bottom" ? "h-text_h-h*0.12" : "(h-text_h)/2+60";
-      filters.push(
-        `drawtext=text='${escaped}':fontfile='${fontPath}':fontsize=${Math.round(fontSize * 0.75)}:fontcolor=${fontColor}:borderw=2:bordercolor=${borderColor}:x=(w-text_w)/2:y=${yPos}:enable='between(t\\,${startTime}\\,${endTime})'`
-      );
-    }
   }
 
   return filters;
@@ -189,7 +176,6 @@ export async function generateSlideshow(options: SlideshowOptions): Promise<Buff
     transition,
     transitionDuration,
     overlayText,
-    showProductName,
     textPosition,
     fontSize = 40,
     fontColor,
@@ -198,6 +184,10 @@ export async function generateSlideshow(options: SlideshowOptions): Promise<Buff
     imageScale = 1.0,
     imageOffsetX = 0,
     imageOffsetY = 0,
+    overlayImageUrl,
+    overlayImageScale = 0.2,
+    overlayImageX = 0,
+    overlayImageY = 0,
     audioUrl,
     audioVolume = 0.5,
   } = options;
@@ -267,9 +257,45 @@ export async function generateSlideshow(options: SlideshowOptions): Promise<Buff
       processedPaths.push(processedPath);
     }
 
+    // 2.5. Apply overlay image on each processed frame (logo, watermark, etc.)
+    if (overlayImageUrl) {
+      console.log(`[Slideshow] Applying overlay image...`);
+      const overlayImgPath = path.join(tmpDir, "overlay_img.png");
+      await downloadFile(overlayImageUrl, overlayImgPath);
+      
+      const clampedOvScale = Math.max(0.05, Math.min(1.0, overlayImageScale));
+      const ovTargetW = Math.round(resolution.width * clampedOvScale);
+      // Scale overlay image preserving aspect ratio
+      const scaledOverlayPath = path.join(tmpDir, "overlay_scaled.png");
+      await runFFmpeg([
+        "-i", overlayImgPath,
+        "-vf", `scale=${ovTargetW}:-1`,
+        "-frames:v", "1",
+        scaledOverlayPath,
+      ]);
+      
+      // Calculate overlay position (percentage-based offset from center)
+      // overlayImageX/Y: -50 to 50 (percentage of canvas)
+      // Default (0,0) = center
+      for (let i = 0; i < processedPaths.length; i++) {
+        const withOverlayPath = path.join(tmpDir, `ov_${String(i).padStart(3, "0")}.png`);
+        const ovXExpr = `(W-w)/2+${Math.round((overlayImageX / 100) * resolution.width)}`;
+        const ovYExpr = `(H-h)/2+${Math.round((overlayImageY / 100) * resolution.height)}`;
+        await runFFmpeg([
+          "-i", processedPaths[i],
+          "-i", scaledOverlayPath,
+          "-filter_complex", `[0:v][1:v]overlay=${ovXExpr}:${ovYExpr},format=yuv420p`,
+          "-frames:v", "1",
+          withOverlayPath,
+        ]);
+        processedPaths[i] = withOverlayPath;
+      }
+      console.log(`[Slideshow] Overlay image applied to ${processedPaths.length} frames.`);
+    }
+
     // 3. Build text filter options
     const textOpts: TextFilterOptions = {
-      images, overlayText, showProductName, textPosition, fontSize,
+      images, overlayText, textPosition, fontSize,
       fontColor: ffmpegFontColor, fontPath, durationPerImage, transitionDuration,
     };
 
