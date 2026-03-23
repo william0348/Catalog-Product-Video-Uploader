@@ -2,7 +2,6 @@ import { useState, useEffect, useContext } from "react";
 import { LanguageProvider, LanguageContext } from "@/contexts/LanguageContext";
 import { AdminPanel } from "@/pages/AdminPanel";
 import { TermsOfServicePage } from "@/pages/TermsOfServicePage";
-import { HomePage } from "@/pages/HomePage";
 import { MainApp } from "@/pages/MainApp";
 import { SlideshowGenerator } from "@/pages/SlideshowGenerator";
 
@@ -15,7 +14,6 @@ const PageRouter = () => {
             setHash(window.location.hash.toLowerCase() || '#/');
         };
         window.addEventListener('hashchange', handleHashChange);
-        // Don't call handleHashChange() here - initial hash is already set via useState initializer
         return () => window.removeEventListener('hashchange', handleHashChange);
     }, []);
     
@@ -28,9 +26,6 @@ const PageRouter = () => {
             case '#/terms':
                 title = `${t('termsOfService')} - CPAS Video Uploader`;
                 break;
-            case '#/home':
-                title = `${t('home')} - CPAS Video Uploader`;
-                break;
             case '#/slideshow':
                 title = `${t('slideshowTitle') || 'Slideshow Generator'} - CPAS Video Uploader`;
                 break;
@@ -40,14 +35,11 @@ const PageRouter = () => {
     
     switch (hash) {
         case '#/admin':
-            return <AdminPanel onBack={() => { window.location.hash = '#/home'; }} />;
+            return <AdminPanel onBack={() => { window.location.hash = '#/'; }} />;
         case '#/terms':
             return <TermsOfServicePage />;
-        case '#/home':
-            return <HomePage />;
         case '#/slideshow':
             return <SlideshowGenerator key="slideshow" />;
-        case '#/app':
         case '#/':
         default:
             return <MainApp />;
