@@ -6,10 +6,45 @@
  * with configurable transitions, text overlays, aspect ratios,
  * font customization, and optional background music.
  */
-import { execFile } from "child_process";
+import { execFile, execFileSync } from "child_process";
 import fs from "fs";
 import path from "path";
 import os from "os";
+import { createRequire } from "module";
+
+// Use bundled FFmpeg binary for deployment compatibility
+let FFMPEG_PATH = "ffmpeg";
+try {
+  const _require = createRequire(import.meta.url);
+  const ffmpegInstaller = _require("@ffmpeg-installer/ffmpeg");
+  if (ffmpegInstaller && ffmpegInstaller.path && fs.existsSync(ffmpegInstaller.path)) {
+    FFMPEG_PATH = ffmpegInstaller.path;
+    console.log(`[Slideshow] Using bundled FFmpeg: ${FFMPEG_PATH}`);
+  } else {
+    console.log(`[Slideshow] Bundled FFmpeg not found at ${ffmpegInstaller?.path}, trying system ffmpeg`);
+  }
+} catch (e) {
+  console.log(`[Slideshow] @ffmpeg-installer/ffmpeg not available: ${e}`);
+}
+
+// Verify FFmpeg is actually callable
+try {
+  execFileSync(FFMPEG_PATH, ["-version"], { timeout: 5000 });
+  console.log(`[Slideshow] FFmpeg verified: ${FFMPEG_PATH}`);
+} catch {
+  // If bundled doesn't work, try system ffmpeg
+  if (FFMPEG_PATH !== "ffmpeg") {
+    try {
+      execFileSync("ffmpeg", ["-version"], { timeout: 5000 });
+      FFMPEG_PATH = "ffmpeg";
+      console.log(`[Slideshow] Falling back to system FFmpeg`);
+    } catch {
+      console.error(`[Slideshow] WARNING: No working FFmpeg found! Video generation will fail.`);
+    }
+  } else {
+    console.error(`[Slideshow] WARNING: System FFmpeg not found! Video generation will fail.`);
+  }
+}
 
 // ==================== Font Configuration ====================
 
@@ -36,10 +71,34 @@ export const AVAILABLE_FONTS: FontConfig[] = [
 
 const DEFAULT_FONT_PATH = "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc";
 
+// Find the first available font on the system
+function findAvailableFont(): string {
+  // Try default first
+  if (fs.existsSync(DEFAULT_FONT_PATH)) return DEFAULT_FONT_PATH;
+  // Try each font in order
+  for (const font of AVAILABLE_FONTS) {
+    if (fs.existsSync(font.path)) return font.path;
+  }
+  // Last resort: try common system font paths
+  const fallbacks = [
+    "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+    "/usr/share/fonts/truetype/freefont/FreeSans.ttf",
+    "/usr/share/fonts/TTF/DejaVuSans.ttf",
+  ];
+  for (const fb of fallbacks) {
+    if (fs.existsSync(fb)) return fb;
+  }
+  return DEFAULT_FONT_PATH; // Return default even if not found, FFmpeg will handle the error
+}
+
+const RESOLVED_DEFAULT_FONT = findAvailableFont();
+console.log(`[Slideshow] Resolved default font: ${RESOLVED_DEFAULT_FONT}`);
+
 function getFontPath(fontId?: string): string {
-  if (!fontId) return DEFAULT_FONT_PATH;
+  if (!fontId) return RESOLVED_DEFAULT_FONT;
   const font = AVAILABLE_FONTS.find(f => f.id === fontId);
-  return font?.path || DEFAULT_FONT_PATH;
+  if (font && fs.existsSync(font.path)) return font.path;
+  return RESOLVED_DEFAULT_FONT;
 }
 
 // ==================== Types ====================
@@ -91,7 +150,7 @@ async function downloadFile(url: string, destPath: string): Promise<void> {
 
 function runFFmpeg(args: string[]): Promise<string> {
   return new Promise((resolve, reject) => {
-    execFile("ffmpeg", ["-y", ...args], { maxBuffer: 100 * 1024 * 1024, timeout: 300000 }, (error, stdout, stderr) => {
+    execFile(FFMPEG_PATH, ["-y", ...args], { maxBuffer: 100 * 1024 * 1024, timeout: 300000 }, (error, stdout, stderr) => {
       if (error) {
         console.error(`[Slideshow] FFmpeg stderr:`, stderr);
         reject(new Error(`FFmpeg failed: ${error.message}\n${stderr}`));

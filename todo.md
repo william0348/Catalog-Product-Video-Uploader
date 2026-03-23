@@ -181,3 +181,10 @@
 - [x] 新增拖曳上傳支援（疊加圖片、背景影片、片頭影片、片尾影片、背景音樂）
 - [x] 拖曳區域視覺回饋（拖曳時高亮邊框 + 藍色陰影）
 - [x] 預覽畫面拖曳定位：可直接拖曳商品圖片和疊加圖片調整位置（grab/grabbing 游標）
+
+## Phase 26: 修復 FFmpeg ENOENT 錯誤
+- [x] 診斷部署環境中 FFmpeg 不可用的問題
+- [x] 安裝 @ffmpeg-installer/ffmpeg npm 套件提供 bundled FFmpeg 二進位檔
+- [x] 更新 slideshow.ts 使用 createRequire + 自動偵測路徑 + 系統 fallback
+- [x] 新增字體存在性檢查和優雅降級
+- [x] 測試並驗證（47/47 passed，FFmpeg verified）
