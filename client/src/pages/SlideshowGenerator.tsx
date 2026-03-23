@@ -577,6 +577,100 @@ export const SlideshowGenerator = () => {
     setAudioFileName(null);
   };
 
+  // ===== Drag & Drop State =====
+  const [dragOverTarget, setDragOverTarget] = useState<string | null>(null);
+
+  const createDropHandler = (target: string, accept: string, maxSizeMB: number, onFile: (file: File) => void) => ({
+    onDragOver: (e: React.DragEvent) => { e.preventDefault(); e.stopPropagation(); setDragOverTarget(target); },
+    onDragLeave: (e: React.DragEvent) => { e.preventDefault(); e.stopPropagation(); setDragOverTarget(null); },
+    onDrop: (e: React.DragEvent) => {
+      e.preventDefault(); e.stopPropagation(); setDragOverTarget(null);
+      const file = e.dataTransfer.files?.[0];
+      if (!file) return;
+      if (!file.type.startsWith(accept.replace('/*', '/'))) { alert(isZh ? `請拖曳${accept === 'image/*' ? '圖片' : accept === 'video/*' ? '影片' : '音訊'}檔案` : `Please drop a ${accept.replace('/*', '')} file`); return; }
+      if (file.size > maxSizeMB * 1024 * 1024) { alert(isZh ? `檔案大小不能超過 ${maxSizeMB}MB` : `File must be under ${maxSizeMB}MB`); return; }
+      onFile(file);
+    },
+  });
+
+  const dropZoneStyle = (target: string): React.CSSProperties => dragOverTarget === target ? {
+    borderColor: '#667eea', borderStyle: 'solid', background: '#f0f4ff', boxShadow: '0 0 0 3px rgba(102,126,234,0.2)',
+  } : {};
+
+  const handleOverlayImageFile = async (file: File) => {
+    setIsUploadingOverlayImage(true);
+    try {
+      const base64 = await fileToBase64(file);
+      const result = await trpcMutate("slideshow.uploadImage", { base64Data: base64, fileName: file.name, mimeType: file.type || "image/png" });
+      if (result?.url) { setOverlayImageUrl(result.url); setOverlayImageFileName(file.name); }
+    } catch (err: any) { alert(err.message || "Upload failed"); } finally {
+      setIsUploadingOverlayImage(false);
+      if (overlayImageInputRef.current) overlayImageInputRef.current.value = "";
+    }
+  };
+
+  const handleVideoFile = async (type: 'bg' | 'intro' | 'outro', file: File) => {
+    const setUrl = type === 'bg' ? setBackgroundVideoUrl : type === 'intro' ? setIntroVideoUrl : setOutroVideoUrl;
+    const setName = type === 'bg' ? setBackgroundVideoFileName : type === 'intro' ? setIntroVideoFileName : setOutroVideoFileName;
+    const setUploading = type === 'bg' ? setIsUploadingBgVideo : type === 'intro' ? setIsUploadingIntroVideo : setIsUploadingOutroVideo;
+    const inputRef = type === 'bg' ? bgVideoInputRef : type === 'intro' ? introVideoInputRef : outroVideoInputRef;
+    setUploading(true);
+    try {
+      const base64 = await fileToBase64(file);
+      const result = await trpcMutate("slideshow.uploadVideo", { base64Data: base64, fileName: file.name, mimeType: file.type || "video/mp4" });
+      if (result?.url) { setUrl(result.url); setName(file.name); }
+    } catch (err: any) { alert(err.message || "Upload failed"); } finally {
+      setUploading(false);
+      if (inputRef.current) inputRef.current.value = "";
+    }
+  };
+
+  const handleAudioFile = async (file: File) => {
+    setIsUploadingAudio(true);
+    try {
+      const base64 = await fileToBase64(file);
+      const result = await trpcMutate("slideshow.uploadAudio", { base64Data: base64, fileName: file.name, mimeType: file.type });
+      if (result?.url) { setAudioUrl(result.url); setAudioFileName(file.name); }
+    } catch (err: any) { alert(err.message || "Upload failed"); } finally {
+      setIsUploadingAudio(false);
+      if (audioInputRef.current) audioInputRef.current.value = "";
+    }
+  };
+
+  // ===== Preview Drag-to-Reposition =====
+  const previewContainerRef = useRef<HTMLDivElement>(null);
+  const [isDraggingImage, setIsDraggingImage] = useState(false);
+  const [isDraggingOverlay, setIsDraggingOverlay] = useState(false);
+  const dragStartRef = useRef<{ x: number; y: number; startOffsetX: number; startOffsetY: number } | null>(null);
+
+  const handlePreviewImageMouseDown = (e: React.MouseEvent, target: 'image' | 'overlay') => {
+    e.preventDefault(); e.stopPropagation();
+    const startX = target === 'image' ? imageOffsetX : overlayImageX;
+    const startY = target === 'image' ? imageOffsetY : overlayImageY;
+    dragStartRef.current = { x: e.clientX, y: e.clientY, startOffsetX: startX, startOffsetY: startY };
+    if (target === 'image') setIsDraggingImage(true); else setIsDraggingOverlay(true);
+  };
+
+  useEffect(() => {
+    if (!isDraggingImage && !isDraggingOverlay) return;
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!dragStartRef.current || !previewContainerRef.current) return;
+      const rect = previewContainerRef.current.getBoundingClientRect();
+      const dx = ((e.clientX - dragStartRef.current.x) / rect.width) * 100;
+      const dy = ((e.clientY - dragStartRef.current.y) / rect.height) * 100;
+      const newX = Math.max(-50, Math.min(50, dragStartRef.current.startOffsetX + dx));
+      const newY = Math.max(-50, Math.min(50, dragStartRef.current.startOffsetY + dy));
+      if (isDraggingImage) { setImageOffsetX(Math.round(newX)); setImageOffsetY(Math.round(newY)); }
+      if (isDraggingOverlay) { setOverlayImageX(Math.round(newX)); setOverlayImageY(Math.round(newY)); }
+    };
+    const handleMouseUp = () => {
+      setIsDraggingImage(false); setIsDraggingOverlay(false); dragStartRef.current = null;
+    };
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+    return () => { window.removeEventListener('mousemove', handleMouseMove); window.removeEventListener('mouseup', handleMouseUp); };
+  }, [isDraggingImage, isDraggingOverlay]);
+
   // ===== Preview Animation =====
   useEffect(() => {
     if (!isPreviewPlaying || selectedImages.length <= 1 || currentStep !== 2) return;
@@ -1172,26 +1266,6 @@ export const SlideshowGenerator = () => {
               </div>
             )}
 
-            {/* Custom Image Upload */}
-            <div style={{
-              marginTop: 20, padding: 20, border: "2px dashed #c0c8e8", borderRadius: 12,
-              background: "#fafbff", textAlign: "center",
-            }}>
-              <h4 style={{ margin: "0 0 8px", fontSize: 14, fontWeight: 600, color: "#555" }}>
-                📤 {t("slideshowUploadCustom") || "Upload Custom Images"}
-              </h4>
-              <p style={{ margin: "0 0 12px", fontSize: 12, color: "#888" }}>
-                {t("slideshowUploadCustomDesc") || "Add your own images to the slideshow (max 10MB each)"}
-              </p>
-              <input ref={imageInputRef} type="file" accept="image/*" multiple onChange={handleImageUpload} style={{ display: "none" }} />
-              <button
-                onClick={() => imageInputRef.current?.click()}
-                disabled={isUploadingImage}
-                style={{ ...buttonStyle, background: "#764ba2", fontSize: 13, padding: "8px 20px" }}
-              >
-                {isUploadingImage ? "⏳ Uploading..." : `🖼 ${t("slideshowChooseImages") || "Choose Images"}`}
-              </button>
-            </div>
 
             {/* Selected Images Preview (reorderable) */}
             {selectedImages.length > 0 && (
@@ -1545,7 +1619,7 @@ export const SlideshowGenerator = () => {
                     {isZh ? "上傳自訂圖片（如 Logo、浮水印）疊加在幻燈片上方" : "Upload a custom image (logo, watermark) to overlay on slides"}
                   </p>
                   {overlayImageUrl ? (
-                    <div>
+                    <div {...createDropHandler('overlay-image', 'image/*', 10, handleOverlayImageFile)} style={dropZoneStyle('overlay-image')}>
                       <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
                         <img src={overlayImageUrl} alt="overlay" style={{ width: 48, height: 48, objectFit: "contain", borderRadius: 6, border: "1px solid #ddd" }} />
                         <span style={{ fontSize: 13, color: "#333", flex: 1 }}>{overlayImageFileName}</span>
@@ -1617,7 +1691,7 @@ export const SlideshowGenerator = () => {
                       </div>
                     </div>
                   ) : (
-                    <>
+                    <div {...createDropHandler('overlay-image', 'image/*', 10, handleOverlayImageFile)} style={{ padding: 16, border: '2px dashed #d0d5dd', borderRadius: 8, textAlign: 'center', transition: 'all 0.2s', ...dropZoneStyle('overlay-image') }}>
                       <input ref={overlayImageInputRef} type="file" accept="image/*" onChange={async (e) => {
                         const file = e.target.files?.[0];
                         if (!file) return;
@@ -1649,7 +1723,8 @@ export const SlideshowGenerator = () => {
                         {isUploadingOverlayImage ? "⏳ Uploading..." : `🖼️ ${isZh ? "上傳疊加圖片" : "Upload Overlay Image"}`}
                       </button>
                       <p style={{ margin: "6px 0 0", fontSize: 11, color: "#999" }}>{isZh ? "支援 PNG, JPG, WebP（最大 10MB，建議使用透明背景 PNG）" : "Supports PNG, JPG, WebP (max 10MB, transparent PNG recommended)"}</p>
-                    </>
+                      <p style={{ margin: "6px 0 0", fontSize: 11, color: '#667eea' }}>{isZh ? '或拖曳圖片到此處' : 'or drag & drop image here'}</p>
+                    </div>
                   )}
                 </div>
 
@@ -1673,7 +1748,7 @@ export const SlideshowGenerator = () => {
                         <button onClick={() => { setBackgroundVideoUrl(null); setBackgroundVideoFileName(null); }} style={{ ...miniActionBtn, color: "#e53e3e", borderColor: "#fca5a5" }}>✕ {isZh ? "移除" : "Remove"}</button>
                       </div>
                     ) : (
-                      <>
+                      <div {...createDropHandler('bg-video', 'video/*', 50, (f) => handleVideoFile('bg', f))} style={{ padding: 12, border: '2px dashed #d0d5dd', borderRadius: 8, textAlign: 'center', transition: 'all 0.2s', ...dropZoneStyle('bg-video') }}>
                         <input ref={bgVideoInputRef} type="file" accept="video/*" onChange={async (e) => {
                           const file = e.target.files?.[0];
                           if (!file) return;
@@ -1692,7 +1767,8 @@ export const SlideshowGenerator = () => {
                           {isUploadingBgVideo ? "⏳ Uploading..." : `🎥 ${isZh ? "上傳背景影片" : "Upload Background Video"}`}
                         </button>
                         <p style={{ margin: "6px 0 0", fontSize: 11, color: "#999" }}>{isZh ? "支援 MP4, MOV, WebM（最大 50MB）" : "Supports MP4, MOV, WebM (max 50MB)"}</p>
-                      </>
+                        <p style={{ margin: "4px 0 0", fontSize: 11, color: '#667eea' }}>{isZh ? '或拖曳影片到此處' : 'or drag & drop video here'}</p>
+                      </div>
                     )}
                   </div>
 
@@ -1710,7 +1786,7 @@ export const SlideshowGenerator = () => {
                         <button onClick={() => { setIntroVideoUrl(null); setIntroVideoFileName(null); }} style={{ ...miniActionBtn, color: "#e53e3e", borderColor: "#fca5a5" }}>✕ {isZh ? "移除" : "Remove"}</button>
                       </div>
                     ) : (
-                      <>
+                      <div {...createDropHandler('intro-video', 'video/*', 50, (f) => handleVideoFile('intro', f))} style={{ padding: 12, border: '2px dashed #d0d5dd', borderRadius: 8, textAlign: 'center', transition: 'all 0.2s', ...dropZoneStyle('intro-video') }}>
                         <input ref={introVideoInputRef} type="file" accept="video/*" onChange={async (e) => {
                           const file = e.target.files?.[0];
                           if (!file) return;
@@ -1729,7 +1805,8 @@ export const SlideshowGenerator = () => {
                           {isUploadingIntroVideo ? "⏳ Uploading..." : `⏮️ ${isZh ? "上傳片頭影片" : "Upload Intro Video"}`}
                         </button>
                         <p style={{ margin: "6px 0 0", fontSize: 11, color: "#999" }}>{isZh ? "支援 MP4, MOV, WebM（最大 50MB）" : "Supports MP4, MOV, WebM (max 50MB)"}</p>
-                      </>
+                        <p style={{ margin: "4px 0 0", fontSize: 11, color: '#667eea' }}>{isZh ? '或拖曳影片到此處' : 'or drag & drop video here'}</p>
+                      </div>
                     )}
                   </div>
 
@@ -1747,7 +1824,7 @@ export const SlideshowGenerator = () => {
                         <button onClick={() => { setOutroVideoUrl(null); setOutroVideoFileName(null); }} style={{ ...miniActionBtn, color: "#e53e3e", borderColor: "#fca5a5" }}>✕ {isZh ? "移除" : "Remove"}</button>
                       </div>
                     ) : (
-                      <>
+                      <div {...createDropHandler('outro-video', 'video/*', 50, (f) => handleVideoFile('outro', f))} style={{ padding: 12, border: '2px dashed #d0d5dd', borderRadius: 8, textAlign: 'center', transition: 'all 0.2s', ...dropZoneStyle('outro-video') }}>
                         <input ref={outroVideoInputRef} type="file" accept="video/*" onChange={async (e) => {
                           const file = e.target.files?.[0];
                           if (!file) return;
@@ -1766,7 +1843,8 @@ export const SlideshowGenerator = () => {
                           {isUploadingOutroVideo ? "⏳ Uploading..." : `⏭️ ${isZh ? "上傳片尾影片" : "Upload Outro Video"}`}
                         </button>
                         <p style={{ margin: "6px 0 0", fontSize: 11, color: "#999" }}>{isZh ? "支援 MP4, MOV, WebM（最大 50MB）" : "Supports MP4, MOV, WebM (max 50MB)"}</p>
-                      </>
+                        <p style={{ margin: "4px 0 0", fontSize: 11, color: '#667eea' }}>{isZh ? '或拖曳影片到此處' : 'or drag & drop video here'}</p>
+                      </div>
                     )}
                   </div>
                 </div>
@@ -1786,13 +1864,14 @@ export const SlideshowGenerator = () => {
                       </div>
                     </div>
                   ) : (
-                    <>
+                    <div {...createDropHandler('audio', 'audio/*', 16, handleAudioFile)} style={{ padding: 12, border: '2px dashed #d0d5dd', borderRadius: 8, textAlign: 'center', transition: 'all 0.2s', ...dropZoneStyle('audio') }}>
                       <input ref={audioInputRef} type="file" accept="audio/*" onChange={handleAudioUpload} style={{ display: "none" }} />
                       <button onClick={() => audioInputRef.current?.click()} disabled={isUploadingAudio} style={{ ...buttonStyle, background: "#764ba2", fontSize: 13, padding: "8px 16px" }}>
                         {isUploadingAudio ? "⏳ Uploading..." : `🎵 ${t("slideshowUploadAudio") || "Upload Audio"}`}
                       </button>
                       <p style={{ margin: "6px 0 0", fontSize: 11, color: "#999" }}>{isZh ? "支援 MP3, WAV, OGG（最大 16MB）" : "Supports MP3, WAV, OGG (max 16MB)"}</p>
-                    </>
+                      <p style={{ margin: "4px 0 0", fontSize: 11, color: '#667eea' }}>{isZh ? '或拖曳音訊到此處' : 'or drag & drop audio here'}</p>
+                    </div>
                   )}
                 </div>
               </div>
@@ -1806,11 +1885,12 @@ export const SlideshowGenerator = () => {
                 <div style={{ fontSize: 11, color: "#999", marginBottom: 8, textAlign: "center" }}>
                   {aspectRatio === "4:5" ? "1080 × 1350px" : "1080 × 1920px"}
                 </div>
-                <div style={{
+                <div ref={previewContainerRef} style={{
                   background: backgroundColor, borderRadius: 12, overflow: "hidden",
                   aspectRatio: aspectRatio === "4:5" ? "4/5" : "9/16",
                   maxHeight: 450, position: "relative",
                   border: "1px solid #e0e0e0",
+                  cursor: isDraggingImage || isDraggingOverlay ? 'grabbing' : 'default',
                 }}>
                   {selectedImages.length > 0 && (
                     <>
@@ -1821,13 +1901,16 @@ export const SlideshowGenerator = () => {
                         <img
                           src={selectedImages[previewIndex % selectedImages.length]?.url}
                           alt=""
+                          onMouseDown={(e) => handlePreviewImageMouseDown(e, 'image')}
                           style={{
                             maxWidth: `${Math.round(imageScale * 100)}%`,
                             maxHeight: `${Math.round(imageScale * 100)}%`,
                             objectFit: "contain",
                             animation: "fadeIn 0.5s",
                             transform: `translate(${imageOffsetX}%, ${imageOffsetY}%)`,
-                            transition: "transform 0.2s, max-width 0.2s, max-height 0.2s",
+                            transition: isDraggingImage ? 'none' : "transform 0.2s, max-width 0.2s, max-height 0.2s",
+                            cursor: isDraggingImage ? 'grabbing' : 'grab',
+                            userSelect: 'none',
                           }}
                         />
                       </div>
@@ -1863,6 +1946,7 @@ export const SlideshowGenerator = () => {
                           <img
                             src={overlayImageUrl}
                             alt="overlay preview"
+                            onMouseDown={(e) => handlePreviewImageMouseDown(e, 'overlay')}
                             style={{
                               position: "absolute",
                               width: `${ovWidthPercent}%`,
@@ -1870,9 +1954,11 @@ export const SlideshowGenerator = () => {
                               left: `${50 + overlayImageX}%`,
                               top: `${50 + overlayImageY}%`,
                               transform: "translate(-50%, -50%)",
-                              pointerEvents: "none",
+                              pointerEvents: "auto",
                               objectFit: "contain",
-                              transition: "all 0.2s",
+                              transition: isDraggingOverlay ? 'none' : "all 0.2s",
+                              cursor: isDraggingOverlay ? 'grabbing' : 'grab',
+                              userSelect: 'none',
                             }}
                           />
                         );
