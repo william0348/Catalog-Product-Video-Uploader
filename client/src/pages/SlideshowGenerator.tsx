@@ -186,6 +186,12 @@ export const SlideshowGenerator = () => {
   const [fontFamily, setFontFamily] = useState<FontFamily>("noto-sans-cjk");
   const [fontColor, setFontColor] = useState("#FFFFFF");
 
+  // Background & Image settings
+  const [backgroundColor, setBackgroundColor] = useState("#FFFFFF");
+  const [imageScale, setImageScale] = useState(1.0);
+  const [imageOffsetX, setImageOffsetX] = useState(0);
+  const [imageOffsetY, setImageOffsetY] = useState(0);
+
   // Background music
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [audioFileName, setAudioFileName] = useState<string | null>(null);
@@ -559,6 +565,10 @@ export const SlideshowGenerator = () => {
         fontSize,
         fontFamily,
         fontColor,
+        backgroundColor,
+        imageScale,
+        imageOffsetX,
+        imageOffsetY,
         audioUrl: audioUrl || undefined,
         audioVolume: audioUrl ? audioVolume : undefined,
       });
@@ -683,6 +693,10 @@ export const SlideshowGenerator = () => {
           fontSize,
           fontFamily,
           fontColor,
+          backgroundColor,
+          imageScale,
+          imageOffsetX,
+          imageOffsetY,
           audioUrl: audioUrl || undefined,
           audioVolume: audioUrl ? audioVolume : undefined,
         });
@@ -1201,6 +1215,103 @@ export const SlideshowGenerator = () => {
                   />
                 </div>
 
+                {/* Background Color & Image Settings */}
+                <div style={{ padding: 16, background: "#f8f9ff", borderRadius: 10, border: "1px solid #e0e7ff", marginBottom: 16 }}>
+                  <h4 style={{ margin: "0 0 12px", fontSize: 14, fontWeight: 600, color: "#555" }}>
+                    🎨 {isZh ? "背景與圖片設定" : "Background & Image Settings"}
+                  </h4>
+
+                  {/* Background Color */}
+                  <div style={{ marginBottom: 14 }}>
+                    <label style={labelStyle}>{isZh ? "背景顏色" : "Background Color"}</label>
+                    <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+                      {["#FFFFFF", "#000000", "#F5F5F5", "#1A1A2E", "#E8E8E8", "#FFF8E7", "#F0F4FF", "#FFF0F0", "#F0FFF0", "#2D2D2D"].map((color) => (
+                        <div
+                          key={color}
+                          onClick={() => setBackgroundColor(color)}
+                          style={{
+                            width: 28, height: 28, borderRadius: 6, background: color, cursor: "pointer",
+                            border: backgroundColor === color ? "3px solid #667eea" : "2px solid #ddd",
+                            boxShadow: backgroundColor === color ? "0 0 0 2px rgba(102,126,234,0.3)" : "none",
+                          }}
+                        />
+                      ))}
+                      <input
+                        type="color"
+                        value={backgroundColor}
+                        onChange={(e) => setBackgroundColor(e.target.value)}
+                        style={{ width: 28, height: 28, border: "none", cursor: "pointer", borderRadius: 4, padding: 0 }}
+                        title={isZh ? "自訂顏色" : "Custom color"}
+                      />
+                      <span style={{ fontSize: 12, color: "#888", marginLeft: 4 }}>{backgroundColor}</span>
+                    </div>
+                  </div>
+
+                  {/* Image Scale */}
+                  <div style={{ marginBottom: 14 }}>
+                    <label style={labelStyle}>{isZh ? "圖片大小" : "Image Scale"}: {Math.round(imageScale * 100)}%</label>
+                    <input
+                      type="range" min={10} max={200} step={5}
+                      value={Math.round(imageScale * 100)}
+                      onChange={(e) => setImageScale(parseInt(e.target.value) / 100)}
+                      style={{ width: "100%" }}
+                    />
+                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: "#999" }}>
+                      <span>10%</span>
+                      <button onClick={() => setImageScale(1.0)} style={{ background: "none", border: "1px solid #ddd", borderRadius: 4, padding: "1px 8px", fontSize: 11, color: "#667eea", cursor: "pointer" }}>
+                        {isZh ? "重置" : "Reset"}
+                      </button>
+                      <span>200%</span>
+                    </div>
+                  </div>
+
+                  {/* Image Position X */}
+                  <div style={{ marginBottom: 14 }}>
+                    <label style={labelStyle}>{isZh ? "水平位置" : "Horizontal Position"}: {imageOffsetX > 0 ? "+" : ""}{imageOffsetX}%</label>
+                    <input
+                      type="range" min={-50} max={50} step={1}
+                      value={imageOffsetX}
+                      onChange={(e) => setImageOffsetX(parseInt(e.target.value))}
+                      style={{ width: "100%" }}
+                    />
+                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: "#999" }}>
+                      <span>← {isZh ? "左" : "Left"}</span>
+                      <button onClick={() => setImageOffsetX(0)} style={{ background: "none", border: "1px solid #ddd", borderRadius: 4, padding: "1px 8px", fontSize: 11, color: "#667eea", cursor: "pointer" }}>
+                        {isZh ? "置中" : "Center"}
+                      </button>
+                      <span>{isZh ? "右" : "Right"} →</span>
+                    </div>
+                  </div>
+
+                  {/* Image Position Y */}
+                  <div style={{ marginBottom: 4 }}>
+                    <label style={labelStyle}>{isZh ? "垂直位置" : "Vertical Position"}: {imageOffsetY > 0 ? "+" : ""}{imageOffsetY}%</label>
+                    <input
+                      type="range" min={-50} max={50} step={1}
+                      value={imageOffsetY}
+                      onChange={(e) => setImageOffsetY(parseInt(e.target.value))}
+                      style={{ width: "100%" }}
+                    />
+                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: "#999" }}>
+                      <span>↑ {isZh ? "上" : "Up"}</span>
+                      <button onClick={() => setImageOffsetY(0)} style={{ background: "none", border: "1px solid #ddd", borderRadius: 4, padding: "1px 8px", fontSize: 11, color: "#667eea", cursor: "pointer" }}>
+                        {isZh ? "置中" : "Center"}
+                      </button>
+                      <span>{isZh ? "下" : "Down"} ↓</span>
+                    </div>
+                  </div>
+
+                  {/* Reset All Button */}
+                  <div style={{ textAlign: "center", marginTop: 10 }}>
+                    <button
+                      onClick={() => { setImageScale(1.0); setImageOffsetX(0); setImageOffsetY(0); }}
+                      style={{ ...miniActionBtn, color: "#667eea", borderColor: "#667eea" }}
+                    >
+                      🔄 {isZh ? "重置圖片位置與大小" : "Reset Image Position & Scale"}
+                    </button>
+                  </div>
+                </div>
+
                 {/* Background Music */}
                 <div style={{ padding: 16, background: "#f8f9ff", borderRadius: 10, border: "1px solid #e0e7ff", marginBottom: 16 }}>
                   <h4 style={{ margin: "0 0 10px", fontSize: 14, fontWeight: 600, color: "#555" }}>
@@ -1232,18 +1343,35 @@ export const SlideshowGenerator = () => {
                 <h3 style={{ fontSize: 16, fontWeight: 600, color: "#333", marginBottom: 16 }}>
                   👁 {t("slideshowPreview") || "Preview"}
                 </h3>
+                {/* Resolution info */}
+                <div style={{ fontSize: 11, color: "#999", marginBottom: 8, textAlign: "center" }}>
+                  {aspectRatio === "4:5" ? "1080 × 1350px" : "1080 × 1920px"}
+                </div>
                 <div style={{
-                  background: "#000", borderRadius: 12, overflow: "hidden",
+                  background: backgroundColor, borderRadius: 12, overflow: "hidden",
                   aspectRatio: aspectRatio === "4:5" ? "4/5" : "9/16",
                   maxHeight: 450, position: "relative",
+                  border: "1px solid #e0e0e0",
                 }}>
                   {selectedImages.length > 0 && (
                     <>
-                      <img
-                        src={selectedImages[previewIndex % selectedImages.length]?.url}
-                        alt=""
-                        style={{ width: "100%", height: "100%", objectFit: "cover", animation: "fadeIn 0.5s" }}
-                      />
+                      <div style={{
+                        width: "100%", height: "100%", position: "relative", overflow: "hidden",
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                      }}>
+                        <img
+                          src={selectedImages[previewIndex % selectedImages.length]?.url}
+                          alt=""
+                          style={{
+                            maxWidth: `${Math.round(imageScale * 100)}%`,
+                            maxHeight: `${Math.round(imageScale * 100)}%`,
+                            objectFit: "contain",
+                            animation: "fadeIn 0.5s",
+                            transform: `translate(${imageOffsetX}%, ${imageOffsetY}%)`,
+                            transition: "transform 0.2s, max-width 0.2s, max-height 0.2s",
+                          }}
+                        />
+                      </div>
                       {/* Text overlay preview */}
                       {(showProductName || overlayText.trim()) && (
                         <div style={{

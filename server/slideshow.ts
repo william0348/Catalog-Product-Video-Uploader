@@ -57,6 +57,9 @@ export interface SlideshowOptions {
   fontColor?: string; // hex color e.g. "#FFFFFF"
   fontFamily?: string; // font id from AVAILABLE_FONTS
   backgroundColor?: string;
+  imageScale?: number; // 0.1 to 2.0, default 1.0 (100%)
+  imageOffsetX?: number; // -50 to 50 (percentage of canvas width), default 0
+  imageOffsetY?: number; // -50 to 50 (percentage of canvas height), default 0
   audioUrl?: string;
   audioVolume?: number;
 }
@@ -192,6 +195,9 @@ export async function generateSlideshow(options: SlideshowOptions): Promise<Buff
     fontColor,
     fontFamily,
     backgroundColor = "white",
+    imageScale = 1.0,
+    imageOffsetX = 0,
+    imageOffsetY = 0,
     audioUrl,
     audioVolume = 0.5,
   } = options;
@@ -217,14 +223,44 @@ export async function generateSlideshow(options: SlideshowOptions): Promise<Buff
       console.log(`[Slideshow] Downloaded image ${i + 1}/${images.length}`);
     }
 
-    // 2. Pre-process images: resize and pad to target resolution
-    console.log(`[Slideshow] Pre-processing images to ${resolution.width}x${resolution.height}...`);
+    // 2. Pre-process images: resize, scale, offset, and pad to target resolution
+    console.log(`[Slideshow] Pre-processing images to ${resolution.width}x${resolution.height} (scale=${imageScale}, offsetX=${imageOffsetX}%, offsetY=${imageOffsetY}%)...`);
     const processedPaths: string[] = [];
+    const clampedScale = Math.max(0.1, Math.min(2.0, imageScale));
+    const scaledW = Math.round(resolution.width * clampedScale);
+    const scaledH = Math.round(resolution.height * clampedScale);
+    // Offset in pixels (percentage of canvas size)
+    const offsetXPx = Math.round((imageOffsetX / 100) * resolution.width);
+    const offsetYPx = Math.round((imageOffsetY / 100) * resolution.height);
+    // Default center position
+    const defaultX = Math.round((resolution.width - scaledW) / 2);
+    const defaultY = Math.round((resolution.height - scaledH) / 2);
+    const finalX = defaultX + offsetXPx;
+    const finalY = defaultY + offsetYPx;
+
     for (let i = 0; i < imagePaths.length; i++) {
       const processedPath = path.join(tmpDir, `processed_${String(i).padStart(3, "0")}.png`);
+      // Step 2a: Create a solid background canvas
+      const bgPath = path.join(tmpDir, `bg_${String(i).padStart(3, "0")}.png`);
+      await runFFmpeg([
+        "-f", "lavfi",
+        "-i", `color=c=${backgroundColor}:s=${resolution.width}x${resolution.height}:d=1`,
+        "-frames:v", "1",
+        bgPath,
+      ]);
+      // Step 2b: Scale the image to fit within the scaled dimensions
+      const scaledImgPath = path.join(tmpDir, `scaled_${String(i).padStart(3, "0")}.png`);
       await runFFmpeg([
         "-i", imagePaths[i],
-        "-vf", `scale=${resolution.width}:${resolution.height}:force_original_aspect_ratio=decrease,pad=${resolution.width}:${resolution.height}:(ow-iw)/2:(oh-ih)/2:color=${backgroundColor},format=yuv420p`,
+        "-vf", `scale=${scaledW}:${scaledH}:force_original_aspect_ratio=decrease,pad=${scaledW}:${scaledH}:(ow-iw)/2:(oh-ih)/2:color=0x00000000`,
+        "-frames:v", "1",
+        scaledImgPath,
+      ]);
+      // Step 2c: Overlay the scaled image onto the background at the offset position
+      await runFFmpeg([
+        "-i", bgPath,
+        "-i", scaledImgPath,
+        "-filter_complex", `[0:v][1:v]overlay=${finalX}:${finalY},format=yuv420p`,
         "-frames:v", "1",
         processedPath,
       ]);

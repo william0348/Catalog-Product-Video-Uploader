@@ -424,6 +424,9 @@ export const appRouter = router({
         fontColor: z.string().optional(),
         fontFamily: z.string().optional(),
         backgroundColor: z.string().optional(),
+        imageScale: z.number().min(0.1).max(2.0).optional(),
+        imageOffsetX: z.number().min(-50).max(50).optional(),
+        imageOffsetY: z.number().min(-50).max(50).optional(),
         audioUrl: z.string().url().optional(),
         audioVolume: z.number().min(0).max(1).optional(),
       }))
