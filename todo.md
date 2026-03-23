@@ -113,3 +113,7 @@
 - [x] 新增批次生成功能（支援全選、批次 Drive 上傳、批次 Catalog 更新）
 - [x] 更新 i18n 翻譯（中英文完整）
 - [x] 撰寫測試並驗證（47/47 passed）
+
+## Phase 19: 重新設計網站圖示
+- [x] 設計新的 site icon / favicon（播放鍵+上傳箭頭，藍紫漸層）
+- [x] 整合到專案中（index.html, AppFooter, MainApp header）

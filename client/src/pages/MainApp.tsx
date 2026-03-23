@@ -997,7 +997,7 @@ export const MainApp = () => {
                 <button onClick={resetAndGoBack} className="back-nav-button" style={{ marginRight: '8px' }}>
                     ←
                 </button>
-                <img src="./lion_logo.png" alt="Lion Logo" className="header-logo" />
+                <img src="https://d2xsxph8kpxj0f.cloudfront.net/310519663317876169/nN7fRv522pr6qmVvUdeAQB/cpv-favicon-mm647eWJko9itpHnxyFRzi.png" alt="CPV Video Uploader" className="header-logo" />
                 <div className="header-title-group">
                     <h1>{catalogName}</h1>
                     <p className="subtle-text-header">{t('catalogIdHeader')}: {catalogId}</p>
