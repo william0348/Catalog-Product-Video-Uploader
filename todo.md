@@ -244,3 +244,10 @@
 ## Phase 33: 選擇商品組合後自動載入商品
 - [x] 選擇商品組合後自動觸發 handleFetchProducts（useEffect 監聽 selectedProductSetId）
 - [x] 測試通過（60/60 passed）
+
+## Phase 34: 預覽畫面加入 IG Reels Organic UI 元素
+- [x] 研究 IG Reels UI 佈局（Reels icon、互動按鈕、用戶名、CTA 等）
+- [x] 建立 ReelsOverlay 組件（左上 Reels 文字+相機圖標、右側 Like/Comment/Share/Save/More 按鈕、音樂光碟）
+- [x] 底部元素：Sponsored 標籤、用戶名+Follow、描述文字、音樂資訊、Shop Now CTA 按鈕
+- [x] 新增 Reels 開關按鈕（Instagram 漸層色）可切換顯示/隱藏 overlay
+- [x] 測試通過（60/60 passed）
