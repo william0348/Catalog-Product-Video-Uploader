@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useContext, useMemo, useCallback, useRef } from "react";
+import { useState, useEffect, useContext, useRef, useMemo, useCallback } from "react";
 import { LanguageContext } from "@/contexts/LanguageContext";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import { AppFooter } from "@/components/AppFooter";
@@ -22,6 +22,7 @@ import { getDriveFolderId } from "@/lib/google";
 declare const google: any;
 declare const gapi: any;
 
+// ===== Types =====
 interface CatalogProduct {
   id: string;
   retailerId: string;
@@ -40,8 +41,9 @@ interface SelectedImage {
 type TransitionType = "fade" | "slideleft" | "slideright" | "slideup" | "slidedown" | "wipeleft" | "wiperight" | "none";
 type AspectRatio = "4:5" | "9:16";
 type TextPosition = "top" | "center" | "bottom";
+type FontFamily = "noto-sans-cjk" | "noto-serif-cjk" | "dejavu-sans" | "liberation-sans";
 
-// Helper: convert file to base64
+// ===== Helpers =====
 const fileToBase64 = (file: File): Promise<string> => {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -55,22 +57,70 @@ const fileToBase64 = (file: File): Promise<string> => {
   });
 };
 
-// Helper: tRPC mutation call
 const trpcMutate = async (path: string, input: any): Promise<any> => {
-  const response = await fetch(`/api/trpc/${path}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    credentials: "include",
-    body: JSON.stringify({ json: input }),
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", `/api/trpc/${path}`, true);
+    xhr.setRequestHeader("Content-Type", "application/json");
+    xhr.withCredentials = true;
+    xhr.onload = () => {
+      try {
+        const data = JSON.parse(xhr.responseText);
+        if (data?.error) {
+          reject(new Error(data.error?.json?.message || "API error"));
+        } else {
+          resolve(data?.result?.data?.json);
+        }
+      } catch (e) {
+        reject(new Error("Failed to parse response"));
+      }
+    };
+    xhr.onerror = () => reject(new Error("Network error"));
+    xhr.timeout = 300000; // 5 min for video generation
+    xhr.ontimeout = () => reject(new Error("Request timeout"));
+    xhr.send(JSON.stringify({ json: input }));
   });
-  const data = await response.json();
-  if (data?.error) {
-    throw new Error(data.error?.json?.message || "API error");
-  }
-  return data?.result?.data?.json;
 };
 
-// ===== Batch Generation Types =====
+const trpcQuery = (path: string, input: any): Promise<any> => {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    const url = `/api/trpc/${path}?input=${encodeURIComponent(JSON.stringify({ json: input }))}`;
+    xhr.open("GET", url, true);
+    xhr.withCredentials = true;
+    xhr.onload = () => {
+      try {
+        const data = JSON.parse(xhr.responseText);
+        if (data?.error) {
+          reject(new Error(data.error?.json?.message || "API error"));
+        } else {
+          resolve(data?.result?.data?.json);
+        }
+      } catch (e) {
+        reject(new Error("Failed to parse response"));
+      }
+    };
+    xhr.onerror = () => reject(new Error("Network error"));
+    xhr.timeout = 60000;
+    xhr.ontimeout = () => reject(new Error("Request timeout"));
+    xhr.send();
+  });
+};
+
+// ===== Font options =====
+const FONT_OPTIONS: { value: FontFamily; label: string; labelZh: string }[] = [
+  { value: "noto-sans-cjk", label: "Noto Sans CJK (Default)", labelZh: "Noto Sans CJK（預設）" },
+  { value: "noto-serif-cjk", label: "Noto Serif CJK (Serif)", labelZh: "Noto Serif CJK（襯線）" },
+  { value: "dejavu-sans", label: "DejaVu Sans", labelZh: "DejaVu Sans" },
+  { value: "liberation-sans", label: "Liberation Sans", labelZh: "Liberation Sans" },
+];
+
+const PRESET_COLORS = [
+  "#FFFFFF", "#000000", "#FF0000", "#FF6600", "#FFD700",
+  "#00CC00", "#0066FF", "#9933FF", "#FF69B4", "#00CED1",
+];
+
+// ===== Batch Types =====
 interface BatchItem {
   product: CatalogProduct;
   status: "pending" | "generating" | "uploading" | "done" | "error";
@@ -79,8 +129,22 @@ interface BatchItem {
   error?: string;
 }
 
+// ===== Transition options =====
+const TRANSITIONS: { value: TransitionType; label: string; labelZh: string }[] = [
+  { value: "fade", label: "Fade", labelZh: "淡入淡出" },
+  { value: "slideleft", label: "Slide Left", labelZh: "向左滑動" },
+  { value: "slideright", label: "Slide Right", labelZh: "向右滑動" },
+  { value: "slideup", label: "Slide Up", labelZh: "向上滑動" },
+  { value: "slidedown", label: "Slide Down", labelZh: "向下滑動" },
+  { value: "wipeleft", label: "Wipe Left", labelZh: "向左擦除" },
+  { value: "wiperight", label: "Wipe Right", labelZh: "向右擦除" },
+  { value: "none", label: "None (Cut)", labelZh: "無（直接切換）" },
+];
+
+// ===== Main Component =====
 export const SlideshowGenerator = () => {
-  const { t } = useContext(LanguageContext);
+  const { t, language } = useContext(LanguageContext);
+  const isZh = language === "zh-TW";
 
   // Auth state
   const [userEmail, setUserEmail] = useState<string | null>(null);
@@ -88,7 +152,7 @@ export const SlideshowGenerator = () => {
   const [googleTokenClient, setGoogleTokenClient] = useState<any>(null);
   const [isGapiReady, setIsGapiReady] = useState(false);
 
-  // Company state (shared with MainApp)
+  // Company state
   const [userCompanies, setUserCompanies] = useState<CompanyInfo[]>([]);
   const [selectedCompanyId, setSelectedCompanyId] = useState<number | null>(getSelectedCompany());
   const [configuredCatalogs, setConfiguredCatalogs] = useState<CatalogConfig[]>([]);
@@ -102,7 +166,8 @@ export const SlideshowGenerator = () => {
   const [productError, setProductError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
 
-  // Selected images for slideshow
+  // Selected products (for batch) and images (for single)
+  const [selectedProductIds, setSelectedProductIds] = useState<Set<string>>(new Set());
   const [selectedImages, setSelectedImages] = useState<SelectedImage[]>([]);
 
   // Manual image upload
@@ -118,6 +183,8 @@ export const SlideshowGenerator = () => {
   const [showProductName, setShowProductName] = useState(false);
   const [textPosition, setTextPosition] = useState<TextPosition>("bottom");
   const [fontSize, setFontSize] = useState(40);
+  const [fontFamily, setFontFamily] = useState<FontFamily>("noto-sans-cjk");
+  const [fontColor, setFontColor] = useState("#FFFFFF");
 
   // Background music
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
@@ -150,64 +217,46 @@ export const SlideshowGenerator = () => {
   const [isPreviewPlaying, setIsPreviewPlaying] = useState(true);
 
   // Batch generation state
-  const [batchMode, setBatchMode] = useState(false);
   const [batchItems, setBatchItems] = useState<BatchItem[]>([]);
   const [isBatchRunning, setIsBatchRunning] = useState(false);
   const [batchUploadToDrive, setBatchUploadToDrive] = useState(false);
   const [batchUpdateCatalog, setBatchUpdateCatalog] = useState(false);
   const batchAbortRef = useRef(false);
 
-  // ===== Load settings on mount — direct fetch to avoid any caching issues =====
+  // Expanded product in list (to show individual images)
+  const [expandedProductId, setExpandedProductId] = useState<string | null>(null);
+
+  // ===== Load settings on mount =====
   useEffect(() => {
-    // Use XMLHttpRequest instead of fetch — fetch has issues in some embedded environments
     const xhr = new XMLHttpRequest();
-    xhr.open('GET', '/api/trpc/settings.getAll', true);
+    xhr.open("GET", "/api/trpc/settings.getAll", true);
     xhr.withCredentials = true;
-    xhr.onload = function() {
+    xhr.onload = function () {
       try {
         const data = JSON.parse(xhr.responseText);
         const result = data?.result?.data?.json;
         if (result) {
           const catalogs = result.catalogs ? JSON.parse(result.catalogs) : [];
-          const token = result.facebookAccessToken || '';
+          const token = result.facebookAccessToken || "";
           setConfiguredCatalogs(catalogs);
           setFbAccessToken(token);
         }
       } catch (e) {
-        console.error('[Slideshow] Failed to parse settings:', e);
-        // Fallback to localStorage
+        console.error("[Slideshow] Failed to parse settings:", e);
         const localSettings = loadSettings();
         setConfiguredCatalogs(localSettings.catalogs);
         setFbAccessToken(localSettings.facebookAccessToken);
       }
       setIsLoadingSettings(false);
     };
-    xhr.onerror = function() {
-      console.error('[Slideshow] XHR error loading settings');
-      // Fallback to company settings or localStorage
-      const savedCompanyId = getSelectedCompany();
-      if (savedCompanyId) {
-        loadCompanySettings(savedCompanyId)
-          .then(companySettings => {
-            setConfiguredCatalogs(companySettings.catalogs);
-            setFbAccessToken(companySettings.facebookAccessToken);
-          })
-          .catch(() => {
-            const localSettings = loadSettings();
-            setConfiguredCatalogs(localSettings.catalogs);
-            setFbAccessToken(localSettings.facebookAccessToken);
-          })
-          .finally(() => setIsLoadingSettings(false));
-      } else {
-        const localSettings = loadSettings();
-        setConfiguredCatalogs(localSettings.catalogs);
-        setFbAccessToken(localSettings.facebookAccessToken);
-        setIsLoadingSettings(false);
-      }
+    xhr.onerror = function () {
+      const localSettings = loadSettings();
+      setConfiguredCatalogs(localSettings.catalogs);
+      setFbAccessToken(localSettings.facebookAccessToken);
+      setIsLoadingSettings(false);
     };
     xhr.timeout = 15000;
-    xhr.ontimeout = function() {
-      console.error('[Slideshow] XHR timeout loading settings');
+    xhr.ontimeout = function () {
       const localSettings = loadSettings();
       setConfiguredCatalogs(localSettings.catalogs);
       setFbAccessToken(localSettings.facebookAccessToken);
@@ -223,7 +272,6 @@ export const SlideshowGenerator = () => {
       setGoogleAccessToken(savedToken);
       fetchUserEmail(savedToken);
     }
-
     const initGoogleAuth = () => {
       if (typeof google !== "undefined" && google.accounts) {
         const client = google.accounts.oauth2.initTokenClient({
@@ -240,7 +288,6 @@ export const SlideshowGenerator = () => {
         setGoogleTokenClient(client);
       }
     };
-
     if (typeof google !== "undefined") {
       initGoogleAuth();
     } else {
@@ -254,16 +301,12 @@ export const SlideshowGenerator = () => {
     }
   }, []);
 
-  // Initialize gapi client for Drive uploads
   useEffect(() => {
     const initGapi = () => {
       if (typeof gapi !== "undefined" && gapi.client) {
-        gapi.client.load("drive", "v3").then(() => {
-          setIsGapiReady(true);
-        });
+        gapi.client.load("drive", "v3").then(() => setIsGapiReady(true));
       }
     };
-
     if (typeof gapi !== "undefined" && gapi.client) {
       initGapi();
     } else {
@@ -283,15 +326,12 @@ export const SlideshowGenerator = () => {
         headers: { Authorization: `Bearer ${token}` },
       });
       const data = await res.json();
-      if (data.email) {
-        setUserEmail(data.email);
-      }
+      if (data.email) setUserEmail(data.email);
     } catch (e) {
       console.error("Failed to fetch user email:", e);
     }
   };
 
-  // ===== Load companies when email is available =====
   useEffect(() => {
     if (!userEmail) return;
     (async () => {
@@ -304,7 +344,6 @@ export const SlideshowGenerator = () => {
     })();
   }, [userEmail]);
 
-  // ===== Load company settings when company changes (from user selection) =====
   useEffect(() => {
     if (!selectedCompanyId) return;
     (async () => {
@@ -323,17 +362,17 @@ export const SlideshowGenerator = () => {
     setIsLoadingProducts(true);
     setProductError(null);
     setProducts([]);
+    setSelectedProductIds(new Set());
+    setSelectedImages([]);
 
     try {
-      const url = `/api/trpc/slideshow.fetchProducts?input=${encodeURIComponent(
-        JSON.stringify({ json: { catalogId: selectedCatalogId, accessToken: fbAccessToken, limit: 100 } })
-      )}`;
-      const res = await fetch(url, { credentials: "include" });
-      const data = await res.json();
-      if (data?.result?.data?.json) {
-        setProducts(data.result.data.json);
-      } else if (data?.error) {
-        setProductError(data.error?.json?.message || "Failed to fetch products");
+      const result = await trpcQuery("slideshow.fetchProducts", {
+        catalogId: selectedCatalogId,
+        accessToken: fbAccessToken,
+        limit: 100,
+      });
+      if (result) {
+        setProducts(result);
       }
     } catch (e: any) {
       setProductError(e.message || "Failed to fetch products");
@@ -347,28 +386,56 @@ export const SlideshowGenerator = () => {
     if (!searchTerm.trim()) return products;
     const term = searchTerm.toLowerCase();
     return products.filter(
-      (p) =>
-        p.name.toLowerCase().includes(term) ||
-        p.retailerId.toLowerCase().includes(term)
+      (p) => p.name.toLowerCase().includes(term) || p.retailerId.toLowerCase().includes(term)
     );
   }, [products, searchTerm]);
 
-  // ===== Toggle image selection =====
-  const toggleImageSelection = (product: CatalogProduct, imageUrl: string) => {
-    const exists = selectedImages.find((img) => img.url === imageUrl);
-    if (exists) {
-      setSelectedImages((prev) => prev.filter((img) => img.url !== imageUrl));
-    } else {
-      setSelectedImages((prev) => [
-        ...prev,
-        { url: imageUrl, label: product.name, productId: product.id },
-      ]);
-    }
+  // ===== Product selection (toggle) =====
+  const toggleProductSelection = (product: CatalogProduct) => {
+    setSelectedProductIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(product.id)) {
+        next.delete(product.id);
+        // Remove all images from this product
+        setSelectedImages((imgs) => imgs.filter((img) => img.productId !== product.id));
+      } else {
+        next.add(product.id);
+        // Add all images from this product
+        const allImages = [product.imageUrl, ...product.additionalImages].filter(Boolean);
+        const newImgs: SelectedImage[] = allImages.map((url, idx) => ({
+          url,
+          label: product.name,
+          productId: product.id,
+        }));
+        setSelectedImages((imgs) => {
+          // Remove any existing images from this product first, then add all
+          const filtered = imgs.filter((img) => img.productId !== product.id);
+          return [...filtered, ...newImgs];
+        });
+      }
+      return next;
+    });
   };
 
-  const isImageSelected = (imageUrl: string) =>
-    selectedImages.some((img) => img.url === imageUrl);
+  const selectAllProducts = () => {
+    const allIds = new Set(filteredProducts.map((p) => p.id));
+    setSelectedProductIds(allIds);
+    const allImages: SelectedImage[] = [];
+    for (const product of filteredProducts) {
+      const imgs = [product.imageUrl, ...product.additionalImages].filter(Boolean);
+      for (const url of imgs) {
+        allImages.push({ url, label: product.name, productId: product.id });
+      }
+    }
+    setSelectedImages(allImages);
+  };
 
+  const deselectAllProducts = () => {
+    setSelectedProductIds(new Set());
+    setSelectedImages((imgs) => imgs.filter((img) => img.isCustom));
+  };
+
+  // ===== Move image in selected list =====
   const moveImage = (index: number, direction: "up" | "down") => {
     const newImages = [...selectedImages];
     const targetIndex = direction === "up" ? index - 1 : index + 1;
@@ -381,25 +448,10 @@ export const SlideshowGenerator = () => {
     setSelectedImages((prev) => prev.filter((_, i) => i !== index));
   };
 
-  // Select all images from a product
-  const selectAllFromProduct = (product: CatalogProduct) => {
-    const allImages = [product.imageUrl, ...product.additionalImages].filter(Boolean);
-    const newSelections: SelectedImage[] = [];
-    for (const imgUrl of allImages) {
-      if (!selectedImages.some((img) => img.url === imgUrl)) {
-        newSelections.push({ url: imgUrl, label: product.name, productId: product.id });
-      }
-    }
-    if (newSelections.length > 0) {
-      setSelectedImages((prev) => [...prev, ...newSelections]);
-    }
-  };
-
   // ===== Manual Image Upload =====
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
-
     setIsUploadingImage(true);
     try {
       for (let i = 0; i < files.length; i++) {
@@ -409,23 +461,16 @@ export const SlideshowGenerator = () => {
           alert(t("slideshowImageTooLarge") || "Image too large. Max 10MB.");
           continue;
         }
-
         const base64 = await fileToBase64(file);
         const result = await trpcMutate("slideshow.uploadImage", {
           base64Data: base64,
           fileName: file.name,
           mimeType: file.type,
         });
-
         if (result?.url) {
           setSelectedImages((prev) => [
             ...prev,
-            {
-              url: result.url,
-              label: file.name.replace(/\.[^/.]+$/, ""),
-              productId: `custom-${Date.now()}-${i}`,
-              isCustom: true,
-            },
+            { url: result.url, label: file.name.replace(/\.[^/.]+$/, ""), productId: `custom-${Date.now()}-${i}`, isCustom: true },
           ]);
         }
       }
@@ -441,7 +486,6 @@ export const SlideshowGenerator = () => {
   const handleAudioUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-
     if (!file.type.startsWith("audio/")) {
       alert(t("slideshowInvalidAudio") || "Please select an audio file (MP3, WAV, etc.)");
       return;
@@ -450,7 +494,6 @@ export const SlideshowGenerator = () => {
       alert(t("slideshowAudioTooLarge") || "Audio file too large. Max 16MB.");
       return;
     }
-
     setIsUploadingAudio(true);
     try {
       const base64 = await fileToBase64(file);
@@ -459,7 +502,6 @@ export const SlideshowGenerator = () => {
         fileName: file.name,
         mimeType: file.type,
       });
-
       if (result?.url) {
         setAudioUrl(result.url);
         setAudioFileName(file.name);
@@ -486,12 +528,11 @@ export const SlideshowGenerator = () => {
     return () => clearInterval(interval);
   }, [isPreviewPlaying, selectedImages.length, durationPerImage, currentStep]);
 
-  // Reset preview index when images change
   useEffect(() => {
     setPreviewIndex(0);
   }, [selectedImages.length]);
 
-  // ===== Generate slideshow (single) =====
+  // ===== Generate slideshow (single product) =====
   const handleGenerate = async () => {
     if (selectedImages.length === 0) return;
     setIsGenerating(true);
@@ -503,39 +544,30 @@ export const SlideshowGenerator = () => {
     setCatalogUpdateError(null);
 
     try {
-      const payload = {
-        json: {
-          images: selectedImages.map((img) => ({
-            url: img.url,
-            label: showProductName ? img.label : undefined,
-          })),
-          aspectRatio,
-          durationPerImage,
-          transition,
-          transitionDuration,
-          overlayText: overlayText.trim() || undefined,
-          showProductName,
-          textPosition,
-          fontSize,
-          audioUrl: audioUrl || undefined,
-          audioVolume: audioUrl ? audioVolume : undefined,
-        },
-      };
-
-      const res = await fetch("/api/trpc/slideshow.generate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify(payload),
+      const result = await trpcMutate("slideshow.generate", {
+        images: selectedImages.map((img) => ({
+          url: img.url,
+          label: showProductName ? img.label : undefined,
+        })),
+        aspectRatio,
+        durationPerImage,
+        transition,
+        transitionDuration,
+        overlayText: overlayText.trim() || undefined,
+        showProductName,
+        textPosition,
+        fontSize,
+        fontFamily,
+        fontColor,
+        audioUrl: audioUrl || undefined,
+        audioVolume: audioUrl ? audioVolume : undefined,
       });
 
-      const data = await res.json();
-      if (data?.result?.data?.json?.success) {
-        setGeneratedVideoUrl(data.result.data.json.videoUrl);
+      if (result?.success) {
+        setGeneratedVideoUrl(result.videoUrl);
         setCurrentStep(3);
       } else {
-        const errMsg = data?.error?.json?.message || "Failed to generate video";
-        setGenerationError(errMsg);
+        setGenerationError("Failed to generate video");
         setCurrentStep(3);
       }
     } catch (e: any) {
@@ -549,59 +581,35 @@ export const SlideshowGenerator = () => {
   // ===== Upload to Google Drive =====
   const handleUploadToDrive = async () => {
     if (!generatedVideoUrl || !googleAccessToken) return;
-
     setIsUploadingToDrive(true);
     setDriveUploadError(null);
     setDriveUploadResult(null);
-
     try {
       gapi.client.setToken({ access_token: googleAccessToken });
       const folderId = await getDriveFolderId();
-
       const videoResponse = await fetch(generatedVideoUrl);
       const videoBlob = await videoResponse.blob();
-
       const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, "");
       const suffix = Math.random().toString(36).substring(2, 6);
       const fileName = `slideshow_${selectedCatalogId || "custom"}_${dateStr}_${suffix}.mp4`;
-
       const metadata = { name: fileName, mimeType: "video/mp4", parents: [folderId] };
-
       const initRes = await fetch("https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable", {
         method: "POST",
-        headers: {
-          Authorization: `Bearer ${googleAccessToken}`,
-          "Content-Type": "application/json; charset=UTF-8",
-        },
+        headers: { Authorization: `Bearer ${googleAccessToken}`, "Content-Type": "application/json; charset=UTF-8" },
         body: JSON.stringify(metadata),
       });
-
       if (!initRes.ok) throw new Error(`Failed to initiate upload: ${initRes.statusText}`);
-
       const location = initRes.headers.get("Location");
       if (!location) throw new Error("Could not get resumable upload URL.");
-
-      const uploadRes = await fetch(location, {
-        method: "PUT",
-        headers: { "Content-Type": "video/mp4" },
-        body: videoBlob,
-      });
-
+      const uploadRes = await fetch(location, { method: "PUT", headers: { "Content-Type": "video/mp4" }, body: videoBlob });
       if (!uploadRes.ok) throw new Error(`Upload failed: ${uploadRes.statusText}`);
-
       const uploadedFile = await uploadRes.json();
-
-      await gapi.client.drive.permissions.create({
-        fileId: uploadedFile.id,
-        resource: { role: "reader", type: "anyone" },
-      });
-
+      await gapi.client.drive.permissions.create({ fileId: uploadedFile.id, resource: { role: "reader", type: "anyone" } });
       const downloadLink = `https://drive.google.com/uc?export=download&id=${uploadedFile.id}`;
       const embedLink = `https://drive.google.com/file/d/${uploadedFile.id}/preview`;
-
       setDriveUploadResult({ downloadLink, embedLink });
     } catch (e: any) {
-      setDriveUploadError(e.message || "Failed to upload to Google Drive");
+      setDriveUploadError(e.message || "Failed to upload to Drive");
     } finally {
       setIsUploadingToDrive(false);
     }
@@ -609,28 +617,21 @@ export const SlideshowGenerator = () => {
 
   // ===== Update Catalog Video =====
   const handleUpdateCatalog = async () => {
-    if (!generatedVideoUrl || !fbAccessToken || !selectedCatalogId || !selectedProductForCatalog) return;
-
+    if (!driveUploadResult?.downloadLink || !selectedProductForCatalog || !selectedCatalogId || !fbAccessToken) return;
     setIsUpdatingCatalog(true);
     setCatalogUpdateError(null);
     setCatalogUpdateResult(null);
-
     try {
-      const videoUrlForCatalog = driveUploadResult?.downloadLink || generatedVideoUrl;
-
       const result = await trpcMutate("slideshow.updateCatalogVideo", {
         catalogId: selectedCatalogId,
         accessToken: fbAccessToken,
-        retailerId: selectedProductForCatalog,
-        videoUrl: videoUrlForCatalog,
+        productRetailerId: selectedProductForCatalog,
+        videoUrl: driveUploadResult.downloadLink,
       });
-
       if (result?.success) {
-        setCatalogUpdateResult(
-          t("slideshowCatalogUpdateSuccess") || `Catalog updated successfully for product ${selectedProductForCatalog}!`
-        );
+        setCatalogUpdateResult(t("slideshowCatalogUpdateSuccess") || "Catalog updated successfully!");
       } else {
-        setCatalogUpdateError(result?.error || "Failed to update catalog");
+        setCatalogUpdateError(result?.message || "Failed to update catalog");
       }
     } catch (e: any) {
       setCatalogUpdateError(e.message || "Failed to update catalog");
@@ -639,1553 +640,350 @@ export const SlideshowGenerator = () => {
     }
   };
 
-  // ===== Upload a single video to Drive (for batch) =====
-  const uploadVideoToDrive = async (videoUrl: string, productName: string): Promise<string | null> => {
-    if (!googleAccessToken) return null;
-    try {
-      gapi.client.setToken({ access_token: googleAccessToken });
-      const folderId = await getDriveFolderId();
-      const videoResponse = await fetch(videoUrl);
-      const videoBlob = await videoResponse.blob();
-      const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, "");
-      const suffix = Math.random().toString(36).substring(2, 6);
-      const safeName = productName.replace(/[^a-zA-Z0-9_\-\u4e00-\u9fff]/g, "_").substring(0, 50);
-      const fileName = `slideshow_${safeName}_${dateStr}_${suffix}.mp4`;
-      const metadata = { name: fileName, mimeType: "video/mp4", parents: [folderId] };
-
-      const initRes = await fetch("https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${googleAccessToken}`,
-          "Content-Type": "application/json; charset=UTF-8",
-        },
-        body: JSON.stringify(metadata),
-      });
-      if (!initRes.ok) return null;
-      const location = initRes.headers.get("Location");
-      if (!location) return null;
-
-      const uploadRes = await fetch(location, {
-        method: "PUT",
-        headers: { "Content-Type": "video/mp4" },
-        body: videoBlob,
-      });
-      if (!uploadRes.ok) return null;
-      const uploadedFile = await uploadRes.json();
-
-      await gapi.client.drive.permissions.create({
-        fileId: uploadedFile.id,
-        resource: { role: "reader", type: "anyone" },
-      });
-
-      return `https://drive.google.com/uc?export=download&id=${uploadedFile.id}`;
-    } catch {
-      return null;
-    }
-  };
-
   // ===== Batch Generation =====
-  const handleBatchGenerate = async () => {
-    if (batchItems.length === 0) return;
-    setIsBatchRunning(true);
-    batchAbortRef.current = false;
+  const selectedProducts = useMemo(() => {
+    return products.filter((p) => selectedProductIds.has(p.id));
+  }, [products, selectedProductIds]);
 
-    for (let i = 0; i < batchItems.length; i++) {
+  const batchStats = useMemo(() => {
+    const total = batchItems.length;
+    const done = batchItems.filter((b) => b.status === "done").length;
+    const error = batchItems.filter((b) => b.status === "error").length;
+    const running = batchItems.filter((b) => b.status === "generating" || b.status === "uploading").length;
+    return { total, done, error, running };
+  }, [batchItems]);
+
+  const handleBatchGenerate = async () => {
+    if (selectedProducts.length === 0) return;
+    batchAbortRef.current = false;
+    setIsBatchRunning(true);
+
+    const items: BatchItem[] = selectedProducts.map((p) => ({ product: p, status: "pending" as const }));
+    setBatchItems(items);
+
+    for (let i = 0; i < items.length; i++) {
       if (batchAbortRef.current) break;
 
-      const item = batchItems[i];
-      if (item.status === "done") continue;
-
-      // Update status to generating
-      setBatchItems(prev => prev.map((b, idx) => idx === i ? { ...b, status: "generating" as const, error: undefined } : b));
+      setBatchItems((prev) => prev.map((item, idx) => (idx === i ? { ...item, status: "generating" } : item)));
 
       try {
-        // Collect all images for this product
-        const productImages = [item.product.imageUrl, ...item.product.additionalImages].filter(Boolean);
-
-        const payload = {
-          json: {
-            images: productImages.map((url) => ({
-              url,
-              label: showProductName ? item.product.name : undefined,
-            })),
-            aspectRatio,
-            durationPerImage,
-            transition,
-            transitionDuration,
-            overlayText: overlayText.trim() || undefined,
-            showProductName,
-            textPosition,
-            fontSize,
-            audioUrl: audioUrl || undefined,
-            audioVolume: audioUrl ? audioVolume : undefined,
-          },
-        };
-
-        const res = await fetch("/api/trpc/slideshow.generate", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          credentials: "include",
-          body: JSON.stringify(payload),
+        const productImages = [items[i].product.imageUrl, ...items[i].product.additionalImages].filter(Boolean);
+        const result = await trpcMutate("slideshow.generate", {
+          images: productImages.map((url) => ({
+            url,
+            label: showProductName ? items[i].product.name : undefined,
+          })),
+          aspectRatio,
+          durationPerImage,
+          transition,
+          transitionDuration,
+          overlayText: overlayText.trim() || undefined,
+          showProductName,
+          textPosition,
+          fontSize,
+          fontFamily,
+          fontColor,
+          audioUrl: audioUrl || undefined,
+          audioVolume: audioUrl ? audioVolume : undefined,
         });
 
-        const data = await res.json();
-        if (!data?.result?.data?.json?.success) {
-          throw new Error(data?.error?.json?.message || "Generation failed");
-        }
+        if (!result?.success) throw new Error("Generation failed");
 
-        const videoUrl = data.result.data.json.videoUrl;
         let driveLink: string | undefined;
 
         // Upload to Drive if enabled
         if (batchUploadToDrive && googleAccessToken) {
-          setBatchItems(prev => prev.map((b, idx) => idx === i ? { ...b, status: "uploading" as const, videoUrl } : b));
-          const link = await uploadVideoToDrive(videoUrl, item.product.name);
-          if (link) driveLink = link;
-        }
-
-        // Update catalog if enabled
-        if (batchUpdateCatalog && fbAccessToken && selectedCatalogId && item.product.retailerId) {
-          const catalogVideoUrl = driveLink || videoUrl;
+          setBatchItems((prev) => prev.map((item, idx) => (idx === i ? { ...item, status: "uploading" } : item)));
           try {
-            await trpcMutate("slideshow.updateCatalogVideo", {
-              catalogId: selectedCatalogId,
-              accessToken: fbAccessToken,
-              retailerId: item.product.retailerId,
-              videoUrl: catalogVideoUrl,
+            gapi.client.setToken({ access_token: googleAccessToken });
+            const folderId = await getDriveFolderId();
+            const videoResponse = await fetch(result.videoUrl);
+            const videoBlob = await videoResponse.blob();
+            const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, "");
+            const suffix = Math.random().toString(36).substring(2, 6);
+            const fileName = `slideshow_${items[i].product.retailerId}_${dateStr}_${suffix}.mp4`;
+            const metadata = { name: fileName, mimeType: "video/mp4", parents: [folderId] };
+            const initRes = await fetch("https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable", {
+              method: "POST",
+              headers: { Authorization: `Bearer ${googleAccessToken}`, "Content-Type": "application/json; charset=UTF-8" },
+              body: JSON.stringify(metadata),
             });
-          } catch (e) {
-            console.warn(`[Batch] Catalog update failed for ${item.product.retailerId}:`, e);
+            if (initRes.ok) {
+              const location = initRes.headers.get("Location");
+              if (location) {
+                const uploadRes = await fetch(location, { method: "PUT", headers: { "Content-Type": "video/mp4" }, body: videoBlob });
+                if (uploadRes.ok) {
+                  const uploadedFile = await uploadRes.json();
+                  await gapi.client.drive.permissions.create({ fileId: uploadedFile.id, resource: { role: "reader", type: "anyone" } });
+                  driveLink = `https://drive.google.com/file/d/${uploadedFile.id}/view`;
+
+                  // Update catalog if enabled
+                  if (batchUpdateCatalog && selectedCatalogId && fbAccessToken) {
+                    const downloadUrl = `https://drive.google.com/uc?export=download&id=${uploadedFile.id}`;
+                    await trpcMutate("slideshow.updateCatalogVideo", {
+                      catalogId: selectedCatalogId,
+                      accessToken: fbAccessToken,
+                      productRetailerId: items[i].product.retailerId,
+                      videoUrl: downloadUrl,
+                    });
+                  }
+                }
+              }
+            }
+          } catch (driveErr) {
+            console.error("Drive upload error:", driveErr);
           }
         }
 
-        setBatchItems(prev => prev.map((b, idx) => idx === i ? { ...b, status: "done" as const, videoUrl, driveLink } : b));
+        setBatchItems((prev) =>
+          prev.map((item, idx) =>
+            idx === i ? { ...item, status: "done", videoUrl: result.videoUrl, driveLink } : item
+          )
+        );
       } catch (e: any) {
-        setBatchItems(prev => prev.map((b, idx) => idx === i ? { ...b, status: "error" as const, error: e.message } : b));
+        setBatchItems((prev) =>
+          prev.map((item, idx) => (idx === i ? { ...item, status: "error", error: e.message } : item))
+        );
       }
     }
-
     setIsBatchRunning(false);
   };
 
   const handleStopBatch = () => {
     batchAbortRef.current = true;
+    setIsBatchRunning(false);
   };
 
-  // Add products to batch
-  const addProductToBatch = (product: CatalogProduct) => {
-    if (batchItems.some(b => b.product.id === product.id)) return;
-    setBatchItems(prev => [...prev, { product, status: "pending" }]);
-  };
+  // ===== Computed values =====
+  const noCatalogs = configuredCatalogs.length === 0;
+  const isSingleMode = selectedProductIds.size <= 1;
 
-  const removeProductFromBatch = (productId: string) => {
-    setBatchItems(prev => prev.filter(b => b.product.id !== productId));
-  };
-
-  const addAllProductsToBatch = () => {
-    const newItems: BatchItem[] = [];
-    for (const product of filteredProducts) {
-      if (!batchItems.some(b => b.product.id === product.id)) {
-        newItems.push({ product, status: "pending" });
-      }
-    }
-    setBatchItems(prev => [...prev, ...newItems]);
-  };
-
-  // ===== Estimated video duration =====
-  const estimatedDuration = useMemo(() => {
-    if (selectedImages.length === 0) return 0;
-    if (selectedImages.length === 1 || transition === "none") {
-      return selectedImages.length * durationPerImage;
-    }
-    const clampedTrans = Math.min(transitionDuration, durationPerImage * 0.4);
-    return selectedImages.length * durationPerImage - (selectedImages.length - 1) * clampedTrans;
-  }, [selectedImages.length, durationPerImage, transition, transitionDuration]);
-
-  // Get unique product retailer IDs from selected images
-  const selectedProductRetailerIds = useMemo(() => {
-    const ids = new Set<string>();
-    selectedImages.forEach((img) => {
-      if (!img.isCustom) {
-        const product = products.find((p) => p.id === img.productId);
-        if (product?.retailerId) ids.add(product.retailerId);
-      }
-    });
-    return Array.from(ids);
-  }, [selectedImages, products]);
-
-  const transitions: { value: TransitionType; label: string }[] = [
-    { value: "fade", label: "Fade" },
-    { value: "slideleft", label: "Slide Left" },
-    { value: "slideright", label: "Slide Right" },
-    { value: "slideup", label: "Slide Up" },
-    { value: "slidedown", label: "Slide Down" },
-    { value: "wipeleft", label: "Wipe Left" },
-    { value: "wiperight", label: "Wipe Right" },
-    { value: "none", label: t("slideshowNoTransition") || "None" },
-  ];
-
-  // Batch stats
-  const batchStats = useMemo(() => {
-    const done = batchItems.filter(b => b.status === "done").length;
-    const error = batchItems.filter(b => b.status === "error").length;
-    const pending = batchItems.filter(b => b.status === "pending").length;
-    const running = batchItems.filter(b => b.status === "generating" || b.status === "uploading").length;
-    return { done, error, pending, running, total: batchItems.length };
-  }, [batchItems]);
-
+  // ===== RENDER =====
   return (
-    <main className="container" style={{ maxWidth: 1200, margin: "0 auto", padding: "20px" }}>
-      <div className="card" style={{ background: "#fff", borderRadius: 16, boxShadow: "0 2px 20px rgba(0,0,0,0.06)", padding: 0, overflow: "hidden" }}>
-        {/* Header */}
-        <header style={{
-          background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
-          color: "#fff",
-          padding: "24px 32px",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          flexWrap: "wrap",
-          gap: 12,
-        }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-            <button
-              onClick={() => { window.location.hash = "#/app"; }}
-              style={{
-                background: "rgba(255,255,255,0.2)",
-                border: "none",
-                color: "#fff",
-                borderRadius: 8,
-                padding: "8px 16px",
-                cursor: "pointer",
-                fontSize: 14,
-                fontWeight: 500,
-              }}
-            >
-              ← {t("back")}
-            </button>
-            <div>
-              <h1 style={{ margin: 0, fontSize: 22, fontWeight: 700 }}>
-                🎬 {t("slideshowTitle") || "Slideshow Video Generator"}
-              </h1>
-              <p style={{ margin: "4px 0 0", fontSize: 13, opacity: 0.85 }}>
-                {t("slideshowSubtitle") || "Create product slideshow videos from catalog images"}
-              </p>
-            </div>
-          </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-            <LanguageSwitcher />
-            {userEmail ? (
-              <span style={{ fontSize: 13, opacity: 0.9 }}>📧 {userEmail}</span>
-            ) : (
-              <button
-                onClick={() => googleTokenClient?.requestAccessToken()}
-                style={{
-                  background: "rgba(255,255,255,0.2)",
-                  border: "1px solid rgba(255,255,255,0.3)",
-                  color: "#fff",
-                  borderRadius: 8,
-                  padding: "8px 16px",
-                  cursor: "pointer",
-                  fontSize: 13,
-                }}
-              >
-                {t("loginWithGoogle")}
-              </button>
-            )}
-          </div>
-        </header>
-
-        {/* Mode Toggle */}
-        <div style={{
-          display: "flex",
-          justifyContent: "center",
-          gap: 8,
-          padding: "16px 32px 0",
-        }}>
+    <main style={{ minHeight: "100vh", background: "#f5f7ff" }}>
+      {/* Header */}
+      <div style={{
+        background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+        padding: "20px 24px",
+        color: "#fff",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        flexWrap: "wrap",
+        gap: 12,
+      }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
           <button
-            onClick={() => setBatchMode(false)}
-            style={{
-              padding: "8px 20px",
-              borderRadius: 20,
-              border: `2px solid ${!batchMode ? "#667eea" : "#e0e0e0"}`,
-              background: !batchMode ? "#667eea" : "#fff",
-              color: !batchMode ? "#fff" : "#666",
-              fontWeight: 600,
-              cursor: "pointer",
-              fontSize: 13,
-            }}
+            onClick={() => (window.location.hash = "#/home")}
+            style={{ background: "rgba(255,255,255,0.2)", border: "none", borderRadius: 8, padding: "8px 16px", color: "#fff", fontSize: 14, fontWeight: 600, cursor: "pointer" }}
           >
-            🎬 {t("slideshowSingleMode") || "Single Video"}
+            ← {t("back") || "Back"}
           </button>
-          <button
-            onClick={() => setBatchMode(true)}
-            style={{
-              padding: "8px 20px",
-              borderRadius: 20,
-              border: `2px solid ${batchMode ? "#667eea" : "#e0e0e0"}`,
-              background: batchMode ? "#667eea" : "#fff",
-              color: batchMode ? "#fff" : "#666",
-              fontWeight: 600,
-              cursor: "pointer",
-              fontSize: 13,
-            }}
-          >
-            📦 {t("slideshowBatchMode") || "Batch Generation"}
-          </button>
+          <div>
+            <h1 style={{ margin: 0, fontSize: 22, fontWeight: 700 }}>🎬 {t("slideshowTitle") || "Slideshow Video Generator"}</h1>
+            <p style={{ margin: "4px 0 0", fontSize: 13, opacity: 0.85 }}>{t("slideshowSubtitle") || "Create slideshow videos from catalog product images"}</p>
+          </div>
         </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <LanguageSwitcher />
+          {!googleAccessToken ? (
+            <button
+              onClick={() => googleTokenClient?.requestAccessToken()}
+              style={{ background: "#fff", color: "#667eea", border: "none", borderRadius: 8, padding: "8px 16px", fontSize: 13, fontWeight: 600, cursor: "pointer" }}
+            >
+              {t("loginWithGoogle") || "Login with Google"}
+            </button>
+          ) : (
+            <span style={{ fontSize: 13, opacity: 0.9 }}>✅ {userEmail || "Connected"}</span>
+          )}
+        </div>
+      </div>
 
-        {/* ===== SINGLE MODE ===== */}
-        {!batchMode && (
-          <>
-            {/* Step Indicator */}
+      {/* Steps Indicator */}
+      <div style={{ display: "flex", justifyContent: "center", gap: 40, padding: "24px 20px 16px", maxWidth: 600, margin: "0 auto" }}>
+        {[1, 2, 3].map((step) => (
+          <div key={step} style={{ textAlign: "center", cursor: step <= currentStep ? "pointer" : "default", opacity: step <= currentStep ? 1 : 0.4 }} onClick={() => step <= currentStep && setCurrentStep(step as 1 | 2 | 3)}>
             <div style={{
-              display: "flex",
-              justifyContent: "center",
-              gap: 0,
-              padding: "16px 32px 0",
-              borderBottom: "1px solid #f0f0f0",
-              paddingBottom: 16,
+              width: 36, height: 36, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 6px",
+              background: step === currentStep ? "linear-gradient(135deg, #667eea, #764ba2)" : step < currentStep ? "#667eea" : "#d0d0d0",
+              color: "#fff", fontWeight: 700, fontSize: 15,
             }}>
-              {[
-                { step: 1, label: t("slideshowStep1") || "Select Images" },
-                { step: 2, label: t("slideshowStep2") || "Configure Settings" },
-                { step: 3, label: t("slideshowStep3") || "Generate & Download" },
-              ].map(({ step, label }) => (
-                <div
-                  key={step}
-                  onClick={() => {
-                    if (step === 1) setCurrentStep(1);
-                    else if (step === 2 && selectedImages.length > 0) setCurrentStep(2);
-                    else if (step === 3 && generatedVideoUrl) setCurrentStep(3);
-                  }}
-                  style={{
-                    flex: 1,
-                    textAlign: "center",
-                    padding: "12px 8px",
-                    cursor: step <= currentStep || (step === 2 && selectedImages.length > 0) ? "pointer" : "default",
-                    borderBottom: `3px solid ${currentStep === step ? "#667eea" : "transparent"}`,
-                    transition: "all 0.2s",
-                  }}
-                >
-                  <div style={{
-                    display: "inline-flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    width: 28,
-                    height: 28,
-                    borderRadius: "50%",
-                    background: currentStep >= step ? "#667eea" : "#e0e0e0",
-                    color: currentStep >= step ? "#fff" : "#999",
-                    fontSize: 13,
-                    fontWeight: 700,
-                    marginBottom: 4,
-                  }}>
-                    {step}
-                  </div>
-                  <div style={{
-                    fontSize: 13,
-                    fontWeight: currentStep === step ? 600 : 400,
-                    color: currentStep === step ? "#333" : "#999",
-                  }}>
-                    {label}
-                  </div>
-                </div>
-              ))}
+              {step}
             </div>
-
-            <div style={{ padding: "24px 32px 32px" }}>
-              {/* ===== STEP 1: Select Images ===== */}
-              {currentStep === 1 && (
-                <div>
-                  {/* Company & Catalog Selection */}
-                  <div style={{ display: "flex", gap: 16, marginBottom: 20, flexWrap: "wrap" }}>
-                    {userCompanies.length > 0 && (
-                      <div style={{ flex: "1 1 200px" }}>
-                        <label style={{ display: "block", fontSize: 13, fontWeight: 600, color: "#555", marginBottom: 6 }}>
-                          {t("selectCompany")}
-                        </label>
-                        <select
-                          value={selectedCompanyId || ""}
-                          onChange={(e) => {
-                            const id = parseInt(e.target.value);
-                            setSelectedCompanyId(id);
-                            saveSelectedCompany(id);
-                            setProducts([]);
-                            setSelectedImages([]);
-                          }}
-                          style={selectStyle}
-                        >
-                          {userCompanies.map((c) => (
-                            <option key={c.id} value={c.id}>{c.name}</option>
-                          ))}
-                        </select>
-                      </div>
-                    )}
-                    <div style={{ flex: "1 1 200px" }}>
-                      <label style={{ display: "block", fontSize: 13, fontWeight: 600, color: "#555", marginBottom: 6 }}>
-                        {t("selectCatalog")}
-                      </label>
-                      <select
-                        value={selectedCatalogId}
-                        onChange={(e) => {
-                          setSelectedCatalogId(e.target.value);
-                          setProducts([]);
-                          setSelectedImages([]);
-                        }}
-                        style={selectStyle}
-                      >
-                        <option value="">{t("catalogIdPlaceholder") || "Select Catalog"}</option>
-                        {configuredCatalogs.map((c) => (
-                          <option key={c.id} value={c.id}>{c.name || c.id}</option>
-                        ))}
-                      </select>
-                    </div>
-                    <div style={{ flex: "0 0 auto", display: "flex", alignItems: "flex-end" }}>
-                      <button
-                        onClick={handleFetchProducts}
-                        disabled={!selectedCatalogId || !fbAccessToken || isLoadingProducts}
-                        style={{
-                          ...buttonStyle,
-                          background: !selectedCatalogId || !fbAccessToken ? "#ccc" : "#667eea",
-                          cursor: !selectedCatalogId || !fbAccessToken ? "not-allowed" : "pointer",
-                        }}
-                      >
-                        {isLoadingProducts ? (t("loadingProducts") || "Loading...") : (t("fetchProducts"))}
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* No catalogs warning / loading */}
-                  {isLoadingSettings && configuredCatalogs.length === 0 && (
-                    <div style={{
-                      background: "#eff6ff",
-                      border: "1px solid #bfdbfe",
-                      borderRadius: 8,
-                      padding: "12px 16px",
-                      color: "#1e40af",
-                      fontSize: 14,
-                      marginBottom: 16,
-                    }}>
-                      ⏳ {t("loadingSettings") || "Loading catalog settings..."}
-                    </div>
-                  )}
-                  {!isLoadingSettings && configuredCatalogs.length === 0 && (
-                    <div style={{
-                      background: "#fffbeb",
-                      border: "1px solid #fde68a",
-                      borderRadius: 8,
-                      padding: "12px 16px",
-                      color: "#92400e",
-                      fontSize: 14,
-                      marginBottom: 16,
-                    }}>
-                      ⚠️ {t("slideshowNoCatalogs") || "No catalogs configured. Please set up catalogs in the main tool settings first."}
-                    </div>
-                  )}
-
-                  {/* Search */}
-                  {products.length > 0 && (
-                    <div style={{ marginBottom: 16 }}>
-                      <input
-                        type="text"
-                        value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
-                        placeholder={t("searchPlaceholder") || "Search products..."}
-                        style={inputStyle}
-                      />
-                    </div>
-                  )}
-
-                  {/* Error */}
-                  {productError && (
-                    <div style={{
-                      background: "#fff5f5",
-                      border: "1px solid #fed7d7",
-                      borderRadius: 8,
-                      padding: "12px 16px",
-                      color: "#c53030",
-                      fontSize: 14,
-                      marginBottom: 16,
-                    }}>
-                      {productError}
-                    </div>
-                  )}
-
-                  {/* Product Grid */}
-                  {filteredProducts.length > 0 && (
-                    <>
-                      <div style={{ fontSize: 13, color: "#888", marginBottom: 12, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                        <div>
-                          {t("slideshowProductCount") || "Products"}: {filteredProducts.length}
-                          {selectedImages.length > 0 && (
-                            <span style={{ marginLeft: 16, color: "#667eea", fontWeight: 600 }}>
-                              {t("slideshowSelectedCount") || "Selected"}: {selectedImages.length} {t("slideshowImages") || "images"}
-                            </span>
-                          )}
-                        </div>
-                        <div style={{ display: "flex", gap: 8 }}>
-                          <button
-                            onClick={() => setSelectedImages([])}
-                            style={{ ...miniActionBtn, color: "#ef4444", borderColor: "#fecaca" }}
-                          >
-                            {t("slideshowClearAll") || "Clear All"}
-                          </button>
-                        </div>
-                      </div>
-                      <div style={{
-                        display: "grid",
-                        gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))",
-                        gap: 12,
-                        maxHeight: 500,
-                        overflowY: "auto",
-                        padding: 4,
-                      }}>
-                        {filteredProducts.map((product) => (
-                          <ProductImageCard
-                            key={product.id}
-                            product={product}
-                            isSelected={isImageSelected}
-                            onToggle={toggleImageSelection}
-                            onSelectAll={selectAllFromProduct}
-                            t={t}
-                          />
-                        ))}
-                      </div>
-                    </>
-                  )}
-
-                  {/* Manual Image Upload Section */}
-                  <div style={{
-                    marginTop: 24,
-                    padding: "16px 20px",
-                    background: "#f8f9ff",
-                    borderRadius: 12,
-                    border: "1px dashed #667eea",
-                  }}>
-                    <h4 style={{ margin: "0 0 8px", fontSize: 14, fontWeight: 600, color: "#444" }}>
-                      📤 {t("slideshowUploadCustomImages") || "Upload Custom Images"}
-                    </h4>
-                    <p style={{ margin: "0 0 12px", fontSize: 13, color: "#777" }}>
-                      {t("slideshowUploadCustomImagesDesc") || "Add your own images to the slideshow (max 10MB per image)"}
-                    </p>
-                    <input
-                      ref={imageInputRef}
-                      type="file"
-                      accept="image/*"
-                      multiple
-                      onChange={handleImageUpload}
-                      style={{ display: "none" }}
-                    />
-                    <button
-                      onClick={() => imageInputRef.current?.click()}
-                      disabled={isUploadingImage}
-                      style={{
-                        ...buttonStyle,
-                        background: isUploadingImage ? "#aaa" : "#667eea",
-                        cursor: isUploadingImage ? "not-allowed" : "pointer",
-                        fontSize: 13,
-                        padding: "8px 20px",
-                      }}
-                    >
-                      {isUploadingImage
-                        ? (t("slideshowUploading") || "Uploading...")
-                        : (t("slideshowChooseImages") || "Choose Images")}
-                    </button>
-                  </div>
-
-                  {/* Selected Images Preview */}
-                  {selectedImages.length > 0 && (
-                    <div style={{ marginTop: 24 }}>
-                      <h3 style={{ fontSize: 16, fontWeight: 600, marginBottom: 12, color: "#333" }}>
-                        {t("slideshowSelectedImages") || "Selected Images"} ({selectedImages.length})
-                      </h3>
-                      <div style={{
-                        display: "flex",
-                        gap: 8,
-                        overflowX: "auto",
-                        padding: "8px 0",
-                      }}>
-                        {selectedImages.map((img, idx) => (
-                          <div key={`${img.url}-${idx}`} style={{
-                            flex: "0 0 100px",
-                            position: "relative",
-                            borderRadius: 8,
-                            overflow: "hidden",
-                            border: img.isCustom ? "2px solid #38a169" : "2px solid #667eea",
-                          }}>
-                            <img
-                              src={img.url}
-                              alt={img.label}
-                              style={{ width: 100, height: 100, objectFit: "cover" }}
-                            />
-                            <div style={{
-                              position: "absolute",
-                              top: 0,
-                              left: 0,
-                              right: 0,
-                              display: "flex",
-                              justifyContent: "space-between",
-                              padding: 2,
-                            }}>
-                              <span style={{
-                                background: img.isCustom ? "#38a169" : "#667eea",
-                                color: "#fff",
-                                fontSize: 10,
-                                fontWeight: 700,
-                                borderRadius: 4,
-                                padding: "1px 5px",
-                              }}>
-                                {idx + 1}{img.isCustom ? " ✦" : ""}
-                              </span>
-                              <button
-                                onClick={() => removeSelectedImage(idx)}
-                                style={{
-                                  background: "rgba(220,38,38,0.85)",
-                                  color: "#fff",
-                                  border: "none",
-                                  borderRadius: 4,
-                                  width: 18,
-                                  height: 18,
-                                  fontSize: 11,
-                                  cursor: "pointer",
-                                  display: "flex",
-                                  alignItems: "center",
-                                  justifyContent: "center",
-                                }}
-                              >
-                                ✕
-                              </button>
-                            </div>
-                            <div style={{
-                              position: "absolute",
-                              bottom: 0,
-                              left: 0,
-                              right: 0,
-                              display: "flex",
-                              justifyContent: "center",
-                              gap: 2,
-                              padding: 2,
-                            }}>
-                              {idx > 0 && (
-                                <button onClick={() => moveImage(idx, "up")} style={miniBtn}>◀</button>
-                              )}
-                              {idx < selectedImages.length - 1 && (
-                                <button onClick={() => moveImage(idx, "down")} style={miniBtn}>▶</button>
-                              )}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Next Button */}
-                  <div style={{ marginTop: 24, display: "flex", justifyContent: "flex-end" }}>
-                    <button
-                      onClick={() => setCurrentStep(2)}
-                      disabled={selectedImages.length === 0}
-                      style={{
-                        ...buttonStyle,
-                        background: selectedImages.length === 0 ? "#ccc" : "#667eea",
-                        cursor: selectedImages.length === 0 ? "not-allowed" : "pointer",
-                        padding: "12px 32px",
-                        fontSize: 15,
-                      }}
-                    >
-                      {t("next")} →
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {/* ===== STEP 2: Configure Settings ===== */}
-              {currentStep === 2 && (
-                <div>
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 24 }}>
-                    {/* Left: Settings */}
-                    <div>
-                      <h3 style={{ fontSize: 16, fontWeight: 600, marginBottom: 16, color: "#333" }}>
-                        {t("slideshowVideoSettings") || "Video Settings"}
-                      </h3>
-
-                      {/* Aspect Ratio */}
-                      <div style={{ marginBottom: 16 }}>
-                        <label style={labelStyle}>{t("slideshowAspectRatio") || "Aspect Ratio"}</label>
-                        <div style={{ display: "flex", gap: 8 }}>
-                          {(["4:5", "9:16"] as AspectRatio[]).map((ratio) => (
-                            <button
-                              key={ratio}
-                              onClick={() => setAspectRatio(ratio)}
-                              style={{
-                                flex: 1,
-                                padding: "10px 16px",
-                                borderRadius: 8,
-                                border: `2px solid ${aspectRatio === ratio ? "#667eea" : "#e0e0e0"}`,
-                                background: aspectRatio === ratio ? "#f0f0ff" : "#fff",
-                                color: aspectRatio === ratio ? "#667eea" : "#666",
-                                fontWeight: 600,
-                                cursor: "pointer",
-                                fontSize: 14,
-                              }}
-                            >
-                              {ratio === "4:5" ? "4:5 (1080×1350)" : "9:16 (1080×1920)"}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-
-                      {/* Duration Per Image */}
-                      <div style={{ marginBottom: 16 }}>
-                        <label style={labelStyle}>
-                          {t("slideshowDuration") || "Duration Per Image"}: {durationPerImage}s
-                        </label>
-                        <input
-                          type="range"
-                          min={1}
-                          max={15}
-                          step={0.5}
-                          value={durationPerImage}
-                          onChange={(e) => setDurationPerImage(parseFloat(e.target.value))}
-                          style={{ width: "100%" }}
-                        />
-                        <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: "#999" }}>
-                          <span>1s</span><span>15s</span>
-                        </div>
-                      </div>
-
-                      {/* Transition */}
-                      <div style={{ marginBottom: 16 }}>
-                        <label style={labelStyle}>{t("slideshowTransition") || "Transition Effect"}</label>
-                        <select
-                          value={transition}
-                          onChange={(e) => setTransition(e.target.value as TransitionType)}
-                          style={selectStyle}
-                        >
-                          {transitions.map((tr) => (
-                            <option key={tr.value} value={tr.value}>{tr.label}</option>
-                          ))}
-                        </select>
-                      </div>
-
-                      {/* Transition Duration */}
-                      {transition !== "none" && (
-                        <div style={{ marginBottom: 16 }}>
-                          <label style={labelStyle}>
-                            {t("slideshowTransDuration") || "Transition Duration"}: {transitionDuration}s
-                          </label>
-                          <input
-                            type="range"
-                            min={0.2}
-                            max={3}
-                            step={0.1}
-                            value={transitionDuration}
-                            onChange={(e) => setTransitionDuration(parseFloat(e.target.value))}
-                            style={{ width: "100%" }}
-                          />
-                        </div>
-                      )}
-
-                      {/* Text Overlay */}
-                      <div style={{ marginBottom: 16 }}>
-                        <label style={labelStyle}>{t("slideshowOverlayText") || "Text Overlay"}</label>
-                        <input
-                          type="text"
-                          value={overlayText}
-                          onChange={(e) => setOverlayText(e.target.value)}
-                          placeholder={t("slideshowOverlayPlaceholder") || "Optional: Add text overlay on all frames"}
-                          style={inputStyle}
-                        />
-                      </div>
-
-                      {/* Show Product Name */}
-                      <div style={{ marginBottom: 16 }}>
-                        <label style={{ ...labelStyle, display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
-                          <input
-                            type="checkbox"
-                            checked={showProductName}
-                            onChange={(e) => setShowProductName(e.target.checked)}
-                            style={{ width: 16, height: 16 }}
-                          />
-                          {t("slideshowShowProductName") || "Show Product Name on Each Image"}
-                        </label>
-                      </div>
-
-                      {/* Text Position */}
-                      {(overlayText || showProductName) && (
-                        <div style={{ marginBottom: 16 }}>
-                          <label style={labelStyle}>{t("slideshowTextPosition") || "Text Position"}</label>
-                          <div style={{ display: "flex", gap: 8 }}>
-                            {(["top", "center", "bottom"] as TextPosition[]).map((pos) => (
-                              <button
-                                key={pos}
-                                onClick={() => setTextPosition(pos)}
-                                style={{
-                                  flex: 1,
-                                  padding: "8px 12px",
-                                  borderRadius: 8,
-                                  border: `2px solid ${textPosition === pos ? "#667eea" : "#e0e0e0"}`,
-                                  background: textPosition === pos ? "#f0f0ff" : "#fff",
-                                  color: textPosition === pos ? "#667eea" : "#666",
-                                  fontWeight: 500,
-                                  cursor: "pointer",
-                                  fontSize: 13,
-                                  textTransform: "capitalize",
-                                }}
-                              >
-                                {pos === "top" ? (t("slideshowTop") || "Top") : pos === "center" ? (t("slideshowCenter") || "Center") : (t("slideshowBottom") || "Bottom")}
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Font Size */}
-                      {(overlayText || showProductName) && (
-                        <div style={{ marginBottom: 16 }}>
-                          <label style={labelStyle}>
-                            {t("slideshowFontSize") || "Font Size"}: {fontSize}px
-                          </label>
-                          <input
-                            type="range"
-                            min={16}
-                            max={80}
-                            step={2}
-                            value={fontSize}
-                            onChange={(e) => setFontSize(parseInt(e.target.value))}
-                            style={{ width: "100%" }}
-                          />
-                        </div>
-                      )}
-
-                      {/* ===== Background Music Section ===== */}
-                      <div style={{
-                        marginTop: 8,
-                        padding: "16px",
-                        background: "#fefce8",
-                        borderRadius: 10,
-                        border: "1px solid #fde68a",
-                      }}>
-                        <h4 style={{ margin: "0 0 10px", fontSize: 14, fontWeight: 600, color: "#92400e" }}>
-                          🎵 {t("slideshowBackgroundMusic") || "Background Music"}
-                        </h4>
-
-                        {audioUrl ? (
-                          <div>
-                            <div style={{
-                              display: "flex",
-                              alignItems: "center",
-                              gap: 10,
-                              marginBottom: 12,
-                              background: "#fff",
-                              padding: "8px 12px",
-                              borderRadius: 8,
-                              border: "1px solid #e5e7eb",
-                            }}>
-                              <span style={{ fontSize: 20 }}>🎶</span>
-                              <span style={{ flex: 1, fontSize: 13, fontWeight: 500, color: "#333", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                                {audioFileName}
-                              </span>
-                              <button
-                                onClick={removeAudio}
-                                style={{
-                                  background: "#ef4444",
-                                  color: "#fff",
-                                  border: "none",
-                                  borderRadius: 6,
-                                  padding: "4px 10px",
-                                  fontSize: 12,
-                                  cursor: "pointer",
-                                  fontWeight: 600,
-                                }}
-                              >
-                                ✕ {t("slideshowRemove") || "Remove"}
-                              </button>
-                            </div>
-
-                            <div>
-                              <label style={{ ...labelStyle, color: "#92400e" }}>
-                                {t("slideshowVolume") || "Volume"}: {Math.round(audioVolume * 100)}%
-                              </label>
-                              <input
-                                type="range"
-                                min={0}
-                                max={1}
-                                step={0.05}
-                                value={audioVolume}
-                                onChange={(e) => setAudioVolume(parseFloat(e.target.value))}
-                                style={{ width: "100%" }}
-                              />
-                              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: "#999" }}>
-                                <span>0%</span><span>100%</span>
-                              </div>
-                            </div>
-                          </div>
-                        ) : (
-                          <div>
-                            <input
-                              ref={audioInputRef}
-                              type="file"
-                              accept="audio/*"
-                              onChange={handleAudioUpload}
-                              style={{ display: "none" }}
-                            />
-                            <button
-                              onClick={() => audioInputRef.current?.click()}
-                              disabled={isUploadingAudio}
-                              style={{
-                                ...buttonStyle,
-                                background: isUploadingAudio ? "#aaa" : "#d97706",
-                                cursor: isUploadingAudio ? "not-allowed" : "pointer",
-                                fontSize: 13,
-                                padding: "8px 20px",
-                              }}
-                            >
-                              {isUploadingAudio
-                                ? (t("slideshowUploading") || "Uploading...")
-                                : (t("slideshowChooseAudio") || "Choose Audio File")}
-                            </button>
-                            <p style={{ margin: "8px 0 0", fontSize: 12, color: "#999" }}>
-                              {t("slideshowAudioFormats") || "Supports MP3, WAV, OGG (max 16MB)"}
-                            </p>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Right: Animated Preview */}
-                    <div>
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-                        <h3 style={{ fontSize: 16, fontWeight: 600, color: "#333", margin: 0 }}>
-                          {t("slideshowPreview") || "Preview"}
-                        </h3>
-                        {selectedImages.length > 1 && (
-                          <button
-                            onClick={() => setIsPreviewPlaying(!isPreviewPlaying)}
-                            style={{
-                              ...miniActionBtn,
-                              color: isPreviewPlaying ? "#ef4444" : "#22c55e",
-                              borderColor: isPreviewPlaying ? "#fecaca" : "#bbf7d0",
-                            }}
-                          >
-                            {isPreviewPlaying ? "⏸ Pause" : "▶ Play"}
-                          </button>
-                        )}
-                      </div>
-                      <div style={{
-                        background: "#f8f8f8",
-                        borderRadius: 12,
-                        padding: 16,
-                        border: "1px solid #e8e8e8",
-                      }}>
-                        {/* Animated preview */}
-                        <div style={{
-                          width: "100%",
-                          maxWidth: aspectRatio === "4:5" ? 240 : 180,
-                          aspectRatio: aspectRatio === "4:5" ? "4/5" : "9/16",
-                          margin: "0 auto",
-                          background: "#000",
-                          borderRadius: 8,
-                          overflow: "hidden",
-                          position: "relative",
-                        }}>
-                          {selectedImages.length > 0 && (
-                            <>
-                              <img
-                                key={previewIndex}
-                                src={selectedImages[previewIndex]?.url}
-                                alt="Preview"
-                                style={{
-                                  width: "100%",
-                                  height: "100%",
-                                  objectFit: "contain",
-                                  background: "#fff",
-                                  animation: transition !== "none" ? "fadeIn 0.5s ease-in-out" : undefined,
-                                }}
-                              />
-                              {/* Image counter */}
-                              <div style={{
-                                position: "absolute",
-                                top: 8,
-                                right: 8,
-                                background: "rgba(0,0,0,0.6)",
-                                color: "#fff",
-                                fontSize: 11,
-                                fontWeight: 600,
-                                borderRadius: 12,
-                                padding: "2px 8px",
-                              }}>
-                                {previewIndex + 1}/{selectedImages.length}
-                              </div>
-                            </>
-                          )}
-                          {overlayText && (
-                            <div style={{
-                              position: "absolute",
-                              left: 0,
-                              right: 0,
-                              textAlign: "center",
-                              color: "#fff",
-                              textShadow: "0 1px 4px rgba(0,0,0,0.8)",
-                              fontSize: Math.max(10, fontSize * 0.3),
-                              fontWeight: 700,
-                              padding: "4px 8px",
-                              ...(textPosition === "top" ? { top: "5%" } : textPosition === "bottom" ? { bottom: "5%" } : { top: "50%", transform: "translateY(-50%)" }),
-                            }}>
-                              {overlayText}
-                            </div>
-                          )}
-                          {showProductName && selectedImages[previewIndex] && (
-                            <div style={{
-                              position: "absolute",
-                              left: 0,
-                              right: 0,
-                              textAlign: "center",
-                              color: "#fff",
-                              textShadow: "0 1px 3px rgba(0,0,0,0.7)",
-                              fontSize: Math.max(8, fontSize * 0.25),
-                              fontWeight: 500,
-                              padding: "4px 8px",
-                              ...(textPosition === "top" ? { top: "12%" } : textPosition === "bottom" ? { bottom: "12%" } : { top: "55%" }),
-                            }}>
-                              {selectedImages[previewIndex].label}
-                            </div>
-                          )}
-                        </div>
-
-                        {/* Image dots navigation */}
-                        {selectedImages.length > 1 && (
-                          <div style={{ display: "flex", justifyContent: "center", gap: 4, marginTop: 12, flexWrap: "wrap" }}>
-                            {selectedImages.map((_, idx) => (
-                              <button
-                                key={idx}
-                                onClick={() => { setPreviewIndex(idx); setIsPreviewPlaying(false); }}
-                                style={{
-                                  width: idx === previewIndex ? 20 : 8,
-                                  height: 8,
-                                  borderRadius: 4,
-                                  border: "none",
-                                  background: idx === previewIndex ? "#667eea" : "#d0d0d0",
-                                  cursor: "pointer",
-                                  transition: "all 0.2s",
-                                  padding: 0,
-                                }}
-                              />
-                            ))}
-                          </div>
-                        )}
-
-                        {/* Summary */}
-                        <div style={{ marginTop: 16, fontSize: 13, color: "#666" }}>
-                          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
-                            <span>{t("slideshowImageCount") || "Images"}:</span>
-                            <strong>{selectedImages.length}</strong>
-                          </div>
-                          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
-                            <span>{t("slideshowEstDuration") || "Est. Duration"}:</span>
-                            <strong>{estimatedDuration.toFixed(1)}s</strong>
-                          </div>
-                          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
-                            <span>{t("slideshowResolution") || "Resolution"}:</span>
-                            <strong>{aspectRatio === "4:5" ? "1080×1350" : "1080×1920"}</strong>
-                          </div>
-                          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
-                            <span>{t("slideshowTransition") || "Transition"}:</span>
-                            <strong>{transitions.find((tr) => tr.value === transition)?.label}</strong>
-                          </div>
-                          {audioUrl && (
-                            <div style={{ display: "flex", justifyContent: "space-between" }}>
-                              <span>🎵 {t("slideshowBackgroundMusic") || "Music"}:</span>
-                              <strong style={{ maxWidth: 120, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                                {audioFileName}
-                              </strong>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Navigation */}
-                  <div style={{ marginTop: 24, display: "flex", justifyContent: "space-between" }}>
-                    <button onClick={() => setCurrentStep(1)} style={{ ...buttonStyle, background: "#888" }}>
-                      ← {t("back")}
-                    </button>
-                    <button
-                      onClick={handleGenerate}
-                      disabled={isGenerating || selectedImages.length === 0}
-                      style={{
-                        ...buttonStyle,
-                        background: isGenerating ? "#aaa" : "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
-                        cursor: isGenerating ? "not-allowed" : "pointer",
-                        padding: "12px 32px",
-                        fontSize: 15,
-                      }}
-                    >
-                      {isGenerating ? (
-                        <>{t("slideshowGenerating") || "Generating..."} ⏳</>
-                      ) : (
-                        <>🎬 {t("slideshowGenerate") || "Generate Video"}</>
-                      )}
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {/* ===== STEP 3: Result ===== */}
-              {currentStep === 3 && (
-                <div>
-                  {generationError && (
-                    <div style={{
-                      background: "#fff5f5",
-                      border: "1px solid #fed7d7",
-                      borderRadius: 12,
-                      padding: "20px",
-                      color: "#c53030",
-                      marginBottom: 24,
-                      textAlign: "center",
-                    }}>
-                      <strong>Error:</strong> {generationError}
-                      <br />
-                      <button
-                        onClick={() => { setCurrentStep(2); setGenerationError(null); }}
-                        style={{ ...buttonStyle, background: "#c53030", marginTop: 12 }}
-                      >
-                        {t("back")} → {t("slideshowStep2") || "Settings"}
-                      </button>
-                    </div>
-                  )}
-
-                  {generatedVideoUrl && (
-                    <div>
-                      <div style={{
-                        background: "#f0fff4",
-                        border: "1px solid #c6f6d5",
-                        borderRadius: 12,
-                        padding: "20px",
-                        marginBottom: 24,
-                        textAlign: "center",
-                      }}>
-                        <div style={{ fontSize: 48, marginBottom: 8 }}>✅</div>
-                        <h3 style={{ fontSize: 18, fontWeight: 600, color: "#22543d", marginBottom: 4 }}>
-                          {t("slideshowSuccess") || "Video Generated Successfully!"}
-                        </h3>
-                        <p style={{ fontSize: 13, color: "#276749" }}>
-                          {t("slideshowSuccessDesc") || "Your slideshow video is ready to download."}
-                        </p>
-                      </div>
-
-                      {/* Video Player */}
-                      <div style={{
-                        maxWidth: aspectRatio === "4:5" ? 400 : 300,
-                        margin: "0 auto 24px",
-                        borderRadius: 12,
-                        overflow: "hidden",
-                        boxShadow: "0 4px 20px rgba(0,0,0,0.1)",
-                      }}>
-                        <video
-                          src={generatedVideoUrl}
-                          controls
-                          autoPlay
-                          style={{ width: "100%", display: "block" }}
-                        />
-                      </div>
-
-                      {/* Primary Actions */}
-                      <div style={{ display: "flex", justifyContent: "center", gap: 12, flexWrap: "wrap", marginBottom: 24 }}>
-                        <a
-                          href={generatedVideoUrl}
-                          download="slideshow.mp4"
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          style={{
-                            ...buttonStyle,
-                            background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
-                            textDecoration: "none",
-                            display: "inline-flex",
-                            alignItems: "center",
-                            gap: 8,
-                            padding: "12px 24px",
-                          }}
-                        >
-                          ⬇️ {t("slideshowDownload") || "Download Video"}
-                        </a>
-                        <button
-                          onClick={() => {
-                            navigator.clipboard.writeText(generatedVideoUrl);
-                            alert(t("slideshowUrlCopied") || "URL copied to clipboard!");
-                          }}
-                          style={{ ...buttonStyle, background: "#38a169" }}
-                        >
-                          📋 {t("slideshowCopyUrl") || "Copy URL"}
-                        </button>
-                        <button
-                          onClick={() => {
-                            setGeneratedVideoUrl(null);
-                            setCurrentStep(1);
-                            setSelectedImages([]);
-                            setDriveUploadResult(null);
-                            setCatalogUpdateResult(null);
-                            setAudioUrl(null);
-                            setAudioFileName(null);
-                          }}
-                          style={{ ...buttonStyle, background: "#888" }}
-                        >
-                          🔄 {t("slideshowCreateNew") || "Create New"}
-                        </button>
-                      </div>
-
-                      {/* Google Drive Upload Section */}
-                      <div style={{
-                        padding: "20px",
-                        background: "#f0f9ff",
-                        borderRadius: 12,
-                        border: "1px solid #bae6fd",
-                        marginBottom: 16,
-                      }}>
-                        <h4 style={{ margin: "0 0 12px", fontSize: 15, fontWeight: 600, color: "#0369a1" }}>
-                          📁 {t("slideshowUploadToDrive") || "Upload to Google Drive"}
-                        </h4>
-
-                        {driveUploadResult ? (
-                          <div style={{
-                            background: "#ecfdf5",
-                            border: "1px solid #a7f3d0",
-                            borderRadius: 8,
-                            padding: "12px 16px",
-                          }}>
-                            <p style={{ margin: "0 0 8px", fontSize: 13, color: "#065f46", fontWeight: 600 }}>
-                              ✅ {t("slideshowDriveUploadSuccess") || "Uploaded to Google Drive!"}
-                            </p>
-                            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                              <a href={driveUploadResult.downloadLink} target="_blank" rel="noopener noreferrer"
-                                style={{ fontSize: 12, color: "#0369a1", textDecoration: "underline" }}>
-                                {t("slideshowDriveDownloadLink") || "Download Link"}
-                              </a>
-                              <a href={driveUploadResult.embedLink} target="_blank" rel="noopener noreferrer"
-                                style={{ fontSize: 12, color: "#0369a1", textDecoration: "underline" }}>
-                                {t("slideshowDrivePreviewLink") || "Preview Link"}
-                              </a>
-                            </div>
-                          </div>
-                        ) : (
-                          <div>
-                            {!googleAccessToken ? (
-                              <p style={{ margin: 0, fontSize: 13, color: "#666" }}>
-                                {t("slideshowLoginForDrive") || "Please login with Google to upload to Drive."}
-                              </p>
-                            ) : (
-                              <button
-                                onClick={handleUploadToDrive}
-                                disabled={isUploadingToDrive}
-                                style={{
-                                  ...buttonStyle,
-                                  background: isUploadingToDrive ? "#aaa" : "#0284c7",
-                                  cursor: isUploadingToDrive ? "not-allowed" : "pointer",
-                                  fontSize: 14,
-                                }}
-                              >
-                                {isUploadingToDrive
-                                  ? (t("slideshowUploadingToDrive") || "Uploading to Drive...")
-                                  : (t("slideshowUploadToDriveBtn") || "Upload to Google Drive")}
-                              </button>
-                            )}
-                            {driveUploadError && (
-                              <p style={{ margin: "8px 0 0", fontSize: 13, color: "#c53030" }}>
-                                {driveUploadError}
-                              </p>
-                            )}
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Catalog Update Section */}
-                      {selectedCatalogId && fbAccessToken && selectedProductRetailerIds.length > 0 && (
-                        <div style={{
-                          padding: "20px",
-                          background: "#fffbeb",
-                          borderRadius: 12,
-                          border: "1px solid #fde68a",
-                        }}>
-                          <h4 style={{ margin: "0 0 12px", fontSize: 15, fontWeight: 600, color: "#92400e" }}>
-                            📦 {t("slideshowUpdateCatalog") || "Update Catalog Product Video"}
-                          </h4>
-
-                          {catalogUpdateResult ? (
-                            <div style={{
-                              background: "#ecfdf5",
-                              border: "1px solid #a7f3d0",
-                              borderRadius: 8,
-                              padding: "12px 16px",
-                            }}>
-                              <p style={{ margin: 0, fontSize: 13, color: "#065f46", fontWeight: 600 }}>
-                                ✅ {catalogUpdateResult}
-                              </p>
-                            </div>
-                          ) : (
-                            <div>
-                              <p style={{ margin: "0 0 10px", fontSize: 13, color: "#78716c" }}>
-                                {t("slideshowCatalogUpdateDesc") || "Select a product to update its video in the Meta Catalog."}
-                              </p>
-                              <div style={{ display: "flex", gap: 10, alignItems: "flex-end", flexWrap: "wrap" }}>
-                                <div style={{ flex: "1 1 200px" }}>
-                                  <label style={{ ...labelStyle, color: "#92400e" }}>
-                                    {t("slideshowSelectProduct") || "Select Product (Retailer ID)"}
-                                  </label>
-                                  <select
-                                    value={selectedProductForCatalog}
-                                    onChange={(e) => setSelectedProductForCatalog(e.target.value)}
-                                    style={selectStyle}
-                                  >
-                                    <option value="">{t("slideshowSelectProductPlaceholder") || "-- Select Product --"}</option>
-                                    {selectedProductRetailerIds.map((rid) => (
-                                      <option key={rid} value={rid}>{rid}</option>
-                                    ))}
-                                  </select>
-                                </div>
-                                <button
-                                  onClick={handleUpdateCatalog}
-                                  disabled={isUpdatingCatalog || !selectedProductForCatalog}
-                                  style={{
-                                    ...buttonStyle,
-                                    background: isUpdatingCatalog || !selectedProductForCatalog ? "#aaa" : "#d97706",
-                                    cursor: isUpdatingCatalog || !selectedProductForCatalog ? "not-allowed" : "pointer",
-                                    fontSize: 14,
-                                  }}
-                                >
-                                  {isUpdatingCatalog
-                                    ? (t("slideshowUpdatingCatalog") || "Updating...")
-                                    : (t("slideshowUpdateCatalogBtn") || "Update Catalog")}
-                                </button>
-                              </div>
-                              {catalogUpdateError && (
-                                <p style={{ margin: "8px 0 0", fontSize: 13, color: "#c53030" }}>
-                                  {catalogUpdateError}
-                                </p>
-                              )}
-                            </div>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  {isGenerating && (
-                    <div style={{ padding: "40px 0", textAlign: "center" }}>
-                      <div style={{ fontSize: 48, marginBottom: 16 }}>⏳</div>
-                      <h3 style={{ fontSize: 18, fontWeight: 600, color: "#333", marginBottom: 8 }}>
-                        {t("slideshowGenerating") || "Generating Video..."}
-                      </h3>
-                      <p style={{ fontSize: 14, color: "#666" }}>
-                        {t("slideshowPleaseWait") || "This may take a minute depending on the number of images."}
-                      </p>
-                      <div style={{
-                        width: 200,
-                        height: 4,
-                        background: "#e0e0e0",
-                        borderRadius: 2,
-                        margin: "16px auto",
-                        overflow: "hidden",
-                      }}>
-                        <div style={{
-                          width: "60%",
-                          height: "100%",
-                          background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
-                          borderRadius: 2,
-                          animation: "pulse 1.5s ease-in-out infinite",
-                        }} />
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
+            <div style={{ fontSize: 12, fontWeight: 600, color: step === currentStep ? "#667eea" : "#888" }}>
+              {step === 1 ? (t("slideshowStep1") || "Select Products") : step === 2 ? (t("slideshowStep2") || "Settings") : (t("slideshowStep3") || "Generate")}
             </div>
-          </>
-        )}
+          </div>
+        ))}
+      </div>
+      <div style={{ width: "100%", height: 3, background: "#e0e7ff", maxWidth: 600, margin: "0 auto 24px" }}>
+        <div style={{ width: `${((currentStep - 1) / 2) * 100}%`, height: "100%", background: "linear-gradient(90deg, #667eea, #764ba2)", transition: "width 0.3s" }} />
+      </div>
 
-        {/* ===== BATCH MODE ===== */}
-        {batchMode && (
-          <div style={{ padding: "24px 32px 32px" }}>
-            {/* Catalog Selection (same as single mode) */}
-            <div style={{ display: "flex", gap: 16, marginBottom: 20, flexWrap: "wrap" }}>
-              {userCompanies.length > 0 && (
-                <div style={{ flex: "1 1 200px" }}>
-                  <label style={{ display: "block", fontSize: 13, fontWeight: 600, color: "#555", marginBottom: 6 }}>
-                    {t("selectCompany")}
-                  </label>
+      {/* Content */}
+      <div style={{ maxWidth: 900, margin: "0 auto", padding: "0 20px 40px" }}>
+
+        {/* ===== STEP 1: Select Products ===== */}
+        {currentStep === 1 && (
+          <div>
+            {/* Catalog Selector */}
+            <div style={{ marginBottom: 20 }}>
+              <h3 style={{ fontSize: 16, fontWeight: 600, color: "#333", marginBottom: 12, textAlign: "center" }}>
+                {t("slideshowSelectCatalog") || "Select Catalog"}
+              </h3>
+              {isLoadingSettings ? (
+                <div style={{ textAlign: "center", padding: 20, color: "#888" }}>⏳ {t("loadingSettings") || "Loading settings..."}</div>
+              ) : noCatalogs ? (
+                <div style={{ textAlign: "center", padding: 20, color: "#e53e3e", background: "#fff5f5", borderRadius: 10, border: "1px solid #fed7d7" }}>
+                  ⚠️ {t("slideshowNoCatalogs") || "No catalogs configured. Please set up catalogs in the main tool first."}
+                </div>
+              ) : (
+                <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
                   <select
-                    value={selectedCompanyId || ""}
-                    onChange={(e) => {
-                      const id = parseInt(e.target.value);
-                      setSelectedCompanyId(id);
-                      saveSelectedCompany(id);
-                      setProducts([]);
-                      setBatchItems([]);
-                    }}
-                    style={selectStyle}
+                    value={selectedCatalogId}
+                    onChange={(e) => setSelectedCatalogId(e.target.value)}
+                    style={{ ...selectStyle, flex: 1 }}
                   >
-                    {userCompanies.map((c) => (
-                      <option key={c.id} value={c.id}>{c.name}</option>
+                    <option value="">{t("slideshowSelectCatalog") || "Select Catalog"}</option>
+                    {configuredCatalogs.map((cat) => (
+                      <option key={cat.id} value={cat.id}>{cat.name || cat.id}</option>
                     ))}
                   </select>
+                  <button
+                    onClick={handleFetchProducts}
+                    disabled={!selectedCatalogId || !fbAccessToken || isLoadingProducts}
+                    style={{
+                      ...buttonStyle,
+                      opacity: !selectedCatalogId || !fbAccessToken || isLoadingProducts ? 0.5 : 1,
+                      cursor: !selectedCatalogId || !fbAccessToken || isLoadingProducts ? "not-allowed" : "pointer",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    {isLoadingProducts ? "⏳" : "📦"} {t("slideshowFetchProducts") || "Load Products"}
+                  </button>
                 </div>
               )}
-              <div style={{ flex: "1 1 200px" }}>
-                <label style={{ display: "block", fontSize: 13, fontWeight: 600, color: "#555", marginBottom: 6 }}>
-                  {t("selectCatalog")}
-                </label>
-                <select
-                  value={selectedCatalogId}
-                  onChange={(e) => {
-                    setSelectedCatalogId(e.target.value);
-                    setProducts([]);
-                    setBatchItems([]);
-                  }}
-                  style={selectStyle}
-                >
-                  <option value="">{t("catalogIdPlaceholder") || "Select Catalog"}</option>
-                  {configuredCatalogs.map((c) => (
-                    <option key={c.id} value={c.id}>{c.name || c.id}</option>
-                  ))}
-                </select>
-              </div>
-              <div style={{ flex: "0 0 auto", display: "flex", alignItems: "flex-end" }}>
-                <button
-                  onClick={handleFetchProducts}
-                  disabled={!selectedCatalogId || !fbAccessToken || isLoadingProducts}
-                  style={{
-                    ...buttonStyle,
-                    background: !selectedCatalogId || !fbAccessToken ? "#ccc" : "#667eea",
-                    cursor: !selectedCatalogId || !fbAccessToken ? "not-allowed" : "pointer",
-                  }}
-                >
-                  {isLoadingProducts ? (t("loadingProducts") || "Loading...") : (t("fetchProducts"))}
-                </button>
-              </div>
             </div>
 
-            {/* No catalogs warning / loading */}
-            {isLoadingSettings && configuredCatalogs.length === 0 && (
-              <div style={{
-                background: "#eff6ff",
-                border: "1px solid #bfdbfe",
-                borderRadius: 8,
-                padding: "12px 16px",
-                color: "#1e40af",
-                fontSize: 14,
-                marginBottom: 16,
-              }}>
-                ⏳ {t("loadingSettings") || "Loading catalog settings..."}
-              </div>
-            )}
-            {!isLoadingSettings && configuredCatalogs.length === 0 && (
-              <div style={{
-                background: "#fffbeb",
-                border: "1px solid #fde68a",
-                borderRadius: 8,
-                padding: "12px 16px",
-                color: "#92400e",
-                fontSize: 14,
-                marginBottom: 16,
-              }}>
-                ⚠️ {t("slideshowNoCatalogs") || "No catalogs configured. Please set up catalogs in the main tool settings first."}
+            {productError && (
+              <div style={{ padding: 12, background: "#fff5f5", borderRadius: 8, border: "1px solid #fed7d7", color: "#e53e3e", fontSize: 13, marginBottom: 16 }}>
+                ❌ {productError}
               </div>
             )}
 
-            {/* Search */}
+            {/* Product List */}
             {products.length > 0 && (
-              <div style={{ marginBottom: 16 }}>
-                <input
-                  type="text"
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  placeholder={t("searchPlaceholder") || "Search products..."}
-                  style={inputStyle}
-                />
-              </div>
-            )}
-
-            {/* Product list for batch selection */}
-            {filteredProducts.length > 0 && (
-              <div style={{ marginBottom: 20 }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-                  <span style={{ fontSize: 13, color: "#888" }}>
-                    {t("slideshowProductCount") || "Products"}: {filteredProducts.length}
-                    {batchItems.length > 0 && (
-                      <span style={{ marginLeft: 16, color: "#667eea", fontWeight: 600 }}>
-                        {t("slideshowBatchSelected") || "In batch"}: {batchItems.length}
-                      </span>
-                    )}
+              <div>
+                {/* Search & Select All */}
+                <div style={{ display: "flex", gap: 12, marginBottom: 12, alignItems: "center", flexWrap: "wrap" }}>
+                  <input
+                    type="text"
+                    placeholder={t("slideshowSearchProducts") || "Search products..."}
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    style={{ ...inputStyle, flex: 1, minWidth: 200 }}
+                  />
+                  <span style={{ fontSize: 13, color: "#666", fontWeight: 500 }}>
+                    {selectedProductIds.size}/{filteredProducts.length} {isZh ? "已選" : "selected"}
                   </span>
-                  <div style={{ display: "flex", gap: 8 }}>
-                    <button
-                      onClick={addAllProductsToBatch}
-                      disabled={isBatchRunning}
-                      style={{ ...miniActionBtn, color: "#667eea", borderColor: "#c7d2fe" }}
-                    >
-                      {t("slideshowAddAll") || "Add All"}
-                    </button>
-                    <button
-                      onClick={() => setBatchItems([])}
-                      disabled={isBatchRunning}
-                      style={{ ...miniActionBtn, color: "#ef4444", borderColor: "#fecaca" }}
-                    >
-                      {t("slideshowClearAll") || "Clear All"}
-                    </button>
-                  </div>
+                  <button onClick={selectAllProducts} style={{ ...miniActionBtn, color: "#667eea", borderColor: "#667eea" }}>
+                    {t("slideshowSelectAll") || "Select All"}
+                  </button>
+                  <button onClick={deselectAllProducts} style={{ ...miniActionBtn, color: "#999" }}>
+                    {t("slideshowDeselectAll") || "Deselect All"}
+                  </button>
                 </div>
 
-                <div style={{
-                  display: "grid",
-                  gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))",
-                  gap: 10,
-                  maxHeight: 350,
-                  overflowY: "auto",
-                  padding: 4,
-                }}>
+                {/* Product List Table */}
+                <div style={{ background: "#fff", borderRadius: 12, border: "1px solid #e8e8e8", overflow: "hidden", maxHeight: 500, overflowY: "auto" }}>
                   {filteredProducts.map((product) => {
-                    const inBatch = batchItems.some(b => b.product.id === product.id);
-                    const batchItem = batchItems.find(b => b.product.id === product.id);
+                    const allImages = [product.imageUrl, ...product.additionalImages].filter(Boolean);
+                    const isSelected = selectedProductIds.has(product.id);
+                    const isExpanded = expandedProductId === product.id;
+
                     return (
-                      <div
-                        key={product.id}
-                        onClick={() => !isBatchRunning && (inBatch ? removeProductFromBatch(product.id) : addProductToBatch(product))}
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          gap: 10,
-                          padding: "8px 12px",
-                          borderRadius: 8,
-                          border: `2px solid ${inBatch ? "#667eea" : "#e8e8e8"}`,
-                          background: inBatch ? "#f0f0ff" : "#fff",
-                          cursor: isBatchRunning ? "default" : "pointer",
-                          transition: "all 0.15s",
-                        }}
-                      >
-                        <img
-                          src={product.imageUrl}
-                          alt={product.name}
-                          style={{ width: 40, height: 40, borderRadius: 6, objectFit: "cover", flexShrink: 0 }}
-                        />
-                        <div style={{ flex: 1, overflow: "hidden" }}>
-                          <div style={{ fontSize: 12, fontWeight: 600, color: "#333", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                            {product.name}
-                          </div>
-                          <div style={{ fontSize: 11, color: "#999" }}>
-                            {product.retailerId} · {1 + product.additionalImages.length} {t("slideshowImages") || "images"}
-                          </div>
-                        </div>
-                        {batchItem && (
-                          <span style={{
-                            fontSize: 10,
-                            fontWeight: 700,
-                            padding: "2px 6px",
-                            borderRadius: 4,
-                            background: batchItem.status === "done" ? "#dcfce7" : batchItem.status === "error" ? "#fef2f2" : batchItem.status === "generating" || batchItem.status === "uploading" ? "#dbeafe" : "#f3f4f6",
-                            color: batchItem.status === "done" ? "#166534" : batchItem.status === "error" ? "#991b1b" : batchItem.status === "generating" || batchItem.status === "uploading" ? "#1e40af" : "#6b7280",
+                      <div key={product.id} style={{ borderBottom: "1px solid #f0f0f0" }}>
+                        {/* Product Row */}
+                        <div
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 12,
+                            padding: "10px 16px",
+                            cursor: "pointer",
+                            background: isSelected ? "#f0f0ff" : "#fff",
+                            transition: "background 0.15s",
+                          }}
+                          onClick={() => toggleProductSelection(product)}
+                          onMouseEnter={(e) => { if (!isSelected) (e.currentTarget.style.background = "#fafafe"); }}
+                          onMouseLeave={(e) => { if (!isSelected) (e.currentTarget.style.background = "#fff"); }}
+                        >
+                          {/* Checkbox */}
+                          <div style={{
+                            width: 22, height: 22, borderRadius: 4, border: `2px solid ${isSelected ? "#667eea" : "#ccc"}`,
+                            background: isSelected ? "#667eea" : "#fff", display: "flex", alignItems: "center", justifyContent: "center",
+                            flexShrink: 0, transition: "all 0.15s",
                           }}>
-                            {batchItem.status === "done" ? "✅" : batchItem.status === "error" ? "❌" : batchItem.status === "generating" ? "⏳" : batchItem.status === "uploading" ? "📤" : "⏸"}
-                          </span>
+                            {isSelected && <span style={{ color: "#fff", fontSize: 13, fontWeight: 700 }}>✓</span>}
+                          </div>
+
+                          {/* Thumbnail */}
+                          <img
+                            src={product.imageUrl}
+                            alt={product.name}
+                            style={{ width: 48, height: 48, borderRadius: 6, objectFit: "cover", flexShrink: 0, border: "1px solid #eee" }}
+                          />
+
+                          {/* Product Info */}
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontSize: 14, fontWeight: 600, color: "#333", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                              {product.name}
+                            </div>
+                            <div style={{ fontSize: 12, color: "#999", marginTop: 2 }}>
+                              ID: {product.retailerId}
+                            </div>
+                          </div>
+
+                          {/* Image Count Badge */}
+                          <div style={{
+                            background: allImages.length > 1 ? "#e0e7ff" : "#f0f0f0",
+                            color: allImages.length > 1 ? "#667eea" : "#888",
+                            padding: "4px 10px", borderRadius: 12, fontSize: 12, fontWeight: 600, flexShrink: 0,
+                          }}>
+                            🖼 {allImages.length} {isZh ? "張圖片" : "images"}
+                          </div>
+
+                          {/* Expand button */}
+                          {allImages.length > 1 && (
+                            <button
+                              onClick={(e) => { e.stopPropagation(); setExpandedProductId(isExpanded ? null : product.id); }}
+                              style={{ background: "none", border: "none", cursor: "pointer", fontSize: 16, color: "#888", padding: "4px 8px" }}
+                              title={isZh ? "展開圖片" : "Expand images"}
+                            >
+                              {isExpanded ? "▲" : "▼"}
+                            </button>
+                          )}
+                        </div>
+
+                        {/* Expanded Image Grid */}
+                        {isExpanded && (
+                          <div style={{ padding: "8px 16px 12px 52px", background: "#fafafe", display: "flex", gap: 8, flexWrap: "wrap" }}>
+                            {allImages.map((imgUrl, idx) => (
+                              <div key={idx} style={{ position: "relative" }}>
+                                <img
+                                  src={imgUrl}
+                                  alt={`${product.name} ${idx + 1}`}
+                                  style={{ width: 64, height: 64, borderRadius: 6, objectFit: "cover", border: "2px solid #e0e0e0" }}
+                                />
+                                <div style={{
+                                  position: "absolute", top: 2, left: 2, background: "rgba(0,0,0,0.6)", color: "#fff",
+                                  fontSize: 10, fontWeight: 700, borderRadius: 3, padding: "1px 4px",
+                                }}>
+                                  {idx === 0 ? (isZh ? "主圖" : "Main") : `#${idx + 1}`}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
                         )}
                       </div>
                     );
@@ -2194,254 +992,544 @@ export const SlideshowGenerator = () => {
               </div>
             )}
 
-            {/* Batch Settings */}
-            {batchItems.length > 0 && (
-              <div style={{
-                padding: "20px",
-                background: "#f8f9ff",
-                borderRadius: 12,
-                border: "1px solid #e0e7ff",
-                marginBottom: 20,
-              }}>
-                <h4 style={{ margin: "0 0 16px", fontSize: 15, fontWeight: 600, color: "#333" }}>
-                  ⚙️ {t("slideshowBatchSettings") || "Batch Settings"}
-                </h4>
+            {/* Custom Image Upload */}
+            <div style={{
+              marginTop: 20, padding: 20, border: "2px dashed #c0c8e8", borderRadius: 12,
+              background: "#fafbff", textAlign: "center",
+            }}>
+              <h4 style={{ margin: "0 0 8px", fontSize: 14, fontWeight: 600, color: "#555" }}>
+                📤 {t("slideshowUploadCustom") || "Upload Custom Images"}
+              </h4>
+              <p style={{ margin: "0 0 12px", fontSize: 12, color: "#888" }}>
+                {t("slideshowUploadCustomDesc") || "Add your own images to the slideshow (max 10MB each)"}
+              </p>
+              <input ref={imageInputRef} type="file" accept="image/*" multiple onChange={handleImageUpload} style={{ display: "none" }} />
+              <button
+                onClick={() => imageInputRef.current?.click()}
+                disabled={isUploadingImage}
+                style={{ ...buttonStyle, background: "#764ba2", fontSize: 13, padding: "8px 20px" }}
+              >
+                {isUploadingImage ? "⏳ Uploading..." : `🖼 ${t("slideshowChooseImages") || "Choose Images"}`}
+              </button>
+            </div>
 
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 16 }}>
-                  <div>
-                    <label style={labelStyle}>{t("slideshowAspectRatio") || "Aspect Ratio"}</label>
-                    <div style={{ display: "flex", gap: 8 }}>
-                      {(["4:5", "9:16"] as AspectRatio[]).map((ratio) => (
-                        <button
-                          key={ratio}
-                          onClick={() => setAspectRatio(ratio)}
-                          disabled={isBatchRunning}
-                          style={{
-                            flex: 1,
-                            padding: "8px",
-                            borderRadius: 8,
-                            border: `2px solid ${aspectRatio === ratio ? "#667eea" : "#e0e0e0"}`,
-                            background: aspectRatio === ratio ? "#f0f0ff" : "#fff",
-                            color: aspectRatio === ratio ? "#667eea" : "#666",
-                            fontWeight: 600,
-                            cursor: isBatchRunning ? "not-allowed" : "pointer",
-                            fontSize: 13,
-                          }}
-                        >
-                          {ratio}
-                        </button>
-                      ))}
+            {/* Selected Images Preview (reorderable) */}
+            {selectedImages.length > 0 && (
+              <div style={{ marginTop: 20 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+                  <h4 style={{ margin: 0, fontSize: 15, fontWeight: 600, color: "#333" }}>
+                    📋 {t("slideshowSelectedImages") || "Selected Images"} ({selectedImages.length})
+                  </h4>
+                  <span style={{ fontSize: 12, color: "#888" }}>{isZh ? "使用箭頭調整順序" : "Use arrows to reorder"}</span>
+                </div>
+                <div style={{ background: "#fff", borderRadius: 10, border: "1px solid #e8e8e8", overflow: "hidden", maxHeight: 300, overflowY: "auto" }}>
+                  {selectedImages.map((img, idx) => (
+                    <div key={`${img.url}-${idx}`} style={{
+                      display: "flex", alignItems: "center", gap: 10, padding: "8px 12px",
+                      borderBottom: idx < selectedImages.length - 1 ? "1px solid #f5f5f5" : "none",
+                      background: img.isCustom ? "#fffbf0" : "#fff",
+                    }}>
+                      <span style={{ fontSize: 12, color: "#999", fontWeight: 600, width: 24, textAlign: "center" }}>{idx + 1}</span>
+                      <img src={img.url} alt="" style={{ width: 40, height: 40, borderRadius: 4, objectFit: "cover", border: "1px solid #eee" }} />
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 12, fontWeight: 500, color: "#333", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                          {img.label} {img.isCustom && <span style={{ color: "#e6a817", fontSize: 10 }}>(custom)</span>}
+                        </div>
+                      </div>
+                      <div style={{ display: "flex", gap: 4 }}>
+                        <button onClick={() => moveImage(idx, "up")} disabled={idx === 0} style={{ ...miniBtn, opacity: idx === 0 ? 0.3 : 1 }}>▲</button>
+                        <button onClick={() => moveImage(idx, "down")} disabled={idx === selectedImages.length - 1} style={{ ...miniBtn, opacity: idx === selectedImages.length - 1 ? 0.3 : 1 }}>▼</button>
+                        <button onClick={() => removeSelectedImage(idx)} style={{ ...miniBtn, color: "#e53e3e" }}>✕</button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Next Step Button */}
+            {selectedImages.length > 0 && (
+              <div style={{ textAlign: "center", marginTop: 24 }}>
+                <button
+                  onClick={() => setCurrentStep(2)}
+                  style={{ ...buttonStyle, background: "linear-gradient(135deg, #667eea, #764ba2)", padding: "12px 40px", fontSize: 15 }}
+                >
+                  {t("slideshowNext") || "Next"} → {t("slideshowStep2") || "Settings"}
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ===== STEP 2: Settings ===== */}
+        {currentStep === 2 && (
+          <div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 24 }}>
+              {/* Left: Settings */}
+              <div>
+                <h3 style={{ fontSize: 16, fontWeight: 600, color: "#333", marginBottom: 16 }}>
+                  ⚙️ {t("slideshowSettings") || "Video Settings"}
+                </h3>
+
+                {/* Aspect Ratio */}
+                <div style={{ marginBottom: 16 }}>
+                  <label style={labelStyle}>{t("slideshowAspectRatio") || "Aspect Ratio"}</label>
+                  <div style={{ display: "flex", gap: 8 }}>
+                    {(["4:5", "9:16"] as AspectRatio[]).map((ratio) => (
+                      <button key={ratio} onClick={() => setAspectRatio(ratio)} style={{
+                        flex: 1, padding: "8px", borderRadius: 8,
+                        border: `2px solid ${aspectRatio === ratio ? "#667eea" : "#e0e0e0"}`,
+                        background: aspectRatio === ratio ? "#f0f0ff" : "#fff",
+                        color: aspectRatio === ratio ? "#667eea" : "#666",
+                        fontWeight: 600, cursor: "pointer", fontSize: 13,
+                      }}>
+                        {ratio}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Duration */}
+                <div style={{ marginBottom: 16 }}>
+                  <label style={labelStyle}>{t("slideshowDuration") || "Duration Per Image"}: {durationPerImage}s</label>
+                  <input type="range" min={1} max={15} step={0.5} value={durationPerImage} onChange={(e) => setDurationPerImage(parseFloat(e.target.value))} style={{ width: "100%" }} />
+                </div>
+
+                {/* Transition */}
+                <div style={{ marginBottom: 16 }}>
+                  <label style={labelStyle}>{t("slideshowTransition") || "Transition Effect"}</label>
+                  <select value={transition} onChange={(e) => setTransition(e.target.value as TransitionType)} style={selectStyle}>
+                    {TRANSITIONS.map((tr) => (
+                      <option key={tr.value} value={tr.value}>{isZh ? tr.labelZh : tr.label}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Transition Duration */}
+                {transition !== "none" && (
+                  <div style={{ marginBottom: 16 }}>
+                    <label style={labelStyle}>{t("slideshowTransitionDuration") || "Transition Duration"}: {transitionDuration}s</label>
+                    <input type="range" min={0.2} max={2} step={0.1} value={transitionDuration} onChange={(e) => setTransitionDuration(parseFloat(e.target.value))} style={{ width: "100%" }} />
+                  </div>
+                )}
+
+                {/* Show Product Name */}
+                <div style={{ marginBottom: 16 }}>
+                  <label style={{ ...labelStyle, display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
+                    <input type="checkbox" checked={showProductName} onChange={(e) => setShowProductName(e.target.checked)} style={{ width: 16, height: 16 }} />
+                    {t("slideshowShowProductName") || "Show Product Name"}
+                  </label>
+                </div>
+
+                {/* Text Settings (shown when showProductName or overlayText) */}
+                {(showProductName || overlayText.trim()) && (
+                  <div style={{ padding: 16, background: "#f8f9ff", borderRadius: 10, border: "1px solid #e0e7ff", marginBottom: 16 }}>
+                    <h4 style={{ margin: "0 0 12px", fontSize: 14, fontWeight: 600, color: "#555" }}>
+                      🔤 {isZh ? "文字設定" : "Text Settings"}
+                    </h4>
+
+                    {/* Font Family */}
+                    <div style={{ marginBottom: 12 }}>
+                      <label style={labelStyle}>{isZh ? "字型" : "Font Family"}</label>
+                      <select value={fontFamily} onChange={(e) => setFontFamily(e.target.value as FontFamily)} style={selectStyle}>
+                        {FONT_OPTIONS.map((f) => (
+                          <option key={f.value} value={f.value}>{isZh ? f.labelZh : f.label}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {/* Font Size */}
+                    <div style={{ marginBottom: 12 }}>
+                      <label style={labelStyle}>{isZh ? "字體大小" : "Font Size"}: {fontSize}px</label>
+                      <input type="range" min={16} max={80} step={2} value={fontSize} onChange={(e) => setFontSize(parseInt(e.target.value))} style={{ width: "100%" }} />
+                    </div>
+
+                    {/* Font Color */}
+                    <div style={{ marginBottom: 12 }}>
+                      <label style={labelStyle}>{isZh ? "字體顏色" : "Font Color"}</label>
+                      <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+                        {PRESET_COLORS.map((color) => (
+                          <div
+                            key={color}
+                            onClick={() => setFontColor(color)}
+                            style={{
+                              width: 28, height: 28, borderRadius: 6, background: color, cursor: "pointer",
+                              border: fontColor === color ? "3px solid #667eea" : "2px solid #ddd",
+                              boxShadow: fontColor === color ? "0 0 0 2px rgba(102,126,234,0.3)" : "none",
+                            }}
+                          />
+                        ))}
+                        <input
+                          type="color"
+                          value={fontColor}
+                          onChange={(e) => setFontColor(e.target.value)}
+                          style={{ width: 28, height: 28, border: "none", cursor: "pointer", borderRadius: 4, padding: 0 }}
+                          title={isZh ? "自訂顏色" : "Custom color"}
+                        />
+                        <span style={{ fontSize: 12, color: "#888", marginLeft: 4 }}>{fontColor}</span>
+                      </div>
+                    </div>
+
+                    {/* Text Position */}
+                    <div>
+                      <label style={labelStyle}>{t("slideshowTextPosition") || "Text Position"}</label>
+                      <div style={{ display: "flex", gap: 6 }}>
+                        {(["top", "center", "bottom"] as TextPosition[]).map((pos) => (
+                          <button key={pos} onClick={() => setTextPosition(pos)} style={{
+                            flex: 1, padding: "6px", borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: "pointer",
+                            border: `2px solid ${textPosition === pos ? "#667eea" : "#e0e0e0"}`,
+                            background: textPosition === pos ? "#f0f0ff" : "#fff",
+                            color: textPosition === pos ? "#667eea" : "#666",
+                          }}>
+                            {pos === "top" ? (isZh ? "頂部" : "Top") : pos === "center" ? (isZh ? "中間" : "Center") : (isZh ? "底部" : "Bottom")}
+                          </button>
+                        ))}
+                      </div>
                     </div>
                   </div>
-                  <div>
-                    <label style={labelStyle}>
-                      {t("slideshowDuration") || "Duration Per Image"}: {durationPerImage}s
-                    </label>
-                    <input
-                      type="range"
-                      min={1}
-                      max={15}
-                      step={0.5}
-                      value={durationPerImage}
-                      onChange={(e) => setDurationPerImage(parseFloat(e.target.value))}
-                      style={{ width: "100%" }}
-                      disabled={isBatchRunning}
-                    />
-                  </div>
+                )}
+
+                {/* Overlay Text */}
+                <div style={{ marginBottom: 16 }}>
+                  <label style={labelStyle}>{t("slideshowOverlayText") || "Custom Overlay Text"}</label>
+                  <input
+                    type="text"
+                    value={overlayText}
+                    onChange={(e) => setOverlayText(e.target.value)}
+                    placeholder={t("slideshowOverlayPlaceholder") || "Optional text on all slides"}
+                    style={inputStyle}
+                  />
                 </div>
 
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 16 }}>
-                  <div>
-                    <label style={labelStyle}>{t("slideshowTransition") || "Transition"}</label>
-                    <select
-                      value={transition}
-                      onChange={(e) => setTransition(e.target.value as TransitionType)}
-                      style={selectStyle}
-                      disabled={isBatchRunning}
-                    >
-                      {transitions.map((tr) => (
-                        <option key={tr.value} value={tr.value}>{tr.label}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label style={{ ...labelStyle, display: "flex", alignItems: "center", gap: 8 }}>
-                      <input
-                        type="checkbox"
-                        checked={showProductName}
-                        onChange={(e) => setShowProductName(e.target.checked)}
-                        disabled={isBatchRunning}
-                        style={{ width: 16, height: 16 }}
-                      />
-                      {t("slideshowShowProductName") || "Show Product Name"}
-                    </label>
-                  </div>
-                </div>
-
-                {/* Batch options */}
-                <div style={{ display: "flex", gap: 20, flexWrap: "wrap" }}>
-                  <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, fontWeight: 500, color: "#555", cursor: "pointer" }}>
-                    <input
-                      type="checkbox"
-                      checked={batchUploadToDrive}
-                      onChange={(e) => setBatchUploadToDrive(e.target.checked)}
-                      disabled={isBatchRunning || !googleAccessToken}
-                      style={{ width: 16, height: 16 }}
-                    />
-                    📁 {t("slideshowBatchUploadDrive") || "Upload to Google Drive"}
-                    {!googleAccessToken && <span style={{ fontSize: 11, color: "#999" }}>({t("slideshowLoginRequired") || "login required"})</span>}
-                  </label>
-                  <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, fontWeight: 500, color: "#555", cursor: "pointer" }}>
-                    <input
-                      type="checkbox"
-                      checked={batchUpdateCatalog}
-                      onChange={(e) => setBatchUpdateCatalog(e.target.checked)}
-                      disabled={isBatchRunning}
-                      style={{ width: 16, height: 16 }}
-                    />
-                    📦 {t("slideshowBatchUpdateCatalog") || "Update Catalog Videos"}
-                  </label>
-                </div>
-              </div>
-            )}
-
-            {/* Batch Progress */}
-            {batchItems.length > 0 && (batchStats.done > 0 || batchStats.running > 0) && (
-              <div style={{
-                padding: "16px 20px",
-                background: "#f0fdf4",
-                borderRadius: 12,
-                border: "1px solid #bbf7d0",
-                marginBottom: 20,
-              }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-                  <span style={{ fontSize: 14, fontWeight: 600, color: "#166534" }}>
-                    {t("slideshowBatchProgress") || "Progress"}: {batchStats.done}/{batchStats.total}
-                  </span>
-                  {batchStats.error > 0 && (
-                    <span style={{ fontSize: 12, color: "#dc2626" }}>
-                      {batchStats.error} {t("slideshowBatchErrors") || "errors"}
-                    </span>
+                {/* Background Music */}
+                <div style={{ padding: 16, background: "#f8f9ff", borderRadius: 10, border: "1px solid #e0e7ff", marginBottom: 16 }}>
+                  <h4 style={{ margin: "0 0 10px", fontSize: 14, fontWeight: 600, color: "#555" }}>
+                    🎵 {t("slideshowBackgroundMusic") || "Background Music"}
+                  </h4>
+                  {audioUrl ? (
+                    <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                      <span style={{ fontSize: 13, color: "#333" }}>🎶 {audioFileName}</span>
+                      <button onClick={removeAudio} style={{ ...miniActionBtn, color: "#e53e3e", borderColor: "#fca5a5" }}>✕ {isZh ? "移除" : "Remove"}</button>
+                      <div style={{ width: "100%", marginTop: 8 }}>
+                        <label style={{ fontSize: 12, color: "#666" }}>{isZh ? "音量" : "Volume"}: {Math.round(audioVolume * 100)}%</label>
+                        <input type="range" min={0} max={1} step={0.05} value={audioVolume} onChange={(e) => setAudioVolume(parseFloat(e.target.value))} style={{ width: "100%" }} />
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      <input ref={audioInputRef} type="file" accept="audio/*" onChange={handleAudioUpload} style={{ display: "none" }} />
+                      <button onClick={() => audioInputRef.current?.click()} disabled={isUploadingAudio} style={{ ...buttonStyle, background: "#764ba2", fontSize: 13, padding: "8px 16px" }}>
+                        {isUploadingAudio ? "⏳ Uploading..." : `🎵 ${t("slideshowUploadAudio") || "Upload Audio"}`}
+                      </button>
+                      <p style={{ margin: "6px 0 0", fontSize: 11, color: "#999" }}>{isZh ? "支援 MP3, WAV, OGG（最大 16MB）" : "Supports MP3, WAV, OGG (max 16MB)"}</p>
+                    </>
                   )}
                 </div>
+              </div>
+
+              {/* Right: Preview */}
+              <div>
+                <h3 style={{ fontSize: 16, fontWeight: 600, color: "#333", marginBottom: 16 }}>
+                  👁 {t("slideshowPreview") || "Preview"}
+                </h3>
                 <div style={{
-                  width: "100%",
-                  height: 8,
-                  background: "#e5e7eb",
-                  borderRadius: 4,
-                  overflow: "hidden",
+                  background: "#000", borderRadius: 12, overflow: "hidden",
+                  aspectRatio: aspectRatio === "4:5" ? "4/5" : "9/16",
+                  maxHeight: 450, position: "relative",
                 }}>
-                  <div style={{
-                    width: `${(batchStats.done / batchStats.total) * 100}%`,
-                    height: "100%",
-                    background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
-                    borderRadius: 4,
-                    transition: "width 0.3s",
-                  }} />
+                  {selectedImages.length > 0 && (
+                    <>
+                      <img
+                        src={selectedImages[previewIndex % selectedImages.length]?.url}
+                        alt=""
+                        style={{ width: "100%", height: "100%", objectFit: "cover", animation: "fadeIn 0.5s" }}
+                      />
+                      {/* Text overlay preview */}
+                      {(showProductName || overlayText.trim()) && (
+                        <div style={{
+                          position: "absolute", left: 0, right: 0, padding: "12px 16px",
+                          background: "rgba(0,0,0,0.5)", textAlign: "center",
+                          ...(textPosition === "top" ? { top: 0 } : textPosition === "center" ? { top: "50%", transform: "translateY(-50%)" } : { bottom: 0 }),
+                        }}>
+                          <div style={{
+                            color: fontColor, fontSize: Math.min(fontSize, 28), fontWeight: 700,
+                            fontFamily: fontFamily.includes("serif") ? "serif" : "sans-serif",
+                            textShadow: "1px 1px 3px rgba(0,0,0,0.7)",
+                          }}>
+                            {showProductName && selectedImages[previewIndex % selectedImages.length]?.label}
+                            {overlayText.trim() && <div style={{ fontSize: Math.min(fontSize * 0.8, 22), marginTop: 4 }}>{overlayText}</div>}
+                          </div>
+                        </div>
+                      )}
+                      {/* Preview controls */}
+                      <div style={{ position: "absolute", bottom: 12, left: "50%", transform: "translateX(-50%)", display: "flex", gap: 8, alignItems: "center" }}>
+                        <button onClick={() => setPreviewIndex((prev) => (prev - 1 + selectedImages.length) % selectedImages.length)} style={previewBtn}>◀</button>
+                        <button onClick={() => setIsPreviewPlaying(!isPreviewPlaying)} style={previewBtn}>{isPreviewPlaying ? "⏸" : "▶"}</button>
+                        <button onClick={() => setPreviewIndex((prev) => (prev + 1) % selectedImages.length)} style={previewBtn}>▶</button>
+                      </div>
+                      <div style={{ position: "absolute", top: 12, right: 12, background: "rgba(0,0,0,0.6)", color: "#fff", padding: "4px 10px", borderRadius: 12, fontSize: 12, fontWeight: 600 }}>
+                        {(previewIndex % selectedImages.length) + 1}/{selectedImages.length}
+                      </div>
+                    </>
+                  )}
                 </div>
               </div>
-            )}
+            </div>
 
-            {/* Batch Action Buttons */}
-            {batchItems.length > 0 && (
-              <div style={{ display: "flex", justifyContent: "center", gap: 12 }}>
-                {!isBatchRunning ? (
+            {/* Navigation Buttons */}
+            <div style={{ display: "flex", justifyContent: "space-between", marginTop: 24 }}>
+              <button onClick={() => setCurrentStep(1)} style={{ ...buttonStyle, background: "#888" }}>
+                ← {t("slideshowPrev") || "Back"}
+              </button>
+
+              {/* Single or Batch */}
+              <div style={{ display: "flex", gap: 12 }}>
+                {selectedProductIds.size > 1 && (
                   <button
-                    onClick={handleBatchGenerate}
-                    disabled={batchItems.length === 0}
-                    style={{
-                      ...buttonStyle,
-                      background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
-                      padding: "12px 32px",
-                      fontSize: 15,
+                    onClick={() => {
+                      setBatchItems(selectedProducts.map((p) => ({ product: p, status: "pending" })));
+                      setCurrentStep(3);
                     }}
+                    style={{ ...buttonStyle, background: "linear-gradient(135deg, #f59e0b, #d97706)", padding: "12px 24px" }}
                   >
-                    🚀 {t("slideshowStartBatch") || "Start Batch Generation"} ({batchItems.filter(b => b.status !== "done").length} {t("slideshowBatchItems") || "items"})
+                    🚀 {isZh ? "批次生成" : "Batch Generate"} ({selectedProductIds.size} {isZh ? "個商品" : "products"})
                   </button>
-                ) : (
-                  <button
-                    onClick={handleStopBatch}
-                    style={{
-                      ...buttonStyle,
-                      background: "#ef4444",
-                      padding: "12px 32px",
-                      fontSize: 15,
-                    }}
-                  >
-                    ⏹ {t("slideshowStopBatch") || "Stop Batch"}
-                  </button>
+                )}
+                <button
+                  onClick={handleGenerate}
+                  disabled={isGenerating || selectedImages.length === 0}
+                  style={{
+                    ...buttonStyle,
+                    background: isGenerating ? "#999" : "linear-gradient(135deg, #667eea, #764ba2)",
+                    padding: "12px 32px", fontSize: 15,
+                    cursor: isGenerating ? "not-allowed" : "pointer",
+                  }}
+                >
+                  {isGenerating ? `⏳ ${t("slideshowGenerating") || "Generating..."}` : `🎬 ${t("slideshowGenerate") || "Generate Video"}`}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ===== STEP 3: Generate & Download ===== */}
+        {currentStep === 3 && (
+          <div>
+            {/* Single Mode Results */}
+            {batchItems.length === 0 && (
+              <div>
+                {isGenerating && (
+                  <div style={{ textAlign: "center", padding: 40 }}>
+                    <div style={{ fontSize: 48, marginBottom: 16 }}>⏳</div>
+                    <h3 style={{ color: "#667eea", marginBottom: 8 }}>{t("slideshowGenerating") || "Generating video..."}</h3>
+                    <p style={{ color: "#888", fontSize: 13 }}>{isZh ? "這可能需要 30-120 秒" : "This may take 30-120 seconds"}</p>
+                  </div>
+                )}
+
+                {generationError && (
+                  <div style={{ padding: 20, background: "#fff5f5", borderRadius: 12, border: "1px solid #fed7d7", textAlign: "center", marginBottom: 20 }}>
+                    <div style={{ fontSize: 32, marginBottom: 8 }}>❌</div>
+                    <h4 style={{ color: "#e53e3e", margin: "0 0 8px" }}>{isZh ? "生成失敗" : "Generation Failed"}</h4>
+                    <p style={{ color: "#999", fontSize: 13 }}>{generationError}</p>
+                  </div>
+                )}
+
+                {generatedVideoUrl && (
+                  <div>
+                    <div style={{ textAlign: "center", marginBottom: 20 }}>
+                      <div style={{ fontSize: 32, marginBottom: 8 }}>✅</div>
+                      <h3 style={{ color: "#16a34a", margin: "0 0 8px" }}>{isZh ? "影片生成成功！" : "Video Generated!"}</h3>
+                    </div>
+
+                    {/* Video Player */}
+                    <div style={{ maxWidth: 400, margin: "0 auto 24px", borderRadius: 12, overflow: "hidden", boxShadow: "0 4px 20px rgba(0,0,0,0.1)" }}>
+                      <video src={generatedVideoUrl} controls style={{ width: "100%", display: "block" }} />
+                    </div>
+
+                    {/* Action Buttons */}
+                    <div style={{ display: "flex", justifyContent: "center", gap: 12, flexWrap: "wrap", marginBottom: 24 }}>
+                      <a href={generatedVideoUrl} download style={{ ...buttonStyle, textDecoration: "none", display: "inline-block" }}>
+                        ⬇️ {t("slideshowDownload") || "Download"}
+                      </a>
+                      {googleAccessToken && (
+                        <button
+                          onClick={handleUploadToDrive}
+                          disabled={isUploadingToDrive}
+                          style={{ ...buttonStyle, background: "#0369a1", opacity: isUploadingToDrive ? 0.6 : 1 }}
+                        >
+                          {isUploadingToDrive ? "⏳ Uploading..." : `📁 ${t("slideshowUploadDrive") || "Upload to Drive"}`}
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Drive Upload Result */}
+                    {driveUploadResult && (
+                      <div style={{ padding: 16, background: "#f0fdf4", borderRadius: 10, border: "1px solid #bbf7d0", marginBottom: 20 }}>
+                        <h4 style={{ margin: "0 0 8px", fontSize: 14, color: "#166534" }}>✅ {isZh ? "已上傳到 Google Drive" : "Uploaded to Google Drive"}</h4>
+                        <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+                          <a href={driveUploadResult.downloadLink} target="_blank" rel="noopener noreferrer" style={{ color: "#0369a1", fontSize: 13 }}>📥 Download Link</a>
+                          <a href={driveUploadResult.embedLink} target="_blank" rel="noopener noreferrer" style={{ color: "#0369a1", fontSize: 13 }}>🔗 Preview Link</a>
+                        </div>
+
+                        {/* Catalog Update */}
+                        {selectedCatalogId && fbAccessToken && (
+                          <div style={{ marginTop: 16, paddingTop: 12, borderTop: "1px solid #bbf7d0" }}>
+                            <h5 style={{ margin: "0 0 8px", fontSize: 13, color: "#166534" }}>📦 {isZh ? "更新 Catalog 商品影片" : "Update Catalog Product Video"}</h5>
+                            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                              <select
+                                value={selectedProductForCatalog}
+                                onChange={(e) => setSelectedProductForCatalog(e.target.value)}
+                                style={{ ...selectStyle, flex: 1, fontSize: 13 }}
+                              >
+                                <option value="">{isZh ? "選擇商品" : "Select product"}</option>
+                                {products.map((p) => (
+                                  <option key={p.id} value={p.retailerId}>{p.name} ({p.retailerId})</option>
+                                ))}
+                              </select>
+                              <button
+                                onClick={handleUpdateCatalog}
+                                disabled={isUpdatingCatalog || !selectedProductForCatalog}
+                                style={{ ...buttonStyle, fontSize: 12, padding: "8px 16px", background: "#16a34a", opacity: isUpdatingCatalog || !selectedProductForCatalog ? 0.5 : 1 }}
+                              >
+                                {isUpdatingCatalog ? "⏳" : "📦"} {isZh ? "更新" : "Update"}
+                              </button>
+                            </div>
+                            {catalogUpdateResult && <p style={{ color: "#16a34a", fontSize: 12, marginTop: 6 }}>✅ {catalogUpdateResult}</p>}
+                            {catalogUpdateError && <p style={{ color: "#e53e3e", fontSize: 12, marginTop: 6 }}>❌ {catalogUpdateError}</p>}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                    {driveUploadError && (
+                      <div style={{ padding: 12, background: "#fff5f5", borderRadius: 8, border: "1px solid #fed7d7", color: "#e53e3e", fontSize: 13, marginBottom: 16 }}>
+                        ❌ {driveUploadError}
+                      </div>
+                    )}
+                  </div>
                 )}
               </div>
             )}
 
-            {/* Batch Results Table */}
-            {batchItems.some(b => b.status === "done") && (
-              <div style={{ marginTop: 24 }}>
-                <h4 style={{ fontSize: 15, fontWeight: 600, color: "#333", marginBottom: 12 }}>
-                  📋 {t("slideshowBatchResults") || "Batch Results"}
-                </h4>
-                <div style={{ overflowX: "auto" }}>
+            {/* Batch Mode */}
+            {batchItems.length > 0 && (
+              <div>
+                <h3 style={{ fontSize: 16, fontWeight: 600, color: "#333", marginBottom: 16 }}>
+                  🚀 {isZh ? "批次生成" : "Batch Generation"} ({batchItems.length} {isZh ? "個商品" : "products"})
+                </h3>
+
+                {/* Batch Settings */}
+                {!isBatchRunning && batchStats.done === 0 && (
+                  <div style={{ padding: 16, background: "#f8f9ff", borderRadius: 12, border: "1px solid #e0e7ff", marginBottom: 20 }}>
+                    <div style={{ display: "flex", gap: 20, flexWrap: "wrap" }}>
+                      <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, fontWeight: 500, color: "#555", cursor: "pointer" }}>
+                        <input type="checkbox" checked={batchUploadToDrive} onChange={(e) => setBatchUploadToDrive(e.target.checked)} disabled={!googleAccessToken} style={{ width: 16, height: 16 }} />
+                        📁 {isZh ? "上傳到 Google Drive" : "Upload to Google Drive"}
+                        {!googleAccessToken && <span style={{ fontSize: 11, color: "#999" }}>({isZh ? "需登入" : "login required"})</span>}
+                      </label>
+                      <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, fontWeight: 500, color: "#555", cursor: "pointer" }}>
+                        <input type="checkbox" checked={batchUpdateCatalog} onChange={(e) => setBatchUpdateCatalog(e.target.checked)} style={{ width: 16, height: 16 }} />
+                        📦 {isZh ? "更新 Catalog 影片" : "Update Catalog Videos"}
+                      </label>
+                    </div>
+                  </div>
+                )}
+
+                {/* Batch Progress */}
+                {(batchStats.done > 0 || batchStats.running > 0) && (
+                  <div style={{ padding: "16px 20px", background: "#f0fdf4", borderRadius: 12, border: "1px solid #bbf7d0", marginBottom: 20 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                      <span style={{ fontSize: 14, fontWeight: 600, color: "#166534" }}>
+                        {isZh ? "進度" : "Progress"}: {batchStats.done}/{batchStats.total}
+                      </span>
+                      {batchStats.error > 0 && <span style={{ fontSize: 12, color: "#dc2626" }}>{batchStats.error} {isZh ? "個錯誤" : "errors"}</span>}
+                    </div>
+                    <div style={{ width: "100%", height: 8, background: "#e5e7eb", borderRadius: 4, overflow: "hidden" }}>
+                      <div style={{ width: `${(batchStats.done / batchStats.total) * 100}%`, height: "100%", background: "linear-gradient(135deg, #667eea, #764ba2)", borderRadius: 4, transition: "width 0.3s" }} />
+                    </div>
+                  </div>
+                )}
+
+                {/* Batch Action Buttons */}
+                <div style={{ display: "flex", justifyContent: "center", gap: 12, marginBottom: 20 }}>
+                  {!isBatchRunning ? (
+                    batchStats.done === 0 ? (
+                      <button onClick={handleBatchGenerate} style={{ ...buttonStyle, background: "linear-gradient(135deg, #667eea, #764ba2)", padding: "12px 32px", fontSize: 15 }}>
+                        🚀 {isZh ? "開始批次生成" : "Start Batch Generation"}
+                      </button>
+                    ) : null
+                  ) : (
+                    <button onClick={handleStopBatch} style={{ ...buttonStyle, background: "#ef4444", padding: "12px 32px", fontSize: 15 }}>
+                      ⏹ {isZh ? "停止" : "Stop"}
+                    </button>
+                  )}
+                </div>
+
+                {/* Batch Results Table */}
+                <div style={{ background: "#fff", borderRadius: 12, border: "1px solid #e8e8e8", overflow: "hidden" }}>
                   <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
                     <thead>
                       <tr style={{ background: "#f8f9fa", borderBottom: "2px solid #e0e0e0" }}>
-                        <th style={thStyle}>{t("slideshowBatchProduct") || "Product"}</th>
-                        <th style={thStyle}>{t("slideshowBatchStatus") || "Status"}</th>
-                        <th style={thStyle}>{t("slideshowBatchVideo") || "Video"}</th>
-                        <th style={thStyle}>{t("slideshowBatchDrive") || "Drive"}</th>
+                        <th style={thStyle}>#</th>
+                        <th style={thStyle}>{isZh ? "商品" : "Product"}</th>
+                        <th style={thStyle}>{isZh ? "圖片數" : "Images"}</th>
+                        <th style={thStyle}>{isZh ? "狀態" : "Status"}</th>
+                        <th style={thStyle}>{isZh ? "影片" : "Video"}</th>
+                        <th style={thStyle}>{isZh ? "Drive" : "Drive"}</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {batchItems.filter(b => b.status === "done" || b.status === "error").map((item, idx) => (
-                        <tr key={idx} style={{ borderBottom: "1px solid #f0f0f0" }}>
-                          <td style={tdStyle}>
-                            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                              <img src={item.product.imageUrl} alt="" style={{ width: 28, height: 28, borderRadius: 4, objectFit: "cover" }} />
-                              <div>
-                                <div style={{ fontWeight: 600, maxWidth: 200, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.product.name}</div>
-                                <div style={{ fontSize: 11, color: "#999" }}>{item.product.retailerId}</div>
+                      {batchItems.map((item, idx) => {
+                        const imgCount = [item.product.imageUrl, ...item.product.additionalImages].filter(Boolean).length;
+                        return (
+                          <tr key={idx} style={{ borderBottom: "1px solid #f0f0f0" }}>
+                            <td style={tdStyle}>{idx + 1}</td>
+                            <td style={tdStyle}>
+                              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                                <img src={item.product.imageUrl} alt="" style={{ width: 32, height: 32, borderRadius: 4, objectFit: "cover" }} />
+                                <div>
+                                  <div style={{ fontWeight: 600, maxWidth: 180, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.product.name}</div>
+                                  <div style={{ fontSize: 11, color: "#999" }}>{item.product.retailerId}</div>
+                                </div>
                               </div>
-                            </div>
-                          </td>
-                          <td style={tdStyle}>
-                            <span style={{
-                              padding: "2px 8px",
-                              borderRadius: 4,
-                              fontSize: 11,
-                              fontWeight: 600,
-                              background: item.status === "done" ? "#dcfce7" : "#fef2f2",
-                              color: item.status === "done" ? "#166534" : "#991b1b",
-                            }}>
-                              {item.status === "done" ? "✅ Done" : `❌ ${item.error || "Error"}`}
-                            </span>
-                          </td>
-                          <td style={tdStyle}>
-                            {item.videoUrl && (
-                              <a href={item.videoUrl} target="_blank" rel="noopener noreferrer" style={{ color: "#667eea", fontSize: 12 }}>
-                                ⬇️ Download
-                              </a>
-                            )}
-                          </td>
-                          <td style={tdStyle}>
-                            {item.driveLink && (
-                              <a href={item.driveLink} target="_blank" rel="noopener noreferrer" style={{ color: "#0369a1", fontSize: 12 }}>
-                                📁 Drive
-                              </a>
-                            )}
-                          </td>
-                        </tr>
-                      ))}
+                            </td>
+                            <td style={tdStyle}>{imgCount}</td>
+                            <td style={tdStyle}>
+                              <span style={{
+                                padding: "2px 8px", borderRadius: 4, fontSize: 11, fontWeight: 600,
+                                background: item.status === "done" ? "#dcfce7" : item.status === "error" ? "#fef2f2" : item.status === "pending" ? "#f3f4f6" : "#eff6ff",
+                                color: item.status === "done" ? "#166534" : item.status === "error" ? "#991b1b" : item.status === "pending" ? "#6b7280" : "#1e40af",
+                              }}>
+                                {item.status === "done" ? "✅" : item.status === "error" ? "❌" : item.status === "pending" ? "⏳" : "🔄"} {item.status}
+                              </span>
+                              {item.error && <div style={{ fontSize: 11, color: "#991b1b", marginTop: 2 }}>{item.error}</div>}
+                            </td>
+                            <td style={tdStyle}>
+                              {item.videoUrl && <a href={item.videoUrl} target="_blank" rel="noopener noreferrer" style={{ color: "#667eea", fontSize: 12 }}>⬇️</a>}
+                            </td>
+                            <td style={tdStyle}>
+                              {item.driveLink && <a href={item.driveLink} target="_blank" rel="noopener noreferrer" style={{ color: "#0369a1", fontSize: 12 }}>📁</a>}
+                            </td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>
               </div>
             )}
+
+            {/* Back button */}
+            <div style={{ textAlign: "center", marginTop: 24 }}>
+              <button onClick={() => { setCurrentStep(2); setBatchItems([]); }} style={{ ...buttonStyle, background: "#888" }}>
+                ← {isZh ? "返回設定" : "Back to Settings"}
+              </button>
+            </div>
           </div>
         )}
 
         <AppFooter />
       </div>
 
-      {/* CSS animation for preview */}
       <style>{`
         @keyframes fadeIn {
           from { opacity: 0; }
@@ -2449,139 +1537,6 @@ export const SlideshowGenerator = () => {
         }
       `}</style>
     </main>
-  );
-};
-
-// ===== Product Image Card Component =====
-const ProductImageCard = ({
-  product,
-  isSelected,
-  onToggle,
-  onSelectAll,
-  t,
-}: {
-  product: CatalogProduct;
-  isSelected: (url: string) => boolean;
-  onToggle: (product: CatalogProduct, imageUrl: string) => void;
-  onSelectAll: (product: CatalogProduct) => void;
-  t: (key: string) => string;
-}) => {
-  const allImages = [product.imageUrl, ...product.additionalImages].filter(Boolean);
-
-  return (
-    <div style={{
-      background: "#fff",
-      borderRadius: 10,
-      border: "1px solid #e8e8e8",
-      overflow: "hidden",
-      transition: "box-shadow 0.2s",
-    }}>
-      {/* Main Image */}
-      <div
-        onClick={() => onToggle(product, product.imageUrl)}
-        style={{
-          position: "relative",
-          cursor: "pointer",
-          aspectRatio: "1",
-          overflow: "hidden",
-        }}
-      >
-        <img
-          src={product.imageUrl}
-          alt={product.name}
-          style={{
-            width: "100%",
-            height: "100%",
-            objectFit: "cover",
-            opacity: isSelected(product.imageUrl) ? 0.7 : 1,
-            transition: "opacity 0.2s",
-          }}
-        />
-        {isSelected(product.imageUrl) && (
-          <div style={{
-            position: "absolute",
-            top: 6,
-            right: 6,
-            background: "#667eea",
-            color: "#fff",
-            borderRadius: "50%",
-            width: 24,
-            height: 24,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            fontSize: 14,
-            fontWeight: 700,
-          }}>
-            ✓
-          </div>
-        )}
-      </div>
-
-      {/* Product Info */}
-      <div style={{ padding: "8px 10px" }}>
-        <div style={{
-          fontSize: 12,
-          fontWeight: 600,
-          color: "#333",
-          overflow: "hidden",
-          textOverflow: "ellipsis",
-          whiteSpace: "nowrap",
-        }}>
-          {product.name}
-        </div>
-        <div style={{ fontSize: 11, color: "#999", marginTop: 2 }}>
-          {product.retailerId}
-        </div>
-
-        {/* Select All button */}
-        {allImages.length > 1 && (
-          <button
-            onClick={(e) => { e.stopPropagation(); onSelectAll(product); }}
-            style={{
-              marginTop: 4,
-              fontSize: 11,
-              color: "#667eea",
-              background: "none",
-              border: "none",
-              cursor: "pointer",
-              padding: 0,
-              fontWeight: 600,
-              textDecoration: "underline",
-            }}
-          >
-            {t("slideshowSelectAll") || "Select all"} ({allImages.length})
-          </button>
-        )}
-
-        {/* Additional images */}
-        {product.additionalImages.length > 0 && (
-          <div style={{ display: "flex", gap: 4, marginTop: 6, overflowX: "auto" }}>
-            {product.additionalImages.slice(0, 4).map((imgUrl, idx) => (
-              <div
-                key={idx}
-                onClick={() => onToggle(product, imgUrl)}
-                style={{
-                  width: 32,
-                  height: 32,
-                  borderRadius: 4,
-                  overflow: "hidden",
-                  cursor: "pointer",
-                  border: isSelected(imgUrl) ? "2px solid #667eea" : "1px solid #e0e0e0",
-                  flexShrink: 0,
-                }}
-              >
-                <img
-                  src={imgUrl}
-                  alt=""
-                  style={{ width: "100%", height: "100%", objectFit: "cover" }}
-                />
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-    </div>
   );
 };
 
@@ -2628,12 +1583,12 @@ const labelStyle: React.CSSProperties = {
 };
 
 const miniBtn: React.CSSProperties = {
-  background: "rgba(255,255,255,0.85)",
-  border: "none",
-  borderRadius: 3,
-  width: 20,
-  height: 18,
-  fontSize: 10,
+  background: "rgba(240,240,240,0.9)",
+  border: "1px solid #e0e0e0",
+  borderRadius: 4,
+  width: 24,
+  height: 24,
+  fontSize: 11,
   cursor: "pointer",
   display: "flex",
   alignItems: "center",
@@ -2641,13 +1596,27 @@ const miniBtn: React.CSSProperties = {
 };
 
 const miniActionBtn: React.CSSProperties = {
-  padding: "4px 12px",
+  padding: "6px 14px",
   borderRadius: 6,
   border: "1px solid #e0e0e0",
   background: "#fff",
   fontSize: 12,
   fontWeight: 600,
   cursor: "pointer",
+};
+
+const previewBtn: React.CSSProperties = {
+  background: "rgba(0,0,0,0.5)",
+  border: "none",
+  borderRadius: "50%",
+  width: 32,
+  height: 32,
+  color: "#fff",
+  fontSize: 14,
+  cursor: "pointer",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
 };
 
 const thStyle: React.CSSProperties = {

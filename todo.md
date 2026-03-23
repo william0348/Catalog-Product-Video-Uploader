@@ -117,3 +117,16 @@
 ## Phase 19: 重新設計網站圖示
 - [x] 設計新的 site icon / favicon（播放鍵+上傳箭頭，藍紫漸層）
 - [x] 整合到專案中（index.html, AppFooter, MainApp header）
+
+## Phase 20: 幻燈片生成器完整重設計
+- [x] 商品以列表方式呈現（勾選框 + 縮圖 + 名稱 + 圖片數量）
+- [x] 批次選擇多個商品，每個商品使用所有圖片（主圖 + additional）
+- [x] 支援上傳自訂影片/圖片插入幻燈片
+- [x] 可移動商品圖片的顯示位置（上下移動排序）
+- [x] 新增字型選擇功能（Noto Sans CJK, Noto Serif CJK, DejaVu Sans, Liberation Sans）
+- [x] 新增字體大小調整功能（16-80px 滑桿）
+- [x] 新增字體顏色選擇功能（10 預設色 + 自訂色彩選擇器）
+- [x] 後端已支援字體顏色參數（fontColor, fontFamily）
+- [x] 批次生成：相同設定套用到所有選中商品
+- [x] 更新 i18n 翻譯（中英文完整）
+- [x] 測試並驗證（47/47 passed）

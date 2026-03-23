@@ -4,26 +4,61 @@
  * FFmpeg-based slideshow video generator.
  * Converts a sequence of product images into a slideshow video
  * with configurable transitions, text overlays, aspect ratios,
- * and optional background music.
+ * font customization, and optional background music.
  */
 import { execFile } from "child_process";
 import fs from "fs";
 import path from "path";
 import os from "os";
 
+// ==================== Font Configuration ====================
+
+export interface FontConfig {
+  id: string;
+  name: string;
+  path: string;
+  supportsCJK: boolean;
+}
+
+export const AVAILABLE_FONTS: FontConfig[] = [
+  { id: "noto-sans", name: "Noto Sans CJK", path: "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc", supportsCJK: true },
+  { id: "noto-sans-bold", name: "Noto Sans CJK Bold", path: "/usr/share/fonts/opentype/noto/NotoSansCJK-Bold.ttc", supportsCJK: true },
+  { id: "noto-sans-medium", name: "Noto Sans CJK Medium", path: "/usr/share/fonts/opentype/noto/NotoSansCJK-Medium.ttc", supportsCJK: true },
+  { id: "noto-sans-light", name: "Noto Sans CJK Light", path: "/usr/share/fonts/opentype/noto/NotoSansCJK-Light.ttc", supportsCJK: true },
+  { id: "noto-serif", name: "Noto Serif CJK", path: "/usr/share/fonts/opentype/noto/NotoSerifCJK-Regular.ttc", supportsCJK: true },
+  { id: "noto-serif-bold", name: "Noto Serif CJK Bold", path: "/usr/share/fonts/opentype/noto/NotoSerifCJK-Bold.ttc", supportsCJK: true },
+  { id: "droid-sans", name: "Droid Sans Fallback", path: "/usr/share/fonts/truetype/droid/DroidSansFallbackFull.ttf", supportsCJK: true },
+  { id: "liberation-sans", name: "Liberation Sans", path: "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf", supportsCJK: false },
+  { id: "liberation-sans-bold", name: "Liberation Sans Bold", path: "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf", supportsCJK: false },
+  { id: "liberation-serif", name: "Liberation Serif", path: "/usr/share/fonts/truetype/liberation/LiberationSerif-Regular.ttf", supportsCJK: false },
+  { id: "liberation-mono", name: "Liberation Mono", path: "/usr/share/fonts/truetype/liberation/LiberationMono-Regular.ttf", supportsCJK: false },
+];
+
+const DEFAULT_FONT_PATH = "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc";
+
+function getFontPath(fontId?: string): string {
+  if (!fontId) return DEFAULT_FONT_PATH;
+  const font = AVAILABLE_FONTS.find(f => f.id === fontId);
+  return font?.path || DEFAULT_FONT_PATH;
+}
+
+// ==================== Types ====================
+
 export interface SlideshowOptions {
   images: { url: string; label?: string }[];
   aspectRatio: "4:5" | "9:16";
-  durationPerImage: number; // seconds per image
+  durationPerImage: number;
   transition: "fade" | "slideleft" | "slideright" | "slideup" | "slidedown" | "wipeleft" | "wiperight" | "none";
-  transitionDuration: number; // seconds for transition
-  overlayText?: string; // fixed text overlay on all frames
-  showProductName: boolean; // show per-image label
+  transitionDuration: number;
+  overlayText?: string;
+  showProductName: boolean;
   textPosition: "top" | "center" | "bottom";
   fontSize?: number;
-  backgroundColor?: string; // hex color for padding, default white
-  audioUrl?: string; // optional background music URL
-  audioVolume?: number; // 0.0 to 1.0, default 0.5
+  fontColor?: string; // hex color e.g. "#FFFFFF"
+  fontFamily?: string; // font id from AVAILABLE_FONTS
+  backgroundColor?: string;
+  audioUrl?: string;
+  audioVolume?: number;
 }
 
 interface Resolution {
@@ -33,8 +68,10 @@ interface Resolution {
 
 function getResolution(aspectRatio: "4:5" | "9:16"): Resolution {
   if (aspectRatio === "9:16") return { width: 1080, height: 1920 };
-  return { width: 1080, height: 1350 }; // 4:5
+  return { width: 1080, height: 1350 };
 }
+
+// ==================== Helpers ====================
 
 async function downloadFile(url: string, destPath: string): Promise<void> {
   const response = await fetch(url, { redirect: "follow" });
@@ -56,11 +93,6 @@ function runFFmpeg(args: string[]): Promise<string> {
   });
 }
 
-const FONT_PATH = "/usr/share/fonts/truetype/droid/DroidSansFallbackFull.ttf";
-
-/**
- * Calculate the total video duration based on images and transitions.
- */
 function calculateVideoDuration(
   imageCount: number,
   durationPerImage: number,
@@ -75,9 +107,77 @@ function calculateVideoDuration(
 }
 
 /**
- * Generate a slideshow video from a list of images.
- * Returns a Buffer containing the MP4 video data.
+ * Convert hex color to FFmpeg-compatible color string.
+ * FFmpeg drawtext accepts colors like "white", "#RRGGBB", or "0xRRGGBB".
  */
+function toFFmpegColor(hexColor?: string): string {
+  if (!hexColor) return "white";
+  // Remove # prefix and validate
+  const hex = hexColor.replace(/^#/, "");
+  if (/^[0-9a-fA-F]{6}$/.test(hex)) {
+    return `0x${hex}`;
+  }
+  return "white";
+}
+
+// ==================== Text Filters ====================
+
+interface TextFilterOptions {
+  images: { url: string; label?: string }[];
+  overlayText?: string;
+  showProductName: boolean;
+  textPosition: "top" | "center" | "bottom";
+  fontSize: number;
+  fontColor: string; // FFmpeg color string
+  fontPath: string;
+  durationPerImage: number;
+  transitionDuration: number;
+}
+
+function buildTextFilters(opts: TextFilterOptions): string[] {
+  const { images, overlayText, showProductName, textPosition, fontSize, fontColor, fontPath, durationPerImage, transitionDuration } = opts;
+  const filters: string[] = [];
+
+  // Determine border color based on font color brightness
+  const borderColor = "black@0.6";
+
+  // Fixed overlay text (shown on all frames)
+  if (overlayText && overlayText.trim()) {
+    const escaped = escapeDrawtext(overlayText);
+    const yPos = textPosition === "top" ? "h*0.05" : textPosition === "bottom" ? "h-text_h-h*0.05" : "(h-text_h)/2";
+    filters.push(
+      `drawtext=text='${escaped}':fontfile='${fontPath}':fontsize=${fontSize}:fontcolor=${fontColor}:borderw=3:bordercolor=${borderColor}:x=(w-text_w)/2:y=${yPos}`
+    );
+  }
+
+  // Per-image product name (timed with enable)
+  if (showProductName) {
+    for (let i = 0; i < images.length; i++) {
+      const label = images[i].label;
+      if (!label) continue;
+      const escaped = escapeDrawtext(label);
+      const startTime = i * (durationPerImage - transitionDuration);
+      const endTime = startTime + durationPerImage;
+      const yPos = textPosition === "top" ? "h*0.12" : textPosition === "bottom" ? "h-text_h-h*0.12" : "(h-text_h)/2+60";
+      filters.push(
+        `drawtext=text='${escaped}':fontfile='${fontPath}':fontsize=${Math.round(fontSize * 0.75)}:fontcolor=${fontColor}:borderw=2:bordercolor=${borderColor}:x=(w-text_w)/2:y=${yPos}:enable='between(t\\,${startTime}\\,${endTime})'`
+      );
+    }
+  }
+
+  return filters;
+}
+
+function escapeDrawtext(text: string): string {
+  return text
+    .replace(/\\/g, "\\\\")
+    .replace(/'/g, "'\\\\\\''")
+    .replace(/:/g, "\\:")
+    .replace(/%/g, "%%");
+}
+
+// ==================== Video Generation ====================
+
 export async function generateSlideshow(options: SlideshowOptions): Promise<Buffer> {
   const {
     images,
@@ -89,18 +189,22 @@ export async function generateSlideshow(options: SlideshowOptions): Promise<Buff
     showProductName,
     textPosition,
     fontSize = 40,
+    fontColor,
+    fontFamily,
     backgroundColor = "white",
     audioUrl,
     audioVolume = 0.5,
   } = options;
 
   if (images.length === 0) throw new Error("No images provided");
-  if (images.length > 30) throw new Error("Maximum 30 images allowed per slideshow");
+  if (images.length > 50) throw new Error("Maximum 50 images allowed per slideshow");
 
   const resolution = getResolution(aspectRatio);
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "slideshow-"));
   const videoOnlyPath = path.join(tmpDir, "video_only.mp4");
   const outputPath = path.join(tmpDir, "output.mp4");
+  const fontPath = getFontPath(fontFamily);
+  const ffmpegFontColor = toFFmpegColor(fontColor);
 
   try {
     // 1. Download all images
@@ -113,7 +217,7 @@ export async function generateSlideshow(options: SlideshowOptions): Promise<Buff
       console.log(`[Slideshow] Downloaded image ${i + 1}/${images.length}`);
     }
 
-    // 2. Pre-process images: resize and pad to target resolution as PNG
+    // 2. Pre-process images: resize and pad to target resolution
     console.log(`[Slideshow] Pre-processing images to ${resolution.width}x${resolution.height}...`);
     const processedPaths: string[] = [];
     for (let i = 0; i < imagePaths.length; i++) {
@@ -127,15 +231,21 @@ export async function generateSlideshow(options: SlideshowOptions): Promise<Buff
       processedPaths.push(processedPath);
     }
 
-    // 3. Generate video (without audio first)
+    // 3. Build text filter options
+    const textOpts: TextFilterOptions = {
+      images, overlayText, showProductName, textPosition, fontSize,
+      fontColor: ffmpegFontColor, fontPath, durationPerImage, transitionDuration,
+    };
+
+    // 4. Generate video (without audio first)
     const videoTarget = audioUrl ? videoOnlyPath : outputPath;
     if (images.length === 1 || transition === "none") {
-      await generateSimpleSlideshow(processedPaths, videoTarget, resolution, durationPerImage, images, overlayText, showProductName, textPosition, fontSize);
+      await generateSimpleSlideshow(processedPaths, videoTarget, durationPerImage, textOpts);
     } else {
-      await generateTransitionSlideshow(processedPaths, videoTarget, resolution, durationPerImage, transitionDuration, transition, images, overlayText, showProductName, textPosition, fontSize);
+      await generateTransitionSlideshow(processedPaths, videoTarget, durationPerImage, transitionDuration, transition, textOpts);
     }
 
-    // 4. Add background music if provided
+    // 5. Add background music if provided
     if (audioUrl) {
       console.log(`[Slideshow] Adding background music...`);
       const audioPath = path.join(tmpDir, "audio_input.mp3");
@@ -144,7 +254,6 @@ export async function generateSlideshow(options: SlideshowOptions): Promise<Buff
       const videoDuration = calculateVideoDuration(images.length, durationPerImage, transition, transitionDuration);
       const vol = Math.max(0, Math.min(1, audioVolume));
 
-      // Merge audio with video: loop audio if shorter, trim to video length, apply volume
       await runFFmpeg([
         "-i", videoTarget,
         "-stream_loop", "-1", "-i", audioPath,
@@ -161,7 +270,7 @@ export async function generateSlideshow(options: SlideshowOptions): Promise<Buff
       console.log(`[Slideshow] Background music added successfully.`);
     }
 
-    // 5. Read output
+    // 6. Read output
     console.log(`[Slideshow] Video generated: ${outputPath}`);
     const videoBuffer = fs.readFileSync(outputPath);
     return videoBuffer;
@@ -174,29 +283,21 @@ export async function generateSlideshow(options: SlideshowOptions): Promise<Buff
   }
 }
 
-/**
- * Simple slideshow: no transitions, just concat images with duration.
- */
 async function generateSimpleSlideshow(
   imagePaths: string[],
   outputPath: string,
-  _resolution: Resolution,
   durationPerImage: number,
-  images: { url: string; label?: string }[],
-  overlayText: string | undefined,
-  showProductName: boolean,
-  textPosition: "top" | "center" | "bottom",
-  fontSize: number,
+  textOpts: TextFilterOptions,
 ): Promise<void> {
   const tmpDir = path.dirname(outputPath);
   const concatFile = path.join(tmpDir, "concat.txt");
-  
+
   const lines = imagePaths.map(p => `file '${p}'\nduration ${durationPerImage}`);
   lines.push(`file '${imagePaths[imagePaths.length - 1]}'`);
   fs.writeFileSync(concatFile, lines.join("\n"));
 
-  const textFilters = buildTextFilters(images, overlayText, showProductName, textPosition, fontSize, durationPerImage, 0);
-  
+  const textFilters = buildTextFilters(textOpts);
+
   const args: string[] = [
     "-f", "concat", "-safe", "0", "-i", concatFile,
     "-c:v", "libx264",
@@ -215,32 +316,22 @@ async function generateSimpleSlideshow(
   await runFFmpeg(args);
 }
 
-/**
- * Slideshow with xfade transitions between images.
- */
 async function generateTransitionSlideshow(
   imagePaths: string[],
   outputPath: string,
-  _resolution: Resolution,
   durationPerImage: number,
   transitionDuration: number,
   transition: string,
-  images: { url: string; label?: string }[],
-  overlayText: string | undefined,
-  showProductName: boolean,
-  textPosition: "top" | "center" | "bottom",
-  fontSize: number,
+  textOpts: TextFilterOptions,
 ): Promise<void> {
   const n = imagePaths.length;
   const clampedTransDur = Math.min(transitionDuration, durationPerImage * 0.4);
 
-  // Build input arguments
   const inputArgs: string[] = [];
   for (const imgPath of imagePaths) {
     inputArgs.push("-loop", "1", "-t", String(durationPerImage), "-i", imgPath);
   }
 
-  // Build xfade filter chain
   const filterParts: string[] = [];
   let prevLabel = "[0:v]";
 
@@ -251,9 +342,8 @@ async function generateTransitionSlideshow(
     prevLabel = outLabel;
   }
 
-  // Add text overlays
-  const textFilters = buildTextFilters(images, overlayText, showProductName, textPosition, fontSize, durationPerImage, clampedTransDur);
-  
+  const textFilters = buildTextFilters(textOpts);
+
   let finalLabel = prevLabel;
   if (textFilters.length > 0) {
     filterParts.push(`${prevLabel}${textFilters.join(",")}[final]`);
@@ -279,58 +369,6 @@ async function generateTransitionSlideshow(
   await runFFmpeg(args);
 }
 
-/**
- * Build FFmpeg drawtext filters for text overlays.
- */
-function buildTextFilters(
-  images: { url: string; label?: string }[],
-  overlayText: string | undefined,
-  showProductName: boolean,
-  textPosition: "top" | "center" | "bottom",
-  fontSize: number,
-  durationPerImage: number,
-  transitionDuration: number,
-): string[] {
-  const filters: string[] = [];
-
-  // Fixed overlay text (shown on all frames)
-  if (overlayText && overlayText.trim()) {
-    const escaped = escapeDrawtext(overlayText);
-    const yPos = textPosition === "top" ? "h*0.05" : textPosition === "bottom" ? "h-text_h-h*0.05" : "(h-text_h)/2";
-    filters.push(
-      `drawtext=text='${escaped}':fontfile='${FONT_PATH}':fontsize=${fontSize}:fontcolor=white:borderw=3:bordercolor=black@0.6:x=(w-text_w)/2:y=${yPos}`
-    );
-  }
-
-  // Per-image product name (timed with enable)
-  if (showProductName) {
-    for (let i = 0; i < images.length; i++) {
-      const label = images[i].label;
-      if (!label) continue;
-      const escaped = escapeDrawtext(label);
-      const startTime = i * (durationPerImage - transitionDuration);
-      const endTime = startTime + durationPerImage;
-      const yPos = textPosition === "top" ? "h*0.12" : textPosition === "bottom" ? "h-text_h-h*0.12" : "(h-text_h)/2+60";
-      filters.push(
-        `drawtext=text='${escaped}':fontfile='${FONT_PATH}':fontsize=${Math.round(fontSize * 0.75)}:fontcolor=white:borderw=2:bordercolor=black@0.5:x=(w-text_w)/2:y=${yPos}:enable='between(t\\,${startTime}\\,${endTime})'`
-      );
-    }
-  }
-
-  return filters;
-}
-
-/**
- * Escape special characters for FFmpeg drawtext filter.
- */
-function escapeDrawtext(text: string): string {
-  return text
-    .replace(/\\/g, "\\\\")
-    .replace(/'/g, "'\\\\\\''")
-    .replace(/:/g, "\\:")
-    .replace(/%/g, "%%");
-}
-
 // ==================== Facebook Catalog API ====================
 
 export interface CatalogProduct {
@@ -341,9 +379,6 @@ export interface CatalogProduct {
   additionalImages: string[];
 }
 
-/**
- * Fetch product images from a Facebook Catalog.
- */
 export async function fetchCatalogProducts(
   catalogId: string,
   accessToken: string,
@@ -351,7 +386,7 @@ export async function fetchCatalogProducts(
 ): Promise<CatalogProduct[]> {
   const fields = "id,name,retailer_id,image_url,additional_image_urls";
   let url = `https://graph.facebook.com/v21.0/${catalogId}/products?fields=${fields}&limit=${Math.min(limit, 250)}&access_token=${accessToken}`;
-  
+
   const products: CatalogProduct[] = [];
   let pageCount = 0;
   const maxPages = Math.ceil(limit / 250);
@@ -359,14 +394,14 @@ export async function fetchCatalogProducts(
   while (url && pageCount < maxPages) {
     const response = await fetch(url);
     const data = await response.json();
-    
+
     if (!response.ok) {
       throw new Error(`Facebook API error: ${data?.error?.message || "Unknown error"}`);
     }
 
     for (const item of data.data || []) {
       if (products.length >= limit) break;
-      
+
       const additionalImages: string[] = [];
       if (item.additional_image_urls && Array.isArray(item.additional_image_urls)) {
         additionalImages.push(...item.additional_image_urls);
@@ -388,9 +423,6 @@ export async function fetchCatalogProducts(
   return products;
 }
 
-/**
- * Update a product's video in a Facebook Catalog using the Batch API.
- */
 export async function updateCatalogProductVideo(
   catalogId: string,
   accessToken: string,

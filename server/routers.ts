@@ -400,13 +400,19 @@ export const appRouter = router({
         return fetchCatalogProducts(input.catalogId, input.accessToken, input.limit);
       }),
 
+    // Get available fonts for text overlay
+    fonts: publicProcedure.query(() => {
+      const { AVAILABLE_FONTS } = require("./slideshow");
+      return AVAILABLE_FONTS;
+    }),
+
     // Generate a slideshow video from selected images
     generate: publicProcedure
       .input(z.object({
         images: z.array(z.object({
           url: z.string().url(),
           label: z.string().optional(),
-        })).min(1).max(30),
+        })).min(1).max(50),
         aspectRatio: z.enum(["4:5", "9:16"]),
         durationPerImage: z.number().min(1).max(30).default(3),
         transition: z.enum(["fade", "slideleft", "slideright", "slideup", "slidedown", "wipeleft", "wiperight", "none"]).default("fade"),
@@ -415,6 +421,8 @@ export const appRouter = router({
         showProductName: z.boolean().default(false),
         textPosition: z.enum(["top", "center", "bottom"]).default("bottom"),
         fontSize: z.number().min(12).max(120).optional(),
+        fontColor: z.string().optional(),
+        fontFamily: z.string().optional(),
         backgroundColor: z.string().optional(),
         audioUrl: z.string().url().optional(),
         audioVolume: z.number().min(0).max(1).optional(),
