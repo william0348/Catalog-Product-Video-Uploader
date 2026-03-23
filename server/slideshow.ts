@@ -13,18 +13,34 @@ import os from "os";
 import { createRequire } from "module";
 
 // Use bundled FFmpeg binary for deployment compatibility
+// Priority: ffmpeg-static > @ffmpeg-installer/ffmpeg > system ffmpeg
 let FFMPEG_PATH = "ffmpeg";
+
+// Try ffmpeg-static first (most reliable for deployment)
 try {
   const _require = createRequire(import.meta.url);
-  const ffmpegInstaller = _require("@ffmpeg-installer/ffmpeg");
-  if (ffmpegInstaller && ffmpegInstaller.path && fs.existsSync(ffmpegInstaller.path)) {
-    FFMPEG_PATH = ffmpegInstaller.path;
-    console.log(`[Slideshow] Using bundled FFmpeg: ${FFMPEG_PATH}`);
+  const ffmpegStaticPath = _require("ffmpeg-static");
+  if (ffmpegStaticPath && fs.existsSync(ffmpegStaticPath)) {
+    FFMPEG_PATH = ffmpegStaticPath;
+    console.log(`[Slideshow] Using ffmpeg-static: ${FFMPEG_PATH}`);
   } else {
-    console.log(`[Slideshow] Bundled FFmpeg not found at ${ffmpegInstaller?.path}, trying system ffmpeg`);
+    throw new Error("ffmpeg-static binary not found");
   }
-} catch (e) {
-  console.log(`[Slideshow] @ffmpeg-installer/ffmpeg not available: ${e}`);
+} catch (e1) {
+  console.log(`[Slideshow] ffmpeg-static not available: ${e1}`);
+  // Try @ffmpeg-installer/ffmpeg as fallback
+  try {
+    const _require = createRequire(import.meta.url);
+    const ffmpegInstaller = _require("@ffmpeg-installer/ffmpeg");
+    if (ffmpegInstaller && ffmpegInstaller.path && fs.existsSync(ffmpegInstaller.path)) {
+      FFMPEG_PATH = ffmpegInstaller.path;
+      console.log(`[Slideshow] Using @ffmpeg-installer: ${FFMPEG_PATH}`);
+    } else {
+      console.log(`[Slideshow] @ffmpeg-installer binary not found, trying system ffmpeg`);
+    }
+  } catch (e2) {
+    console.log(`[Slideshow] @ffmpeg-installer not available: ${e2}`);
+  }
 }
 
 // Verify FFmpeg is actually callable
@@ -142,18 +158,23 @@ function getResolution(aspectRatio: "4:5" | "9:16"): Resolution {
 // ==================== Helpers ====================
 
 async function downloadFile(url: string, destPath: string): Promise<void> {
+  console.log(`[Slideshow] Downloading: ${url.substring(0, 100)}...`);
   const response = await fetch(url, { redirect: "follow" });
   if (!response.ok) throw new Error(`Failed to download file: ${url} (${response.status})`);
   const buffer = Buffer.from(await response.arrayBuffer());
   fs.writeFileSync(destPath, buffer);
+  console.log(`[Slideshow] Downloaded ${buffer.length} bytes -> ${destPath}`);
 }
 
 function runFFmpeg(args: string[]): Promise<string> {
   return new Promise((resolve, reject) => {
+    console.log(`[Slideshow] FFmpeg cmd: ${FFMPEG_PATH} -y ${args.slice(0, 6).join(' ')}...`);
     execFile(FFMPEG_PATH, ["-y", ...args], { maxBuffer: 100 * 1024 * 1024, timeout: 300000 }, (error, stdout, stderr) => {
       if (error) {
-        console.error(`[Slideshow] FFmpeg stderr:`, stderr);
-        reject(new Error(`FFmpeg failed: ${error.message}\n${stderr}`));
+        console.error(`[Slideshow] FFmpeg FAILED:`, error.message);
+        console.error(`[Slideshow] FFmpeg stderr (last 500 chars):`, stderr?.slice(-500));
+        console.error(`[Slideshow] FFmpeg path used: ${FFMPEG_PATH}`);
+        reject(new Error(`FFmpeg failed: ${error.message}`));
       } else {
         resolve(stderr);
       }
@@ -397,11 +418,14 @@ export async function generateSlideshow(options: SlideshowOptions): Promise<Buff
         ]);
         
         // Overlay the processed product image on top of the bg video frame
+        // Use the user's background color for colorkey removal
+        const bgColorHex = (backgroundColor || "white").replace(/^#/, "");
+        const colorKeyColor = /^[0-9a-fA-F]{6}$/.test(bgColorHex) ? `0x${bgColorHex}` : "0xFFFFFF";
         const withBgPath = path.join(tmpDir, `withbg_${String(i).padStart(3, "0")}.png`);
         await runFFmpeg([
           "-i", bgFramePath,
           "-i", processedPaths[i],
-          "-filter_complex", `[1:v]colorkey=0xFFFFFF:0.3:0.2[fg];[0:v][fg]overlay=0:0,format=yuv420p`,
+          "-filter_complex", `[1:v]colorkey=${colorKeyColor}:0.3:0.2[fg];[0:v][fg]overlay=0:0,format=yuv420p`,
           "-frames:v", "1",
           withBgPath,
         ]);

@@ -1743,9 +1743,12 @@ export const SlideshowGenerator = () => {
                       {isZh ? "上傳影片作為幻燈片背景，商品圖片會疊加在影片上方" : "Upload a video as slideshow background, product images overlay on top"}
                     </p>
                     {backgroundVideoUrl ? (
-                      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                        <span style={{ fontSize: 13, color: "#333" }}>🎬 {backgroundVideoFileName}</span>
-                        <button onClick={() => { setBackgroundVideoUrl(null); setBackgroundVideoFileName(null); }} style={{ ...miniActionBtn, color: "#e53e3e", borderColor: "#fca5a5" }}>✕ {isZh ? "移除" : "Remove"}</button>
+                      <div>
+                        <video src={backgroundVideoUrl} controls style={{ width: "100%", maxHeight: 150, borderRadius: 6, marginBottom: 8, background: "#000" }} />
+                        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                          <span style={{ fontSize: 13, color: "#333" }}>🎬 {backgroundVideoFileName}</span>
+                          <button onClick={() => { setBackgroundVideoUrl(null); setBackgroundVideoFileName(null); }} style={{ ...miniActionBtn, color: "#e53e3e", borderColor: "#fca5a5" }}>✕ {isZh ? "移除" : "Remove"}</button>
+                        </div>
                       </div>
                     ) : (
                       <div {...createDropHandler('bg-video', 'video/*', 50, (f) => handleVideoFile('bg', f))} style={{ padding: 12, border: '2px dashed #d0d5dd', borderRadius: 8, textAlign: 'center', transition: 'all 0.2s', ...dropZoneStyle('bg-video') }}>
@@ -1781,9 +1784,12 @@ export const SlideshowGenerator = () => {
                       {isZh ? "在幻燈片開始前播放的影片" : "Video played before the slideshow starts"}
                     </p>
                     {introVideoUrl ? (
-                      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                        <span style={{ fontSize: 13, color: "#333" }}>⏮️ {introVideoFileName}</span>
-                        <button onClick={() => { setIntroVideoUrl(null); setIntroVideoFileName(null); }} style={{ ...miniActionBtn, color: "#e53e3e", borderColor: "#fca5a5" }}>✕ {isZh ? "移除" : "Remove"}</button>
+                      <div>
+                        <video src={introVideoUrl} controls style={{ width: "100%", maxHeight: 150, borderRadius: 6, marginBottom: 8, background: "#000" }} />
+                        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                          <span style={{ fontSize: 13, color: "#333" }}>⏮️ {introVideoFileName}</span>
+                          <button onClick={() => { setIntroVideoUrl(null); setIntroVideoFileName(null); }} style={{ ...miniActionBtn, color: "#e53e3e", borderColor: "#fca5a5" }}>✕ {isZh ? "移除" : "Remove"}</button>
+                        </div>
                       </div>
                     ) : (
                       <div {...createDropHandler('intro-video', 'video/*', 50, (f) => handleVideoFile('intro', f))} style={{ padding: 12, border: '2px dashed #d0d5dd', borderRadius: 8, textAlign: 'center', transition: 'all 0.2s', ...dropZoneStyle('intro-video') }}>
@@ -1819,9 +1825,12 @@ export const SlideshowGenerator = () => {
                       {isZh ? "在幻燈片結束後播放的影片" : "Video played after the slideshow ends"}
                     </p>
                     {outroVideoUrl ? (
-                      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                        <span style={{ fontSize: 13, color: "#333" }}>⏭️ {outroVideoFileName}</span>
-                        <button onClick={() => { setOutroVideoUrl(null); setOutroVideoFileName(null); }} style={{ ...miniActionBtn, color: "#e53e3e", borderColor: "#fca5a5" }}>✕ {isZh ? "移除" : "Remove"}</button>
+                      <div>
+                        <video src={outroVideoUrl} controls style={{ width: "100%", maxHeight: 150, borderRadius: 6, marginBottom: 8, background: "#000" }} />
+                        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                          <span style={{ fontSize: 13, color: "#333" }}>⏭️ {outroVideoFileName}</span>
+                          <button onClick={() => { setOutroVideoUrl(null); setOutroVideoFileName(null); }} style={{ ...miniActionBtn, color: "#e53e3e", borderColor: "#fca5a5" }}>✕ {isZh ? "移除" : "Remove"}</button>
+                        </div>
                       </div>
                     ) : (
                       <div {...createDropHandler('outro-video', 'video/*', 50, (f) => handleVideoFile('outro', f))} style={{ padding: 12, border: '2px dashed #d0d5dd', borderRadius: 8, textAlign: 'center', transition: 'all 0.2s', ...dropZoneStyle('outro-video') }}>
@@ -1877,7 +1886,7 @@ export const SlideshowGenerator = () => {
               </div>
 
               {/* Right: Preview */}
-              <div>
+              <div style={{ position: "sticky", top: 20, alignSelf: "flex-start" }}>
                 <h3 style={{ fontSize: 16, fontWeight: 600, color: "#333", marginBottom: 16 }}>
                   👁 {t("slideshowPreview") || "Preview"}
                 </h3>

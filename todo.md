@@ -188,3 +188,10 @@
 - [x] 更新 slideshow.ts 使用 createRequire + 自動偵測路徑 + 系統 fallback
 - [x] 新增字體存在性檢查和優雅降級
 - [x] 測試並驗證（47/47 passed，FFmpeg verified）
+
+## Phase 27: 修復影片生成失敗 + 影片預覽 + 懸浮預覽
+- [x] 改用 ffmpeg-static 作為主要 FFmpeg 來源（更可靠），改善錯誤處理和日誌
+- [x] 修復 colorkey 使用用戶設定的背景色而非硬編碼白色
+- [x] 上傳的影片可在預覽區域播放查看（背景/片頭/片尾各有播放器）
+- [x] 預覽面板懸浮（sticky），隨頁面捲動保持可見
+- [x] 測試並驗證（47/47 passed）
