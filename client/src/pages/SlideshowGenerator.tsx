@@ -229,6 +229,7 @@ export const SlideshowGenerator = () => {
   const [isGenerating, setIsGenerating] = useState(false);
   const [generatedVideoUrl, setGeneratedVideoUrl] = useState<string | null>(null);
   const [generationError, setGenerationError] = useState<string | null>(null);
+  const [generationProgress, setGenerationProgress] = useState<string>("");
 
   // Google Drive upload state
   const [isUploadingToDrive, setIsUploadingToDrive] = useState(false);
@@ -786,6 +787,46 @@ export const SlideshowGenerator = () => {
     }
   };
 
+  // ===== Proxy upload images to S3 (solves Facebook CDN URL expiration) =====
+  const proxyUploadImagesToS3 = async (imageUrls: string[]): Promise<Map<string, string>> => {
+    const urlMap = new Map<string, string>();
+    // Skip URLs that are already on S3/CDN (not Facebook CDN)
+    const fbUrls = imageUrls.filter(url => 
+      url.includes('fbcdn.net') || url.includes('facebook.com') || url.includes('fb.com')
+    );
+    const nonFbUrls = imageUrls.filter(url => 
+      !url.includes('fbcdn.net') && !url.includes('facebook.com') && !url.includes('fb.com')
+    );
+    
+    // Non-FB URLs don't need proxy
+    for (const url of nonFbUrls) {
+      urlMap.set(url, url);
+    }
+    
+    if (fbUrls.length === 0) return urlMap;
+    
+    console.log(`[Slideshow] Proxy uploading ${fbUrls.length} Facebook CDN images to S3...`);
+    
+    // Batch upload FB images
+    const result = await trpcMutate("slideshow.proxyUploadImages", {
+      imageUrls: fbUrls,
+    });
+    
+    if (result?.results) {
+      for (const r of result.results) {
+        if (r.s3Url) {
+          urlMap.set(r.originalUrl, r.s3Url);
+        } else {
+          // If proxy failed, use original URL as fallback
+          console.warn(`[Slideshow] Proxy upload failed for ${r.originalUrl}: ${r.error}`);
+          urlMap.set(r.originalUrl, r.originalUrl);
+        }
+      }
+    }
+    
+    return urlMap;
+  };
+
   // ===== Generate slideshow (single product) =====
   const handleGenerate = async () => {
     if (selectedImages.length === 0) return;
@@ -796,11 +837,19 @@ export const SlideshowGenerator = () => {
     setDriveUploadError(null);
     setCatalogUpdateResult(null);
     setCatalogUpdateError(null);
+    setGenerationProgress(isZh ? "正在準備圖片..." : "Preparing images...");
 
     try {
+      // Step 1: Proxy upload Facebook CDN images to S3
+      const allUrls = selectedImages.map(img => img.url);
+      const urlMap = await proxyUploadImagesToS3(allUrls);
+      
+      setGenerationProgress(isZh ? "正在生成影片..." : "Generating video...");
+      
+      // Step 2: Generate slideshow with S3 URLs
       const result = await trpcMutate("slideshow.generate", {
         images: selectedImages.map((img) => ({
-          url: img.url,
+          url: urlMap.get(img.url) || img.url,
           label: img.label,
         })),
         aspectRatio,
@@ -839,6 +888,7 @@ export const SlideshowGenerator = () => {
       setCurrentStep(3);
     } finally {
       setIsGenerating(false);
+      setGenerationProgress("");
     }
   };
 
@@ -932,9 +982,13 @@ export const SlideshowGenerator = () => {
 
       try {
         const productImages = [items[i].product.imageUrl, ...items[i].product.additionalImages].filter(Boolean);
+        
+        // Proxy upload Facebook CDN images to S3 first
+        const urlMap = await proxyUploadImagesToS3(productImages);
+        
         const result = await trpcMutate("slideshow.generate", {
           images: productImages.map((url) => ({
-            url,
+            url: urlMap.get(url) || url,
             label: items[i].product.name,
           })),
           aspectRatio,
@@ -2032,7 +2086,7 @@ export const SlideshowGenerator = () => {
                 {isGenerating && (
                   <div style={{ textAlign: "center", padding: 40 }}>
                     <div style={{ fontSize: 48, marginBottom: 16 }}>⏳</div>
-                    <h3 style={{ color: "#667eea", marginBottom: 8 }}>{t("slideshowGenerating") || "Generating video..."}</h3>
+                    <h3 style={{ color: "#667eea", marginBottom: 8 }}>{generationProgress || (t("slideshowGenerating") || "Generating video...")}</h3>
                     <p style={{ color: "#888", fontSize: 13 }}>{isZh ? "這可能需要 30-120 秒" : "This may take 30-120 seconds"}</p>
                   </div>
                 )}

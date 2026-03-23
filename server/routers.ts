@@ -463,6 +463,123 @@ export const appRouter = router({
         };
       }),
 
+    // Proxy-download an image from URL and upload to S3 (solves Facebook CDN URL expiration)
+    proxyUploadImage: publicProcedure
+      .input(z.object({
+        imageUrl: z.string().url(),
+      }))
+      .mutation(async ({ input }) => {
+        console.log(`[Slideshow API] Proxy uploading image: ${input.imageUrl.substring(0, 80)}...`);
+        
+        // Download the image with retries
+        let buffer: Buffer | null = null;
+        let lastError: Error | null = null;
+        for (let attempt = 0; attempt < 3; attempt++) {
+          try {
+            const response = await fetch(input.imageUrl, {
+              redirect: "follow",
+              headers: {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+              },
+            });
+            if (!response.ok) {
+              throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+            buffer = Buffer.from(await response.arrayBuffer());
+            break;
+          } catch (e: any) {
+            lastError = e;
+            console.warn(`[Slideshow API] Proxy download attempt ${attempt + 1} failed: ${e.message}`);
+            if (attempt < 2) await new Promise(r => setTimeout(r, 1000 * (attempt + 1)));
+          }
+        }
+        
+        if (!buffer) {
+          throw new Error(`Failed to download image after 3 attempts: ${lastError?.message || 'Unknown error'}`);
+        }
+        
+        if (buffer.length > 10 * 1024 * 1024) {
+          throw new Error("Image file too large. Maximum 10MB.");
+        }
+        
+        // Detect content type from URL or default to jpeg
+        let contentType = "image/jpeg";
+        const urlLower = input.imageUrl.toLowerCase();
+        if (urlLower.includes(".png")) contentType = "image/png";
+        else if (urlLower.includes(".webp")) contentType = "image/webp";
+        else if (urlLower.includes(".gif")) contentType = "image/gif";
+        
+        const suffix = Math.random().toString(36).substring(2, 8);
+        const ext = contentType.split("/")[1] || "jpg";
+        const fileKey = `slideshow-proxy-images/${Date.now()}-${suffix}.${ext}`;
+        const { url } = await storagePut(fileKey, buffer, contentType);
+        
+        console.log(`[Slideshow API] Proxy uploaded ${buffer.length} bytes -> ${url}`);
+        return { success: true, url };
+      }),
+
+    // Batch proxy-upload multiple images from URLs to S3
+    proxyUploadImages: publicProcedure
+      .input(z.object({
+        imageUrls: z.array(z.string().url()).min(1).max(50),
+      }))
+      .mutation(async ({ input }) => {
+        console.log(`[Slideshow API] Batch proxy uploading ${input.imageUrls.length} images...`);
+        
+        const results: { originalUrl: string; s3Url: string | null; error: string | null }[] = [];
+        
+        for (const imageUrl of input.imageUrls) {
+          try {
+            let buffer: Buffer | null = null;
+            let lastError: Error | null = null;
+            
+            for (let attempt = 0; attempt < 3; attempt++) {
+              try {
+                const response = await fetch(imageUrl, {
+                  redirect: "follow",
+                  headers: {
+                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+                  },
+                });
+                if (!response.ok) {
+                  throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                buffer = Buffer.from(await response.arrayBuffer());
+                break;
+              } catch (e: any) {
+                lastError = e;
+                if (attempt < 2) await new Promise(r => setTimeout(r, 1000 * (attempt + 1)));
+              }
+            }
+            
+            if (!buffer) {
+              results.push({ originalUrl: imageUrl, s3Url: null, error: lastError?.message || 'Download failed' });
+              continue;
+            }
+            
+            let contentType = "image/jpeg";
+            const urlLower = imageUrl.toLowerCase();
+            if (urlLower.includes(".png")) contentType = "image/png";
+            else if (urlLower.includes(".webp")) contentType = "image/webp";
+            else if (urlLower.includes(".gif")) contentType = "image/gif";
+            
+            const suffix = Math.random().toString(36).substring(2, 8);
+            const ext = contentType.split("/")[1] || "jpg";
+            const fileKey = `slideshow-proxy-images/${Date.now()}-${suffix}.${ext}`;
+            const { url } = await storagePut(fileKey, buffer, contentType);
+            
+            results.push({ originalUrl: imageUrl, s3Url: url, error: null });
+          } catch (e: any) {
+            results.push({ originalUrl: imageUrl, s3Url: null, error: e.message });
+          }
+        }
+        
+        const successCount = results.filter(r => r.s3Url).length;
+        console.log(`[Slideshow API] Batch proxy upload: ${successCount}/${input.imageUrls.length} succeeded`);
+        
+        return { results };
+      }),
+
     // Upload a custom image (base64) to S3 for use in slideshow
     uploadImage: publicProcedure
       .input(z.object({

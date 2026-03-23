@@ -159,11 +159,31 @@ function getResolution(aspectRatio: "4:5" | "9:16"): Resolution {
 
 async function downloadFile(url: string, destPath: string): Promise<void> {
   console.log(`[Slideshow] Downloading: ${url.substring(0, 100)}...`);
-  const response = await fetch(url, { redirect: "follow" });
-  if (!response.ok) throw new Error(`Failed to download file: ${url} (${response.status})`);
-  const buffer = Buffer.from(await response.arrayBuffer());
-  fs.writeFileSync(destPath, buffer);
-  console.log(`[Slideshow] Downloaded ${buffer.length} bytes -> ${destPath}`);
+  let lastError: Error | null = null;
+  
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const response = await fetch(url, {
+        redirect: "follow",
+        headers: {
+          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        },
+      });
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+      const buffer = Buffer.from(await response.arrayBuffer());
+      fs.writeFileSync(destPath, buffer);
+      console.log(`[Slideshow] Downloaded ${buffer.length} bytes -> ${destPath}`);
+      return;
+    } catch (e: any) {
+      lastError = e;
+      console.warn(`[Slideshow] Download attempt ${attempt + 1} failed for ${url.substring(0, 80)}: ${e.message}`);
+      if (attempt < 2) await new Promise(r => setTimeout(r, 1000 * (attempt + 1)));
+    }
+  }
+  
+  throw new Error(`Failed to download file after 3 attempts: ${url.substring(0, 100)} - ${lastError?.message || 'Unknown error'}`);
 }
 
 function runFFmpeg(args: string[]): Promise<string> {

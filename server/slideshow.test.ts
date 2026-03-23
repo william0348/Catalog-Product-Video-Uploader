@@ -75,11 +75,11 @@ describe("slideshow router", () => {
       ).rejects.toThrow();
     });
 
-    it("rejects more than 30 images", async () => {
+    it("rejects more than 50 images", async () => {
       const ctx = createPublicContext();
       const caller = appRouter.createCaller(ctx);
 
-      const images = Array.from({ length: 31 }, (_, i) => ({
+      const images = Array.from({ length: 51 }, (_, i) => ({
         url: `https://example.com/img${i}.jpg`,
         label: `Product ${i}`,
       }));
@@ -292,6 +292,67 @@ describe("slideshow router", () => {
       expect(result.url).toBeDefined();
       expect(result.url).toContain("slideshow-audio");
     });
+  });
+
+  describe("slideshow.proxyUploadImage", () => {
+    it("rejects invalid URL", async () => {
+      const ctx = createPublicContext();
+      const caller = appRouter.createCaller(ctx);
+
+      await expect(
+        caller.slideshow.proxyUploadImage({
+          imageUrl: "not-a-url",
+        })
+      ).rejects.toThrow();
+    });
+
+    it("throws error for unreachable URL", async () => {
+      const ctx = createPublicContext();
+      const caller = appRouter.createCaller(ctx);
+
+      await expect(
+        caller.slideshow.proxyUploadImage({
+          imageUrl: "https://example.com/nonexistent-image-12345.jpg",
+        })
+      ).rejects.toThrow();
+    }, 15000);
+  });
+
+  describe("slideshow.proxyUploadImages", () => {
+    it("rejects empty array", async () => {
+      const ctx = createPublicContext();
+      const caller = appRouter.createCaller(ctx);
+
+      await expect(
+        caller.slideshow.proxyUploadImages({
+          imageUrls: [],
+        })
+      ).rejects.toThrow();
+    });
+
+    it("rejects invalid URLs in array", async () => {
+      const ctx = createPublicContext();
+      const caller = appRouter.createCaller(ctx);
+
+      await expect(
+        caller.slideshow.proxyUploadImages({
+          imageUrls: ["not-a-url"],
+        })
+      ).rejects.toThrow();
+    });
+
+    it("returns error for unreachable URLs without throwing", async () => {
+      const ctx = createPublicContext();
+      const caller = appRouter.createCaller(ctx);
+
+      const result = await caller.slideshow.proxyUploadImages({
+        imageUrls: ["https://example.com/nonexistent-image-12345.jpg"],
+      });
+
+      expect(result.results).toHaveLength(1);
+      expect(result.results[0].s3Url).toBeNull();
+      expect(result.results[0].error).toBeTruthy();
+    }, 15000);
   });
 
   describe("slideshow.updateCatalogVideo input validation", () => {

@@ -198,3 +198,11 @@
 
 ## Phase 28: 移除開始畫面
 - [x] 移除 HomePage，一開始直接顯示影片上傳工具主畫面（MainApp）
+
+## Phase 29: 修復影片生成失敗（Facebook CDN URL 過期問題）
+- [x] 根本原因：Facebook CDN 圖片 URL 會過期（403 Forbidden），後端無法下載
+- [x] 修復方案：前端先將圖片代理下載並上傳到 S3，用 S3 永久 URL 生成影片
+- [x] 新增 /api/trpc/slideshow.proxyUploadImage 和 proxyUploadImages 端點
+- [x] 前端在生成影片前，先批次代理上傳所有 Facebook CDN 圖片到 S3
+- [x] 改善 downloadFile 錯誤處理（加入 3 次重試機制、User-Agent header、更好的錯誤訊息）
+- [x] 測試並驗證（52/52 passed）
