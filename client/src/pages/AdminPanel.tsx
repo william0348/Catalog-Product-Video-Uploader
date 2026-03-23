@@ -2,7 +2,6 @@
 import React, { useState, useEffect, useCallback, useMemo, useContext } from 'react';
 import * as XLSX from 'xlsx';
 import { AppFooter } from '@/components/AppFooter';
-import { LanguageSwitcher } from '@/components/LanguageSwitcher';
 import { LanguageContext } from '@/contexts/LanguageContext';
 import { loadSettings, saveSettings, fetchCatalogName, validateAccessToken, loadSettingsFromServer, type AppSettings, type CatalogConfig } from '@/settingsStore';
 
@@ -1416,13 +1415,7 @@ export const AdminPanel = ({ onBack }: AdminPanelProps) => {
             <div className="card admin-panel">
                 <header className="admin-header">
                     <div className="admin-header-left">
-                        <button onClick={onBack} className="back-nav-button" title={t('backToHome')}>
-                            ← {t('back') || 'Back'}
-                        </button>
                         <h1>{t('adminPanel')}</h1>
-                    </div>
-                    <div className="header-actions">
-                        <LanguageSwitcher />
                     </div>
                 </header>
 

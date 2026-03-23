@@ -3456,3 +3456,343 @@ tbody tr.selected:hover td {
   color: var(--text-tertiary);
   line-height: 1.5;
 }
+
+
+/* ==================== App Layout with Sidebar ==================== */
+
+.app-layout {
+  display: flex;
+  min-height: 100vh;
+  width: 100%;
+}
+
+/* Override the old #root centering */
+#root {
+  display: flex;
+  justify-content: stretch;
+  align-items: stretch;
+  padding: 0;
+}
+
+/* Sidebar */
+.app-sidebar {
+  width: 260px;
+  min-width: 260px;
+  background: #fff;
+  border-right: 1px solid var(--separator-opaque);
+  display: flex;
+  flex-direction: column;
+  position: fixed;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  z-index: 100;
+  transform: translateX(-100%);
+  transition: transform 0.25s ease;
+}
+
+.app-sidebar.sidebar-desktop {
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  transform: translateX(0);
+}
+
+.app-sidebar.sidebar-open {
+  transform: translateX(0);
+  box-shadow: var(--shadow-lg);
+}
+
+.sidebar-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.3);
+  z-index: 99;
+  backdrop-filter: blur(2px);
+}
+
+/* Sidebar Header */
+.sidebar-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 20px 20px 16px;
+  border-bottom: 1px solid var(--separator-opaque);
+}
+
+.sidebar-logo {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  object-fit: contain;
+}
+
+.sidebar-brand {
+  display: flex;
+  flex-direction: column;
+}
+
+.sidebar-brand-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-primary);
+  letter-spacing: -0.02em;
+}
+
+.sidebar-brand-subtitle {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  font-weight: 500;
+  margin-top: 1px;
+}
+
+/* Sidebar Navigation */
+.sidebar-nav {
+  flex: 1;
+  padding: 12px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  overflow-y: auto;
+}
+
+.sidebar-nav-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  border: none;
+  background: transparent;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  transition: all var(--transition-fast);
+  text-align: left;
+  width: 100%;
+  font-family: var(--font-family);
+}
+
+.sidebar-nav-item:hover {
+  background: var(--gray-6);
+  color: var(--text-primary);
+}
+
+.sidebar-nav-item.active {
+  background: var(--system-blue);
+  color: #fff;
+}
+
+.sidebar-nav-item.active:hover {
+  background: var(--system-blue-hover);
+}
+
+.sidebar-nav-icon {
+  font-size: 18px;
+  width: 24px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.sidebar-nav-label {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Sidebar Footer */
+.sidebar-footer {
+  padding: 12px 16px 16px;
+  border-top: 1px solid var(--separator-opaque);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.sidebar-lang {
+  display: flex;
+  justify-content: center;
+}
+
+.sidebar-lang .language-switcher-container {
+  width: 100%;
+}
+
+.sidebar-lang .language-switcher-container select {
+  width: 100%;
+  font-size: 13px;
+  padding: 6px 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--separator-opaque);
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+}
+
+.sidebar-user {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 4px;
+}
+
+.sidebar-user-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--system-blue);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.sidebar-user-info {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.sidebar-user-email {
+  font-size: 12px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sidebar-logout-btn {
+  font-size: 12px;
+  color: var(--system-red);
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  text-align: left;
+  font-family: var(--font-family);
+  font-weight: 500;
+  margin-top: 2px;
+}
+
+.sidebar-logout-btn:hover {
+  text-decoration: underline;
+}
+
+.sidebar-login-btn {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border: 1px solid var(--separator-opaque);
+  background: var(--bg-tertiary);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--system-blue);
+  font-family: var(--font-family);
+  transition: all var(--transition-fast);
+  width: 100%;
+}
+
+.sidebar-login-btn:hover {
+  background: var(--gray-6);
+}
+
+.sidebar-login-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.sidebar-powered {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  text-align: center;
+}
+
+/* Main Content Area */
+.app-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-primary);
+}
+
+.app-content {
+  flex: 1;
+  padding: 24px;
+  overflow-y: auto;
+}
+
+/* Mobile Top Bar */
+.mobile-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  background: #fff;
+  border-bottom: 1px solid var(--separator-opaque);
+  position: sticky;
+  top: 0;
+  z-index: 50;
+}
+
+.mobile-menu-btn {
+  background: none;
+  border: none;
+  padding: 8px;
+  cursor: pointer;
+  color: var(--text-primary);
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.mobile-menu-btn:hover {
+  background: var(--gray-6);
+}
+
+.mobile-topbar-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+/* Override container styles for sidebar layout */
+.app-content .container {
+  max-width: 100%;
+  padding: 0;
+}
+
+.app-content .container.data-view {
+  max-width: 100%;
+  padding-top: 0;
+}
+
+/* Override the card to not center */
+.app-content .card {
+  max-width: 640px;
+}
+
+.app-content .data-view .card {
+  max-width: 100%;
+}
+
+/* Desktop: wider content area for data views */
+@media (min-width: 1024px) {
+  .app-content {
+    padding: 32px 40px;
+  }
+}
+
+/* Responsive: hide sidebar on mobile by default */
+@media (max-width: 1023px) {
+  .app-sidebar.sidebar-desktop {
+    transform: translateX(-100%);
+  }
+}

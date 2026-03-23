@@ -7,7 +7,6 @@ import { ImagePreview } from '@/components/ImagePreview';
 import { ProductTable } from '@/components/ProductTable';
 import { GoogleDriveUploader } from '@/components/GoogleDriveUploader';
 import { AppFooter } from '@/components/AppFooter';
-import { LanguageSwitcher } from '@/components/LanguageSwitcher';
 import { 
     BASE_URL, GOOGLE_CLIENT_ID, GOOGLE_API_SCOPES, GOOGLE_AUTH_TOKEN_KEY,
     MASTER_GOOGLE_SHEET_ID, SHEET_TAB_NAME, GOOGLE_APPS_SCRIPT_URL,
@@ -766,17 +765,6 @@ export const MainApp = () => {
         <div className="card">
           <header className="input-view-header">
             <div className="input-header-text">
-                <div style={{ display: 'flex', gap: '12px', marginBottom: '4px', flexWrap: 'wrap', alignItems: 'center' }}>
-                    <button onClick={() => { window.location.hash = '#/home'; }} className="back-nav-button">
-                        ← {t('back') || 'Back'}
-                    </button>
-                    <button onClick={() => { window.location.hash = '#/admin'; }} className="back-nav-button" style={{ background: 'var(--color-fill-tertiary)', color: 'var(--color-label-secondary)' }}>
-                        ⚙️ {t('adminPanel')}
-                    </button>
-                    <button onClick={() => { window.location.hash = '#/slideshow'; }} className="back-nav-button" style={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', color: '#fff', border: 'none' }}>
-                        🎬 {t('slideshowTitle') || 'Slideshow Generator'}
-                    </button>
-                </div>
                 <h1>{t('homeHeader')}</h1>
                 <p>{t('inputHeader')}</p>
             </div>
@@ -796,7 +784,6 @@ export const MainApp = () => {
                   {isGapiClientReady ? (t('loginWithGoogle') || '使用 Google 登入') : (t('initializing') || '初始化中...')}
                 </button>
               )}
-              <LanguageSwitcher />
             </div>
           </header>
 
@@ -997,24 +984,17 @@ export const MainApp = () => {
                 <button onClick={resetAndGoBack} className="back-nav-button" style={{ marginRight: '8px' }}>
                     ←
                 </button>
-                <img src="https://d2xsxph8kpxj0f.cloudfront.net/310519663317876169/nN7fRv522pr6qmVvUdeAQB/cpv-favicon-mm647eWJko9itpHnxyFRzi.png" alt="CPV Video Uploader" className="header-logo" />
                 <div className="header-title-group">
                     <h1>{catalogName}</h1>
                     <p className="subtle-text-header">{t('catalogIdHeader')}: {catalogId}</p>
                 </div>
             </div>
             <div className="header-actions">
-                 {googleAccessToken && userEmail ? (
-                    <div className="user-info-header-small">
-                        <span>{userEmail}</span>
-                        <button onClick={handleLogout} className="logout-button-small" title={t('logout')}>{t('logout')}</button>
-                    </div>
-                 ) : (
+                 {!googleAccessToken && (
                     <button ref={googleLoginRef} onClick={handleGoogleLogin} disabled={!isGoogleReady} className="google-login-button">
                         {isGapiClientReady ? t('loginWithGoogle') : t('initializing')}
                     </button>
                  )}
-                 <LanguageSwitcher />
                 <button onClick={resetAndGoBack} className="back-button">{t('changeCatalog')}</button>
             </div>
         </header>

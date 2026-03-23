@@ -1,6 +1,5 @@
 import { useState, useEffect, useContext, useRef, useMemo, useCallback } from "react";
 import { LanguageContext } from "@/contexts/LanguageContext";
-import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import { AppFooter } from "@/components/AppFooter";
 import {
   getCompaniesByEmail,
@@ -1088,47 +1087,41 @@ export const SlideshowGenerator = () => {
 
   // ===== RENDER =====
   return (
-    <main style={{ minHeight: "100vh", background: "#f5f7ff" }}>
+    <main style={{ minHeight: "100%", background: "transparent" }}>
       {/* Header */}
       <div style={{
         background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
-        padding: "20px 24px",
+        padding: "16px 24px",
         color: "#fff",
         display: "flex",
         alignItems: "center",
         justifyContent: "space-between",
         flexWrap: "wrap",
         gap: 12,
+        borderRadius: "12px",
+        marginBottom: 20,
       }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-          <button
-            onClick={() => (window.location.hash = "#/home")}
-            style={{ background: "rgba(255,255,255,0.2)", border: "none", borderRadius: 8, padding: "8px 16px", color: "#fff", fontSize: 14, fontWeight: 600, cursor: "pointer" }}
-          >
-            ← {t("back") || "Back"}
-          </button>
-          <div>
-            <h1 style={{ margin: 0, fontSize: 22, fontWeight: 700 }}>🎬 {t("slideshowTitle") || "Slideshow Video Generator"}</h1>
-            <p style={{ margin: "4px 0 0", fontSize: 13, opacity: 0.85 }}>{t("slideshowSubtitle") || "Create slideshow videos from catalog product images"}</p>
-          </div>
+        <div>
+          <h1 style={{ margin: 0, fontSize: 20, fontWeight: 700 }}>🎬 {t("slideshowTitle") || "Slideshow Video Generator"}</h1>
+          <p style={{ margin: "4px 0 0", fontSize: 13, opacity: 0.85 }}>{t("slideshowSubtitle") || "Create slideshow videos from catalog product images"}</p>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          <LanguageSwitcher />
-          {!googleAccessToken ? (
+          {!googleAccessToken && (
             <button
               onClick={() => googleTokenClient?.requestAccessToken()}
               style={{ background: "#fff", color: "#667eea", border: "none", borderRadius: 8, padding: "8px 16px", fontSize: 13, fontWeight: 600, cursor: "pointer" }}
             >
               {t("loginWithGoogle") || "Login with Google"}
             </button>
-          ) : (
-            <span style={{ fontSize: 13, opacity: 0.9 }}>✅ {userEmail || "Connected"}</span>
+          )}
+          {googleAccessToken && userEmail && (
+            <span style={{ fontSize: 13, opacity: 0.9 }}>✅ {userEmail}</span>
           )}
         </div>
       </div>
 
       {/* Steps Indicator */}
-      <div style={{ display: "flex", justifyContent: "center", gap: 40, padding: "24px 20px 16px", maxWidth: 600, margin: "0 auto" }}>
+      <div style={{ display: "flex", justifyContent: "center", gap: 40, padding: "16px 20px 12px", maxWidth: 600, margin: "0 auto" }}>
         {[1, 2, 3].map((step) => (
           <div key={step} style={{ textAlign: "center", cursor: step <= currentStep ? "pointer" : "default", opacity: step <= currentStep ? 1 : 0.4 }} onClick={() => step <= currentStep && setCurrentStep(step as 1 | 2 | 3)}>
             <div style={{
@@ -1144,12 +1137,12 @@ export const SlideshowGenerator = () => {
           </div>
         ))}
       </div>
-      <div style={{ width: "100%", height: 3, background: "#e0e7ff", maxWidth: 600, margin: "0 auto 24px" }}>
+      <div style={{ width: "100%", height: 3, background: "#e0e7ff", maxWidth: 600, margin: "0 auto 20px" }}>
         <div style={{ width: `${((currentStep - 1) / 2) * 100}%`, height: "100%", background: "linear-gradient(90deg, #667eea, #764ba2)", transition: "width 0.3s" }} />
       </div>
 
       {/* Content */}
-      <div style={{ maxWidth: 900, margin: "0 auto", padding: "0 20px 40px" }}>
+      <div style={{ maxWidth: 1400, margin: "0 auto", padding: "0 0 40px" }}>
 
         {/* ===== STEP 1: Select Products ===== */}
         {currentStep === 1 && (

@@ -9,9 +9,6 @@ export const TermsOfServicePage = () => {
         <main className="container data-view" style={{maxWidth: '800px'}}>
           <div className="card static-page-card">
             <header>
-                <button onClick={() => { window.history.back(); }} className="back-nav-button" style={{ marginBottom: '12px' }}>
-                    ← {t('back') || 'Back'}
-                </button>
                 <h1>{t('termsOfService')}</h1>
             </header>
             <p><strong>Last Updated:</strong> August 1, 2024</p>
