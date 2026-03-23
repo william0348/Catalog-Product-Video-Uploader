@@ -240,3 +240,7 @@
 - [x] 前端 UI 新增商品組合下拉選單、商品計數、讀取全部按鈕
 - [x] i18n 翻譯（中/英）
 - [x] 測試通過（60/60 passed）
+
+## Phase 33: 選擇商品組合後自動載入商品
+- [x] 選擇商品組合後自動觸發 handleFetchProducts（useEffect 監聽 selectedProductSetId）
+- [x] 測試通過（60/60 passed）

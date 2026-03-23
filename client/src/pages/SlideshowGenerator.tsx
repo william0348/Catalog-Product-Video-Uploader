@@ -529,6 +529,13 @@ export const SlideshowGenerator = () => {
     }
   }, [selectedCatalogId, selectedProductSetId, fbAccessToken]);
 
+  // Auto-fetch products when product set changes
+  useEffect(() => {
+    if (selectedProductSetId && fbAccessToken) {
+      handleFetchProducts();
+    }
+  }, [selectedProductSetId]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // ===== Load ALL products from product set =====
   const handleLoadAllProducts = useCallback(async () => {
     if (!selectedProductSetId || !fbAccessToken) return;
