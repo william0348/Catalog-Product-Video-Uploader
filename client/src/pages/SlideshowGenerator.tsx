@@ -232,6 +232,32 @@ export const SlideshowGenerator = () => {
   // Expanded product in list (to show individual images)
   const [expandedProductId, setExpandedProductId] = useState<string | null>(null);
 
+  // Template state
+  interface SlideshowTemplateData {
+    id: number;
+    name: string;
+    aspectRatio: string;
+    durationPerImage: number;
+    transition: string;
+    transitionDuration: number;
+    showProductName: number;
+    textPosition: string;
+    fontSize: number;
+    fontFamily: string;
+    fontColor: string;
+    backgroundColor: string;
+    imageScale: number;
+    imageOffsetX: number;
+    imageOffsetY: number;
+    overlayText: string | null;
+  }
+  const [templates, setTemplates] = useState<SlideshowTemplateData[]>([]);
+  const [isLoadingTemplates, setIsLoadingTemplates] = useState(false);
+  const [showSaveTemplate, setShowSaveTemplate] = useState(false);
+  const [templateName, setTemplateName] = useState("");
+  const [editingTemplateId, setEditingTemplateId] = useState<number | null>(null);
+  const [editingTemplateName, setEditingTemplateName] = useState("");
+
   // ===== Load settings on mount =====
   useEffect(() => {
     const xhr = new XMLHttpRequest();
@@ -537,6 +563,109 @@ export const SlideshowGenerator = () => {
   useEffect(() => {
     setPreviewIndex(0);
   }, [selectedImages.length]);
+
+  // ===== Template Functions =====
+  const loadTemplates = async () => {
+    setIsLoadingTemplates(true);
+    try {
+      const resp = await fetch("/api/trpc/slideshowTemplate.list", { credentials: "include" });
+      const json = await resp.json();
+      if (json?.result?.data) {
+        setTemplates(json.result.data);
+      }
+    } catch (e) {
+      console.error("Failed to load templates", e);
+    } finally {
+      setIsLoadingTemplates(false);
+    }
+  };
+
+  useEffect(() => {
+    loadTemplates();
+  }, []);
+
+  const saveTemplate = async () => {
+    if (!templateName.trim()) return;
+    try {
+      await trpcMutate("slideshowTemplate.create", {
+        name: templateName.trim(),
+        aspectRatio,
+        durationPerImage,
+        transition,
+        transitionDuration: Math.round(transitionDuration * 100),
+        showProductName: showProductName ? 1 : 0,
+        textPosition,
+        fontSize,
+        fontFamily,
+        fontColor,
+        backgroundColor,
+        imageScale: Math.round(imageScale * 100),
+        imageOffsetX,
+        imageOffsetY,
+        overlayText: overlayText.trim() || undefined,
+      });
+      setTemplateName("");
+      setShowSaveTemplate(false);
+      loadTemplates();
+    } catch (e: any) {
+      alert(e.message || "Failed to save template");
+    }
+  };
+
+  const applyTemplate = (tmpl: SlideshowTemplateData) => {
+    setAspectRatio(tmpl.aspectRatio as AspectRatio);
+    setDurationPerImage(tmpl.durationPerImage);
+    setTransition(tmpl.transition as TransitionType);
+    setTransitionDuration(tmpl.transitionDuration / 100);
+    setShowProductName(tmpl.showProductName === 1);
+    setTextPosition(tmpl.textPosition as TextPosition);
+    setFontSize(tmpl.fontSize);
+    setFontFamily(tmpl.fontFamily as FontFamily);
+    setFontColor(tmpl.fontColor);
+    setBackgroundColor(tmpl.backgroundColor);
+    setImageScale(tmpl.imageScale / 100);
+    setImageOffsetX(tmpl.imageOffsetX);
+    setImageOffsetY(tmpl.imageOffsetY);
+    setOverlayText(tmpl.overlayText || "");
+  };
+
+  const updateTemplate = async (id: number) => {
+    try {
+      await trpcMutate("slideshowTemplate.update", {
+        id,
+        name: editingTemplateName.trim() || undefined,
+        aspectRatio,
+        durationPerImage,
+        transition,
+        transitionDuration: Math.round(transitionDuration * 100),
+        showProductName: showProductName ? 1 : 0,
+        textPosition,
+        fontSize,
+        fontFamily,
+        fontColor,
+        backgroundColor,
+        imageScale: Math.round(imageScale * 100),
+        imageOffsetX,
+        imageOffsetY,
+        overlayText: overlayText.trim() || undefined,
+      });
+      setEditingTemplateId(null);
+      setEditingTemplateName("");
+      loadTemplates();
+    } catch (e: any) {
+      alert(e.message || "Failed to update template");
+    }
+  };
+
+  const deleteTemplate = async (id: number) => {
+    if (!confirm(isZh ? "確定要刪除此範本嗎？" : "Delete this template?")) return;
+    try {
+      await trpcMutate("slideshowTemplate.delete", { id });
+      loadTemplates();
+    } catch (e: any) {
+      alert(e.message || "Failed to delete template");
+    }
+  };
 
   // ===== Generate slideshow (single product) =====
   const handleGenerate = async () => {
@@ -1078,6 +1207,74 @@ export const SlideshowGenerator = () => {
         {/* ===== STEP 2: Settings ===== */}
         {currentStep === 2 && (
           <div>
+            {/* Template Bar */}
+            <div style={{ marginBottom: 20, padding: 16, background: "#f0f4ff", borderRadius: 12, border: "1px solid #d0d8ff" }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: templates.length > 0 ? 12 : 0 }}>
+                <h4 style={{ margin: 0, fontSize: 14, fontWeight: 600, color: "#4a5568" }}>
+                  📁 {isZh ? "影片生成範本" : "Video Templates"}
+                </h4>
+                <div style={{ display: "flex", gap: 8 }}>
+                  {!showSaveTemplate ? (
+                    <button onClick={() => setShowSaveTemplate(true)} style={{ ...miniActionBtn, color: "#667eea", borderColor: "#667eea", fontSize: 12 }}>
+                      💾 {isZh ? "儲存為範本" : "Save as Template"}
+                    </button>
+                  ) : (
+                    <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                      <input
+                        type="text" value={templateName} onChange={(e) => setTemplateName(e.target.value)}
+                        placeholder={isZh ? "範本名稱..." : "Template name..."}
+                        style={{ ...inputStyle, width: 180, padding: "4px 8px", fontSize: 12 }}
+                        onKeyDown={(e) => e.key === "Enter" && saveTemplate()}
+                        autoFocus
+                      />
+                      <button onClick={saveTemplate} disabled={!templateName.trim()} style={{ ...miniActionBtn, color: "#38a169", borderColor: "#38a169", fontSize: 12, opacity: templateName.trim() ? 1 : 0.5 }}>
+                        ✓
+                      </button>
+                      <button onClick={() => { setShowSaveTemplate(false); setTemplateName(""); }} style={{ ...miniActionBtn, color: "#e53e3e", borderColor: "#fca5a5", fontSize: 12 }}>
+                        ✕
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+              {templates.length > 0 && (
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  {templates.map((tmpl) => (
+                    <div key={tmpl.id} style={{
+                      display: "flex", alignItems: "center", gap: 4, padding: "6px 10px",
+                      background: "#fff", borderRadius: 8, border: "1px solid #e0e7ff",
+                      fontSize: 12, boxShadow: "0 1px 2px rgba(0,0,0,0.05)",
+                    }}>
+                      {editingTemplateId === tmpl.id ? (
+                        <>
+                          <input
+                            type="text" value={editingTemplateName} onChange={(e) => setEditingTemplateName(e.target.value)}
+                            style={{ border: "1px solid #ccc", borderRadius: 4, padding: "2px 6px", fontSize: 12, width: 120 }}
+                            onKeyDown={(e) => e.key === "Enter" && updateTemplate(tmpl.id)}
+                            autoFocus
+                          />
+                          <button onClick={() => updateTemplate(tmpl.id)} style={{ background: "none", border: "none", cursor: "pointer", color: "#38a169", fontSize: 14, padding: "0 2px" }} title={isZh ? "儲存" : "Save"}>✓</button>
+                          <button onClick={() => { setEditingTemplateId(null); setEditingTemplateName(""); }} style={{ background: "none", border: "none", cursor: "pointer", color: "#e53e3e", fontSize: 14, padding: "0 2px" }} title={isZh ? "取消" : "Cancel"}>✕</button>
+                        </>
+                      ) : (
+                        <>
+                          <button onClick={() => applyTemplate(tmpl)} style={{ background: "none", border: "none", cursor: "pointer", color: "#333", fontWeight: 500, fontSize: 12, padding: 0 }} title={isZh ? "套用範本" : "Apply template"}>
+                            {tmpl.name}
+                          </button>
+                          <span style={{ color: "#aaa", fontSize: 10 }}>({tmpl.aspectRatio})</span>
+                          <button onClick={() => { setEditingTemplateId(tmpl.id); setEditingTemplateName(tmpl.name); }} style={{ background: "none", border: "none", cursor: "pointer", color: "#667eea", fontSize: 12, padding: "0 2px" }} title={isZh ? "編輯" : "Edit"}>✏️</button>
+                          <button onClick={() => deleteTemplate(tmpl.id)} style={{ background: "none", border: "none", cursor: "pointer", color: "#e53e3e", fontSize: 12, padding: "0 2px" }} title={isZh ? "刪除" : "Delete"}>🗑</button>
+                        </>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+              {templates.length === 0 && !isLoadingTemplates && (
+                <p style={{ margin: 0, fontSize: 12, color: "#999" }}>{isZh ? "尚無儲存的範本。設定好影片參數後，點擊「儲存為範本」以便下次重複使用。" : "No templates saved yet. Configure your video settings and click \"Save as Template\" to reuse them later."}</p>
+              )}
+            </div>
+
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 24 }}>
               {/* Left: Settings */}
               <div>
@@ -1372,23 +1569,35 @@ export const SlideshowGenerator = () => {
                           }}
                         />
                       </div>
-                      {/* Text overlay preview */}
-                      {(showProductName || overlayText.trim()) && (
-                        <div style={{
-                          position: "absolute", left: 0, right: 0, padding: "12px 16px",
-                          background: "rgba(0,0,0,0.5)", textAlign: "center",
-                          ...(textPosition === "top" ? { top: 0 } : textPosition === "center" ? { top: "50%", transform: "translateY(-50%)" } : { bottom: 0 }),
-                        }}>
+                      {/* Text overlay preview - proportionally scaled to match actual video */}
+                      {(showProductName || overlayText.trim()) && (() => {
+                        // The preview container maxHeight is 450px.
+                        // Actual video canvas: 4:5 = 1350px height, 9:16 = 1920px height.
+                        // Scale factor = previewHeight / canvasHeight
+                        // For 4:5: preview ~360px wide (450 * 4/5), height ~450px → scale = 450/1350 ≈ 0.333
+                        // For 9:16: preview ~253px wide (450 * 9/16), height ~450px → scale = 450/1920 ≈ 0.234
+                        const canvasHeight = aspectRatio === "4:5" ? 1350 : 1920;
+                        const previewScale = 450 / canvasHeight;
+                        const previewFontSize = Math.max(8, Math.round(fontSize * previewScale));
+                        const previewProductFontSize = Math.max(6, Math.round(fontSize * 0.75 * previewScale));
+                        return (
                           <div style={{
-                            color: fontColor, fontSize: Math.min(fontSize, 28), fontWeight: 700,
-                            fontFamily: fontFamily.includes("serif") ? "serif" : "sans-serif",
-                            textShadow: "1px 1px 3px rgba(0,0,0,0.7)",
+                            position: "absolute", left: 0, right: 0, padding: `${Math.round(12 * previewScale)}px ${Math.round(16 * previewScale)}px`,
+                            background: "rgba(0,0,0,0.5)", textAlign: "center",
+                            ...(textPosition === "top" ? { top: 0 } : textPosition === "center" ? { top: "50%", transform: "translateY(-50%)" } : { bottom: 0 }),
                           }}>
-                            {showProductName && selectedImages[previewIndex % selectedImages.length]?.label}
-                            {overlayText.trim() && <div style={{ fontSize: Math.min(fontSize * 0.8, 22), marginTop: 4 }}>{overlayText}</div>}
+                            <div style={{
+                              color: fontColor, fontSize: previewFontSize, fontWeight: 700,
+                              fontFamily: fontFamily.includes("serif") ? "serif" : "sans-serif",
+                              textShadow: "1px 1px 3px rgba(0,0,0,0.7)",
+                              lineHeight: 1.3,
+                            }}>
+                              {overlayText.trim() && <div>{overlayText}</div>}
+                              {showProductName && <div style={{ fontSize: previewProductFontSize, marginTop: overlayText.trim() ? 2 : 0 }}>{selectedImages[previewIndex % selectedImages.length]?.label}</div>}
+                            </div>
                           </div>
-                        </div>
-                      )}
+                        );
+                      })()}
                       {/* Preview controls */}
                       <div style={{ position: "absolute", bottom: 12, left: "50%", transform: "translateX(-50%)", display: "flex", gap: 8, alignItems: "center" }}>
                         <button onClick={() => setPreviewIndex((prev) => (prev - 1 + selectedImages.length) % selectedImages.length)} style={previewBtn}>◀</button>

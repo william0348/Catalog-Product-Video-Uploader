@@ -6,6 +6,7 @@ import {
   appSettings,
   companies, InsertCompany, Company,
   companyMembers, InsertCompanyMember, CompanyMember,
+  slideshowTemplates, InsertSlideshowTemplate, SlideshowTemplate,
 } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
@@ -288,4 +289,38 @@ export async function getAllSettings(): Promise<Record<string, string>> {
     if (row.settingValue) result[row.settingKey] = row.settingValue;
   }
   return result;
+}
+
+// ==================== Slideshow Templates ====================
+
+export async function createSlideshowTemplate(data: Omit<InsertSlideshowTemplate, "id" | "createdAt" | "updatedAt">): Promise<number> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const result = await db.insert(slideshowTemplates).values(data);
+  return result[0].insertId;
+}
+
+export async function getSlideshowTemplates(): Promise<SlideshowTemplate[]> {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(slideshowTemplates).orderBy(slideshowTemplates.updatedAt);
+}
+
+export async function getSlideshowTemplateById(id: number): Promise<SlideshowTemplate | undefined> {
+  const db = await getDb();
+  if (!db) return undefined;
+  const rows = await db.select().from(slideshowTemplates).where(eq(slideshowTemplates.id, id)).limit(1);
+  return rows[0];
+}
+
+export async function updateSlideshowTemplate(id: number, data: Partial<Omit<InsertSlideshowTemplate, "id" | "createdAt" | "updatedAt" | "createdBy">>): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(slideshowTemplates).set(data).where(eq(slideshowTemplates.id, id));
+}
+
+export async function deleteSlideshowTemplate(id: number): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db.delete(slideshowTemplates).where(eq(slideshowTemplates.id, id));
 }

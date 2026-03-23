@@ -276,6 +276,15 @@ export const translations = {
         slideshowUploadDrive: "Upload to Drive",
         slideshowPrev: "Back",
         slideshowNext: "Next",
+        slideshowTemplates: "Video Templates",
+        slideshowSaveAsTemplate: "Save as Template",
+        slideshowTemplateName: "Template name...",
+        slideshowNoTemplates: "No templates saved yet. Configure your video settings and click \"Save as Template\" to reuse them later.",
+        slideshowApplyTemplate: "Apply template",
+        slideshowEditTemplate: "Edit",
+        slideshowDeleteTemplate: "Delete",
+        slideshowDeleteTemplateConfirm: "Delete this template?",
+        slideshowUpdateCurrentSettings: "Update with current settings",
     },
     'zh-TW': {
         // General
@@ -553,5 +562,14 @@ export const translations = {
         slideshowUploadDrive: "上傳到 Drive",
         slideshowPrev: "返回",
         slideshowNext: "下一步",
+        slideshowTemplates: "影片生成範本",
+        slideshowSaveAsTemplate: "儲存為範本",
+        slideshowTemplateName: "範本名稱...",
+        slideshowNoTemplates: "尚無儲存的範本。設定好影片參數後，點擊「儲存為範本」以便下次重複使用。",
+        slideshowApplyTemplate: "套用範本",
+        slideshowEditTemplate: "編輯",
+        slideshowDeleteTemplate: "刪除",
+        slideshowDeleteTemplateConfirm: "確定要刪除此範本嗎？",
+        slideshowUpdateCurrentSettings: "以目前設定更新",
     }
 };

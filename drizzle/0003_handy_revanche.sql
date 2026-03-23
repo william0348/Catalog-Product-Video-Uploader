@@ -1,0 +1,22 @@
+CREATE TABLE `slideshow_templates` (
+	`id` int AUTO_INCREMENT NOT NULL,
+	`name` varchar(255) NOT NULL,
+	`aspectRatio` varchar(10) NOT NULL DEFAULT '4:5',
+	`durationPerImage` int NOT NULL DEFAULT 3,
+	`transition` varchar(50) NOT NULL DEFAULT 'fade',
+	`transitionDuration` int NOT NULL DEFAULT 50,
+	`showProductName` int NOT NULL DEFAULT 0,
+	`textPosition` varchar(20) NOT NULL DEFAULT 'bottom',
+	`fontSize` int NOT NULL DEFAULT 40,
+	`fontFamily` varchar(100) NOT NULL DEFAULT 'noto-sans-cjk',
+	`fontColor` varchar(20) NOT NULL DEFAULT '#FFFFFF',
+	`backgroundColor` varchar(20) NOT NULL DEFAULT '#FFFFFF',
+	`imageScale` int NOT NULL DEFAULT 100,
+	`imageOffsetX` int NOT NULL DEFAULT 0,
+	`imageOffsetY` int NOT NULL DEFAULT 0,
+	`overlayText` text,
+	`createdBy` int NOT NULL,
+	`createdAt` timestamp NOT NULL DEFAULT (now()),
+	`updatedAt` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,
+	CONSTRAINT `slideshow_templates_id` PRIMARY KEY(`id`)
+);

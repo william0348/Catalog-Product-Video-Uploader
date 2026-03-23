@@ -92,3 +92,44 @@ export const appSettings = mysqlTable("app_settings", {
 
 export type AppSetting = typeof appSettings.$inferSelect;
 export type InsertAppSetting = typeof appSettings.$inferInsert;
+
+// ==================== Slideshow Templates ====================
+export const slideshowTemplates = mysqlTable("slideshow_templates", {
+  id: int("id").autoincrement().primaryKey(),
+  name: varchar("name", { length: 255 }).notNull(),
+  /** Aspect ratio: 4:5 or 9:16 */
+  aspectRatio: varchar("aspectRatio", { length: 10 }).notNull().default("4:5"),
+  /** Duration per image in seconds */
+  durationPerImage: int("durationPerImage").notNull().default(3),
+  /** Transition effect type */
+  transition: varchar("transition", { length: 50 }).notNull().default("fade"),
+  /** Transition duration in seconds (stored as integer, divide by 100) */
+  transitionDuration: int("transitionDuration").notNull().default(50),
+  /** Show product name on slides */
+  showProductName: int("showProductName").notNull().default(0),
+  /** Text position: top, center, bottom */
+  textPosition: varchar("textPosition", { length: 20 }).notNull().default("bottom"),
+  /** Font size in pixels */
+  fontSize: int("fontSize").notNull().default(40),
+  /** Font family identifier */
+  fontFamily: varchar("fontFamily", { length: 100 }).notNull().default("noto-sans-cjk"),
+  /** Font color hex */
+  fontColor: varchar("fontColor", { length: 20 }).notNull().default("#FFFFFF"),
+  /** Background color hex */
+  backgroundColor: varchar("backgroundColor", { length: 20 }).notNull().default("#FFFFFF"),
+  /** Image scale (stored as integer percentage, e.g. 100 = 1.0) */
+  imageScale: int("imageScale").notNull().default(100),
+  /** Image horizontal offset percentage */
+  imageOffsetX: int("imageOffsetX").notNull().default(0),
+  /** Image vertical offset percentage */
+  imageOffsetY: int("imageOffsetY").notNull().default(0),
+  /** Overlay text */
+  overlayText: text("overlayText"),
+  /** Created by user ID */
+  createdBy: int("createdBy").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type SlideshowTemplate = typeof slideshowTemplates.$inferSelect;
+export type InsertSlideshowTemplate = typeof slideshowTemplates.$inferInsert;

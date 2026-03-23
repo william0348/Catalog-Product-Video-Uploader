@@ -24,6 +24,11 @@ import {
   getCompanyMembers,
   removeCompanyMember,
   activateMemberByEmail,
+  createSlideshowTemplate,
+  getSlideshowTemplates,
+  getSlideshowTemplateById,
+  updateSlideshowTemplate,
+  deleteSlideshowTemplate,
 } from "./db";
 
 export const appRouter = router({
@@ -500,6 +505,77 @@ export const appRouter = router({
       }))
       .mutation(async ({ input }) => {
         return updateCatalogProductVideo(input.catalogId, input.accessToken, input.retailerId, input.videoUrl);
+      }),
+  }),
+
+  // ==================== Slideshow Templates ====================
+  slideshowTemplate: router({
+    list: publicProcedure.query(async () => {
+      return getSlideshowTemplates();
+    }),
+
+    getById: publicProcedure
+      .input(z.object({ id: z.number() }))
+      .query(async ({ input }) => {
+        return getSlideshowTemplateById(input.id);
+      }),
+
+    create: publicProcedure
+      .input(z.object({
+        name: z.string().min(1).max(255),
+        aspectRatio: z.string().default("4:5"),
+        durationPerImage: z.number().min(1).max(15).default(3),
+        transition: z.string().default("fade"),
+        transitionDuration: z.number().min(0).max(200).default(50),
+        showProductName: z.number().min(0).max(1).default(0),
+        textPosition: z.string().default("bottom"),
+        fontSize: z.number().min(12).max(120).default(40),
+        fontFamily: z.string().default("noto-sans-cjk"),
+        fontColor: z.string().default("#FFFFFF"),
+        backgroundColor: z.string().default("#FFFFFF"),
+        imageScale: z.number().min(10).max(200).default(100),
+        imageOffsetX: z.number().min(-50).max(50).default(0),
+        imageOffsetY: z.number().min(-50).max(50).default(0),
+        overlayText: z.string().optional(),
+      }))
+      .mutation(async ({ input }) => {
+        const id = await createSlideshowTemplate({
+          ...input,
+          createdBy: 0, // public access, no auth required
+        });
+        return { success: true, id };
+      }),
+
+    update: publicProcedure
+      .input(z.object({
+        id: z.number(),
+        name: z.string().min(1).max(255).optional(),
+        aspectRatio: z.string().optional(),
+        durationPerImage: z.number().min(1).max(15).optional(),
+        transition: z.string().optional(),
+        transitionDuration: z.number().min(0).max(200).optional(),
+        showProductName: z.number().min(0).max(1).optional(),
+        textPosition: z.string().optional(),
+        fontSize: z.number().min(12).max(120).optional(),
+        fontFamily: z.string().optional(),
+        fontColor: z.string().optional(),
+        backgroundColor: z.string().optional(),
+        imageScale: z.number().min(10).max(200).optional(),
+        imageOffsetX: z.number().min(-50).max(50).optional(),
+        imageOffsetY: z.number().min(-50).max(50).optional(),
+        overlayText: z.string().optional(),
+      }))
+      .mutation(async ({ input }) => {
+        const { id, ...data } = input;
+        await updateSlideshowTemplate(id, data);
+        return { success: true };
+      }),
+
+    delete: publicProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ input }) => {
+        await deleteSlideshowTemplate(input.id);
+        return { success: true };
       }),
   }),
 
