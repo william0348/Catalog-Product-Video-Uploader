@@ -206,3 +206,8 @@
 - [x] 前端在生成影片前，先批次代理上傳所有 Facebook CDN 圖片到 S3
 - [x] 改善 downloadFile 錯誤處理（加入 3 次重試機制、User-Agent header、更好的錯誤訊息）
 - [x] 測試並驗證（52/52 passed）
+
+## Phase 30: 修復背景影片合成時不應去背商品圖片
+- [x] 分析問題：使用背景影片時，FFmpeg colorkey 將商品圖片的背景色移除了
+- [x] 修復 FFmpeg 合成邏輯：背景影片模式下，商品圖片應完整疊加（不去背）
+- [x] 測試並驗證（52/52 passed）

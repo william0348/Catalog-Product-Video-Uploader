@@ -437,15 +437,13 @@ export async function generateSlideshow(options: SlideshowOptions): Promise<Buff
           bgFramePath,
         ]);
         
-        // Overlay the processed product image on top of the bg video frame
-        // Use the user's background color for colorkey removal
-        const bgColorHex = (backgroundColor || "white").replace(/^#/, "");
-        const colorKeyColor = /^[0-9a-fA-F]{6}$/.test(bgColorHex) ? `0x${bgColorHex}` : "0xFFFFFF";
+        // Overlay the processed product image directly on top of the bg video frame
+        // NO colorkey removal - keep the original product image intact
         const withBgPath = path.join(tmpDir, `withbg_${String(i).padStart(3, "0")}.png`);
         await runFFmpeg([
           "-i", bgFramePath,
           "-i", processedPaths[i],
-          "-filter_complex", `[1:v]colorkey=${colorKeyColor}:0.3:0.2[fg];[0:v][fg]overlay=0:0,format=yuv420p`,
+          "-filter_complex", `[0:v][1:v]overlay=0:0,format=yuv420p`,
           "-frames:v", "1",
           withBgPath,
         ]);
