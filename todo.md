@@ -165,3 +165,13 @@
 - [x] 移除「顯示商品名稱」功能（showProductName）
 - [x] 更新 i18n 翻譯（中英文完整）
 - [x] 測試並驗證（47/47 passed）
+
+## Phase 24: 影片疊加（背景影片）+ 片頭片尾
+- [x] 後端 FFmpeg 支援背景影片（影片作為背景，商品圖片疊加在上方，使用 colorkey 去背）
+- [x] 後端 FFmpeg 支援片頭影片（normalize 解析度/幀率後 concat）
+- [x] 後端 FFmpeg 支援片尾影片（normalize 解析度/幀率後 concat）
+- [x] 新增影片上傳 tRPC endpoint（uploadVideo，最大 50MB）
+- [x] 更新 routers.ts 接受 backgroundVideoUrl, introVideoUrl, outroVideoUrl 參數
+- [x] 前端新增影片上傳 UI（背景影片、片頭影片、片尾影片各自獨立上傳）
+- [x] 更新 i18n 翻譯（中英文完整）
+- [x] 測試並驗證（47/47 passed）

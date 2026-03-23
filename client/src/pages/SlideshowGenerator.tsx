@@ -200,6 +200,24 @@ export const SlideshowGenerator = () => {
   const [isUploadingOverlayImage, setIsUploadingOverlayImage] = useState(false);
   const overlayImageInputRef = useRef<HTMLInputElement>(null);
 
+  // Background video (plays behind product images)
+  const [backgroundVideoUrl, setBackgroundVideoUrl] = useState<string | null>(null);
+  const [backgroundVideoFileName, setBackgroundVideoFileName] = useState<string | null>(null);
+  const [isUploadingBgVideo, setIsUploadingBgVideo] = useState(false);
+  const bgVideoInputRef = useRef<HTMLInputElement>(null);
+
+  // Intro video (prepended before slideshow)
+  const [introVideoUrl, setIntroVideoUrl] = useState<string | null>(null);
+  const [introVideoFileName, setIntroVideoFileName] = useState<string | null>(null);
+  const [isUploadingIntroVideo, setIsUploadingIntroVideo] = useState(false);
+  const introVideoInputRef = useRef<HTMLInputElement>(null);
+
+  // Outro video (appended after slideshow)
+  const [outroVideoUrl, setOutroVideoUrl] = useState<string | null>(null);
+  const [outroVideoFileName, setOutroVideoFileName] = useState<string | null>(null);
+  const [isUploadingOutroVideo, setIsUploadingOutroVideo] = useState(false);
+  const outroVideoInputRef = useRef<HTMLInputElement>(null);
+
   // Background music
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [audioFileName, setAudioFileName] = useState<string | null>(null);
@@ -708,6 +726,9 @@ export const SlideshowGenerator = () => {
         overlayImageScale: overlayImageUrl ? overlayImageScale : undefined,
         overlayImageX: overlayImageUrl ? overlayImageX : undefined,
         overlayImageY: overlayImageUrl ? overlayImageY : undefined,
+        backgroundVideoUrl: backgroundVideoUrl || undefined,
+        introVideoUrl: introVideoUrl || undefined,
+        outroVideoUrl: outroVideoUrl || undefined,
         audioUrl: audioUrl || undefined,
         audioVolume: audioUrl ? audioVolume : undefined,
       });
@@ -839,6 +860,9 @@ export const SlideshowGenerator = () => {
           overlayImageScale: overlayImageUrl ? overlayImageScale : undefined,
           overlayImageX: overlayImageUrl ? overlayImageX : undefined,
           overlayImageY: overlayImageUrl ? overlayImageY : undefined,
+          backgroundVideoUrl: backgroundVideoUrl || undefined,
+          introVideoUrl: introVideoUrl || undefined,
+          outroVideoUrl: outroVideoUrl || undefined,
           audioUrl: audioUrl || undefined,
           audioVolume: audioUrl ? audioVolume : undefined,
         });
@@ -1627,6 +1651,124 @@ export const SlideshowGenerator = () => {
                       <p style={{ margin: "6px 0 0", fontSize: 11, color: "#999" }}>{isZh ? "支援 PNG, JPG, WebP（最大 10MB，建議使用透明背景 PNG）" : "Supports PNG, JPG, WebP (max 10MB, transparent PNG recommended)"}</p>
                     </>
                   )}
+                </div>
+
+                {/* Video Sections: Background / Intro / Outro */}
+                <div style={{ padding: 16, background: "#f0fdf4", borderRadius: 10, border: "1px solid #bbf7d0", marginBottom: 16 }}>
+                  <h4 style={{ margin: "0 0 12px", fontSize: 14, fontWeight: 600, color: "#555" }}>
+                    🎬 {isZh ? "影片設定" : "Video Settings"}
+                  </h4>
+
+                  {/* Background Video */}
+                  <div style={{ marginBottom: 16, padding: 12, background: "#fff", borderRadius: 8, border: "1px solid #e5e7eb" }}>
+                    <label style={{ fontSize: 13, fontWeight: 600, color: "#444", display: "block", marginBottom: 6 }}>
+                      🎥 {isZh ? "背景影片" : "Background Video"}
+                    </label>
+                    <p style={{ margin: "0 0 8px", fontSize: 11, color: "#888" }}>
+                      {isZh ? "上傳影片作為幻燈片背景，商品圖片會疊加在影片上方" : "Upload a video as slideshow background, product images overlay on top"}
+                    </p>
+                    {backgroundVideoUrl ? (
+                      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                        <span style={{ fontSize: 13, color: "#333" }}>🎬 {backgroundVideoFileName}</span>
+                        <button onClick={() => { setBackgroundVideoUrl(null); setBackgroundVideoFileName(null); }} style={{ ...miniActionBtn, color: "#e53e3e", borderColor: "#fca5a5" }}>✕ {isZh ? "移除" : "Remove"}</button>
+                      </div>
+                    ) : (
+                      <>
+                        <input ref={bgVideoInputRef} type="file" accept="video/*" onChange={async (e) => {
+                          const file = e.target.files?.[0];
+                          if (!file) return;
+                          if (file.size > 50 * 1024 * 1024) { alert(isZh ? "影片大小不能超過 50MB" : "Video must be under 50MB"); return; }
+                          setIsUploadingBgVideo(true);
+                          try {
+                            const base64 = await fileToBase64(file);
+                            const result = await trpcMutate("slideshow.uploadVideo", { base64Data: base64, fileName: file.name, mimeType: file.type || "video/mp4" });
+                            if (result?.url) { setBackgroundVideoUrl(result.url); setBackgroundVideoFileName(file.name); }
+                          } catch (err: any) { alert(err.message || "Upload failed"); } finally {
+                            setIsUploadingBgVideo(false);
+                            if (bgVideoInputRef.current) bgVideoInputRef.current.value = "";
+                          }
+                        }} style={{ display: "none" }} />
+                        <button onClick={() => bgVideoInputRef.current?.click()} disabled={isUploadingBgVideo} style={{ ...buttonStyle, background: "#16a34a", fontSize: 13, padding: "8px 16px" }}>
+                          {isUploadingBgVideo ? "⏳ Uploading..." : `🎥 ${isZh ? "上傳背景影片" : "Upload Background Video"}`}
+                        </button>
+                        <p style={{ margin: "6px 0 0", fontSize: 11, color: "#999" }}>{isZh ? "支援 MP4, MOV, WebM（最大 50MB）" : "Supports MP4, MOV, WebM (max 50MB)"}</p>
+                      </>
+                    )}
+                  </div>
+
+                  {/* Intro Video */}
+                  <div style={{ marginBottom: 16, padding: 12, background: "#fff", borderRadius: 8, border: "1px solid #e5e7eb" }}>
+                    <label style={{ fontSize: 13, fontWeight: 600, color: "#444", display: "block", marginBottom: 6 }}>
+                      ⏮️ {isZh ? "片頭影片" : "Intro Video"}
+                    </label>
+                    <p style={{ margin: "0 0 8px", fontSize: 11, color: "#888" }}>
+                      {isZh ? "在幻燈片開始前播放的影片" : "Video played before the slideshow starts"}
+                    </p>
+                    {introVideoUrl ? (
+                      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                        <span style={{ fontSize: 13, color: "#333" }}>⏮️ {introVideoFileName}</span>
+                        <button onClick={() => { setIntroVideoUrl(null); setIntroVideoFileName(null); }} style={{ ...miniActionBtn, color: "#e53e3e", borderColor: "#fca5a5" }}>✕ {isZh ? "移除" : "Remove"}</button>
+                      </div>
+                    ) : (
+                      <>
+                        <input ref={introVideoInputRef} type="file" accept="video/*" onChange={async (e) => {
+                          const file = e.target.files?.[0];
+                          if (!file) return;
+                          if (file.size > 50 * 1024 * 1024) { alert(isZh ? "影片大小不能超過 50MB" : "Video must be under 50MB"); return; }
+                          setIsUploadingIntroVideo(true);
+                          try {
+                            const base64 = await fileToBase64(file);
+                            const result = await trpcMutate("slideshow.uploadVideo", { base64Data: base64, fileName: file.name, mimeType: file.type || "video/mp4" });
+                            if (result?.url) { setIntroVideoUrl(result.url); setIntroVideoFileName(file.name); }
+                          } catch (err: any) { alert(err.message || "Upload failed"); } finally {
+                            setIsUploadingIntroVideo(false);
+                            if (introVideoInputRef.current) introVideoInputRef.current.value = "";
+                          }
+                        }} style={{ display: "none" }} />
+                        <button onClick={() => introVideoInputRef.current?.click()} disabled={isUploadingIntroVideo} style={{ ...buttonStyle, background: "#2563eb", fontSize: 13, padding: "8px 16px" }}>
+                          {isUploadingIntroVideo ? "⏳ Uploading..." : `⏮️ ${isZh ? "上傳片頭影片" : "Upload Intro Video"}`}
+                        </button>
+                        <p style={{ margin: "6px 0 0", fontSize: 11, color: "#999" }}>{isZh ? "支援 MP4, MOV, WebM（最大 50MB）" : "Supports MP4, MOV, WebM (max 50MB)"}</p>
+                      </>
+                    )}
+                  </div>
+
+                  {/* Outro Video */}
+                  <div style={{ padding: 12, background: "#fff", borderRadius: 8, border: "1px solid #e5e7eb" }}>
+                    <label style={{ fontSize: 13, fontWeight: 600, color: "#444", display: "block", marginBottom: 6 }}>
+                      ⏭️ {isZh ? "片尾影片" : "Outro Video"}
+                    </label>
+                    <p style={{ margin: "0 0 8px", fontSize: 11, color: "#888" }}>
+                      {isZh ? "在幻燈片結束後播放的影片" : "Video played after the slideshow ends"}
+                    </p>
+                    {outroVideoUrl ? (
+                      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                        <span style={{ fontSize: 13, color: "#333" }}>⏭️ {outroVideoFileName}</span>
+                        <button onClick={() => { setOutroVideoUrl(null); setOutroVideoFileName(null); }} style={{ ...miniActionBtn, color: "#e53e3e", borderColor: "#fca5a5" }}>✕ {isZh ? "移除" : "Remove"}</button>
+                      </div>
+                    ) : (
+                      <>
+                        <input ref={outroVideoInputRef} type="file" accept="video/*" onChange={async (e) => {
+                          const file = e.target.files?.[0];
+                          if (!file) return;
+                          if (file.size > 50 * 1024 * 1024) { alert(isZh ? "影片大小不能超過 50MB" : "Video must be under 50MB"); return; }
+                          setIsUploadingOutroVideo(true);
+                          try {
+                            const base64 = await fileToBase64(file);
+                            const result = await trpcMutate("slideshow.uploadVideo", { base64Data: base64, fileName: file.name, mimeType: file.type || "video/mp4" });
+                            if (result?.url) { setOutroVideoUrl(result.url); setOutroVideoFileName(file.name); }
+                          } catch (err: any) { alert(err.message || "Upload failed"); } finally {
+                            setIsUploadingOutroVideo(false);
+                            if (outroVideoInputRef.current) outroVideoInputRef.current.value = "";
+                          }
+                        }} style={{ display: "none" }} />
+                        <button onClick={() => outroVideoInputRef.current?.click()} disabled={isUploadingOutroVideo} style={{ ...buttonStyle, background: "#9333ea", fontSize: 13, padding: "8px 16px" }}>
+                          {isUploadingOutroVideo ? "⏳ Uploading..." : `⏭️ ${isZh ? "上傳片尾影片" : "Upload Outro Video"}`}
+                        </button>
+                        <p style={{ margin: "6px 0 0", fontSize: 11, color: "#999" }}>{isZh ? "支援 MP4, MOV, WebM（最大 50MB）" : "Supports MP4, MOV, WebM (max 50MB)"}</p>
+                      </>
+                    )}
+                  </div>
                 </div>
 
                 {/* Background Music */}

@@ -290,6 +290,16 @@ export const translations = {
         slideshowDeleteTemplate: "Delete",
         slideshowDeleteTemplateConfirm: "Delete this template?",
         slideshowUpdateCurrentSettings: "Update with current settings",
+        slideshowBackgroundVideo: "Background Video",
+        slideshowBackgroundVideoDesc: "Upload a video as slideshow background, product images overlay on top",
+        slideshowIntroVideo: "Intro Video",
+        slideshowIntroVideoDesc: "Video played before the slideshow starts",
+        slideshowOutroVideo: "Outro Video",
+        slideshowOutroVideoDesc: "Video played after the slideshow ends",
+        slideshowUploadBgVideo: "Upload Background Video",
+        slideshowUploadIntroVideo: "Upload Intro Video",
+        slideshowUploadOutroVideo: "Upload Outro Video",
+        slideshowVideoFormats: "Supports MP4, MOV, WebM (max 50MB)",
     },
     'zh-TW': {
         // General
@@ -581,5 +591,15 @@ export const translations = {
         slideshowDeleteTemplate: "刪除",
         slideshowDeleteTemplateConfirm: "確定要刪除此範本嗎？",
         slideshowUpdateCurrentSettings: "以目前設定更新",
+        slideshowBackgroundVideo: "背景影片",
+        slideshowBackgroundVideoDesc: "上傳影片作為幻燈片背景，商品圖片會疊加在影片上方",
+        slideshowIntroVideo: "片頭影片",
+        slideshowIntroVideoDesc: "在幻燈片開始前播放的影片",
+        slideshowOutroVideo: "片尾影片",
+        slideshowOutroVideoDesc: "在幻燈片結束後播放的影片",
+        slideshowUploadBgVideo: "上傳背景影片",
+        slideshowUploadIntroVideo: "上傳片頭影片",
+        slideshowUploadOutroVideo: "上傳片尾影片",
+        slideshowVideoFormats: "支援 MP4, MOV, WebM（最大 50MB）",
     }
 };
