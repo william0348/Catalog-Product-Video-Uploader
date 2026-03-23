@@ -63,6 +63,23 @@ const trpcMutate = async (path: string, input: any): Promise<any> => {
     xhr.setRequestHeader("Content-Type", "application/json");
     xhr.withCredentials = true;
     xhr.onload = () => {
+      if (xhr.status === 0) {
+        reject(new Error("Network error: connection was lost"));
+        return;
+      }
+      if (xhr.status >= 500) {
+        reject(new Error(`Server error (${xhr.status}): ${xhr.statusText || 'Internal server error'}`));
+        return;
+      }
+      if (xhr.status >= 400) {
+        try {
+          const errData = JSON.parse(xhr.responseText);
+          reject(new Error(errData?.error?.json?.message || `Request failed (${xhr.status})`));
+        } catch {
+          reject(new Error(`Request failed (${xhr.status}): ${xhr.statusText}`));
+        }
+        return;
+      }
       try {
         const data = JSON.parse(xhr.responseText);
         if (data?.error) {
@@ -71,12 +88,13 @@ const trpcMutate = async (path: string, input: any): Promise<any> => {
           resolve(data?.result?.data?.json);
         }
       } catch (e) {
-        reject(new Error("Failed to parse response"));
+        console.error("[trpcMutate] Failed to parse response:", xhr.status, xhr.responseText?.substring(0, 200));
+        reject(new Error(`Failed to parse response (status: ${xhr.status})`));
       }
     };
-    xhr.onerror = () => reject(new Error("Network error"));
+    xhr.onerror = () => reject(new Error("Network error: unable to connect to server"));
     xhr.timeout = 300000; // 5 min for video generation
-    xhr.ontimeout = () => reject(new Error("Request timeout"));
+    xhr.ontimeout = () => reject(new Error("Request timeout: video generation took too long (>5 min)"));
     xhr.send(JSON.stringify({ json: input }));
   });
 };
@@ -88,6 +106,23 @@ const trpcQuery = (path: string, input: any): Promise<any> => {
     xhr.open("GET", url, true);
     xhr.withCredentials = true;
     xhr.onload = () => {
+      if (xhr.status === 0) {
+        reject(new Error("Network error: connection was lost"));
+        return;
+      }
+      if (xhr.status >= 500) {
+        reject(new Error(`Server error (${xhr.status}): ${xhr.statusText || 'Internal server error'}`));
+        return;
+      }
+      if (xhr.status >= 400) {
+        try {
+          const errData = JSON.parse(xhr.responseText);
+          reject(new Error(errData?.error?.json?.message || `Request failed (${xhr.status})`));
+        } catch {
+          reject(new Error(`Request failed (${xhr.status}): ${xhr.statusText}`));
+        }
+        return;
+      }
       try {
         const data = JSON.parse(xhr.responseText);
         if (data?.error) {
@@ -96,10 +131,11 @@ const trpcQuery = (path: string, input: any): Promise<any> => {
           resolve(data?.result?.data?.json);
         }
       } catch (e) {
-        reject(new Error("Failed to parse response"));
+        console.error("[trpcQuery] Failed to parse response:", xhr.status, xhr.responseText?.substring(0, 200));
+        reject(new Error(`Failed to parse response (status: ${xhr.status})`));
       }
     };
-    xhr.onerror = () => reject(new Error("Network error"));
+    xhr.onerror = () => reject(new Error("Network error: unable to connect to server"));
     xhr.timeout = 60000;
     xhr.ontimeout = () => reject(new Error("Request timeout"));
     xhr.send();
@@ -164,6 +200,14 @@ export const SlideshowGenerator = () => {
   const [isLoadingProducts, setIsLoadingProducts] = useState(false);
   const [productError, setProductError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
+
+  // Product Set state
+  const [productSets, setProductSets] = useState<{ id: string; name: string; productCount: number }[]>([]);
+  const [selectedProductSetId, setSelectedProductSetId] = useState<string>("");
+  const [isLoadingProductSets, setIsLoadingProductSets] = useState(false);
+  const [hasMoreProducts, setHasMoreProducts] = useState(false);
+  const [isLoadingAllProducts, setIsLoadingAllProducts] = useState(false);
+  const [totalProductCount, setTotalProductCount] = useState(0);
 
   // Selected products (for batch) and images (for single)
   const [selectedProductIds, setSelectedProductIds] = useState<Set<string>>(new Set());
@@ -414,6 +458,34 @@ export const SlideshowGenerator = () => {
     })();
   }, [selectedCompanyId]);
 
+  // ===== Fetch product sets when catalog changes =====
+  const handleFetchProductSets = useCallback(async () => {
+    if (!selectedCatalogId || !fbAccessToken) return;
+    setIsLoadingProductSets(true);
+    setProductSets([]);
+    setSelectedProductSetId("");
+    try {
+      const result = await trpcQuery("slideshow.fetchProductSets", {
+        catalogId: selectedCatalogId,
+        accessToken: fbAccessToken,
+      });
+      if (result && Array.isArray(result)) {
+        setProductSets(result);
+      }
+    } catch (e: any) {
+      console.error("[Slideshow] Failed to fetch product sets:", e);
+    } finally {
+      setIsLoadingProductSets(false);
+    }
+  }, [selectedCatalogId, fbAccessToken]);
+
+  // Auto-fetch product sets when catalog changes
+  useEffect(() => {
+    if (selectedCatalogId && fbAccessToken) {
+      handleFetchProductSets();
+    }
+  }, [selectedCatalogId, fbAccessToken, handleFetchProductSets]);
+
   // ===== Fetch products =====
   const handleFetchProducts = useCallback(async () => {
     if (!selectedCatalogId || !fbAccessToken) return;
@@ -422,22 +494,63 @@ export const SlideshowGenerator = () => {
     setProducts([]);
     setSelectedProductIds(new Set());
     setSelectedImages([]);
+    setHasMoreProducts(false);
+    setTotalProductCount(0);
 
     try {
-      const result = await trpcQuery("slideshow.fetchProducts", {
-        catalogId: selectedCatalogId,
-        accessToken: fbAccessToken,
-        limit: 100,
-      });
-      if (result) {
-        setProducts(result);
+      if (selectedProductSetId) {
+        // Fetch from product set (first 1000)
+        const result = await trpcQuery("slideshow.fetchProductSetProducts", {
+          productSetId: selectedProductSetId,
+          accessToken: fbAccessToken,
+          limit: 1000,
+        });
+        if (result) {
+          setProducts(result.products || []);
+          setHasMoreProducts(result.hasMore || false);
+          setTotalProductCount(result.products?.length || 0);
+        }
+      } else {
+        // Fetch from catalog directly (first 100)
+        const result = await trpcQuery("slideshow.fetchProducts", {
+          catalogId: selectedCatalogId,
+          accessToken: fbAccessToken,
+          limit: 100,
+        });
+        if (result) {
+          setProducts(result);
+          setTotalProductCount(result.length || 0);
+        }
       }
     } catch (e: any) {
       setProductError(e.message || "Failed to fetch products");
     } finally {
       setIsLoadingProducts(false);
     }
-  }, [selectedCatalogId, fbAccessToken]);
+  }, [selectedCatalogId, selectedProductSetId, fbAccessToken]);
+
+  // ===== Load ALL products from product set =====
+  const handleLoadAllProducts = useCallback(async () => {
+    if (!selectedProductSetId || !fbAccessToken) return;
+    setIsLoadingAllProducts(true);
+    setProductError(null);
+
+    try {
+      const result = await trpcQuery("slideshow.fetchAllProductSetProducts", {
+        productSetId: selectedProductSetId,
+        accessToken: fbAccessToken,
+      });
+      if (result && Array.isArray(result)) {
+        setProducts(result);
+        setHasMoreProducts(false);
+        setTotalProductCount(result.length);
+      }
+    } catch (e: any) {
+      setProductError(e.message || "Failed to load all products");
+    } finally {
+      setIsLoadingAllProducts(false);
+    }
+  }, [selectedProductSetId, fbAccessToken]);
 
   // ===== Filter products =====
   const filteredProducts = useMemo(() => {
@@ -1185,6 +1298,70 @@ export const SlideshowGenerator = () => {
                 </div>
               )}
             </div>
+
+            {/* Product Set Selector */}
+            {selectedCatalogId && fbAccessToken && productSets.length > 0 && (
+              <div style={{ marginBottom: 20 }}>
+                <h3 style={{ fontSize: 16, fontWeight: 600, color: "#333", marginBottom: 12, textAlign: "center" }}>
+                  {t("slideshowSelectProductSet") || "Select Product Set (Optional)"}
+                </h3>
+                {isLoadingProductSets ? (
+                  <div style={{ textAlign: "center", padding: 12, color: "#888" }}>
+                    ⏳ {t("slideshowLoadingProductSets") || "Loading product sets..."}
+                  </div>
+                ) : (
+                  <select
+                    value={selectedProductSetId}
+                    onChange={(e) => {
+                      setSelectedProductSetId(e.target.value);
+                      setProducts([]);
+                      setSelectedProductIds(new Set());
+                      setSelectedImages([]);
+                      setHasMoreProducts(false);
+                    }}
+                    style={{ ...selectStyle, width: "100%" }}
+                  >
+                    <option value="">{t("slideshowAllProducts") || "All Products"}</option>
+                    {productSets.map((ps) => (
+                      <option key={ps.id} value={ps.id}>
+                        {ps.name} ({ps.productCount} {t("slideshowProductSetCount") || "products"})
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </div>
+            )}
+
+            {/* Product count & Load All button */}
+            {products.length > 0 && (
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12, padding: "8px 12px", background: "#f0f4ff", borderRadius: 8 }}>
+                <span style={{ fontSize: 13, color: "#4a5568", fontWeight: 500 }}>
+                  📦 {totalProductCount} {t("slideshowProductsLoaded") || "products loaded"}
+                </span>
+                {hasMoreProducts && (
+                  <button
+                    onClick={handleLoadAllProducts}
+                    disabled={isLoadingAllProducts}
+                    style={{
+                      ...buttonStyle,
+                      fontSize: 13,
+                      padding: "6px 16px",
+                      background: isLoadingAllProducts ? "#a0aec0" : "#ed8936",
+                      cursor: isLoadingAllProducts ? "not-allowed" : "pointer",
+                    }}
+                  >
+                    {isLoadingAllProducts
+                      ? `⏳ ${t("slideshowLoadingAllProducts") || "Loading all products..."}`
+                      : `📥 ${t("slideshowLoadAllProducts") || "Load All Products"}`}
+                  </button>
+                )}
+              </div>
+            )}
+            {hasMoreProducts && products.length > 0 && (
+              <div style={{ padding: 8, background: "#fffaf0", borderRadius: 8, border: "1px solid #feebc8", color: "#c05621", fontSize: 12, marginBottom: 12, textAlign: "center" }}>
+                ⚠️ {t("slideshowHasMoreProducts") || "There are more products. Click 'Load All' to fetch them all."}
+              </div>
+            )}
 
             {productError && (
               <div style={{ padding: 12, background: "#fff5f5", borderRadius: 8, border: "1px solid #fed7d7", color: "#e53e3e", fontSize: 13, marginBottom: 16 }}>

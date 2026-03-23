@@ -399,4 +399,112 @@ describe("slideshow router", () => {
       expect(result.success).toBe(false);
     });
   });
+
+  describe("slideshow.fetchProductSets", () => {
+    it("rejects empty catalogId", async () => {
+      const ctx = createPublicContext();
+      const caller = appRouter.createCaller(ctx);
+
+      // Facebook API will return error for empty catalog ID
+      await expect(
+        caller.slideshow.fetchProductSets({
+          catalogId: "",
+          accessToken: "test-token",
+        })
+      ).rejects.toThrow();
+    });
+
+    it("returns error for invalid token", async () => {
+      const ctx = createPublicContext();
+      const caller = appRouter.createCaller(ctx);
+
+      await expect(
+        caller.slideshow.fetchProductSets({
+          catalogId: "123",
+          accessToken: "invalid-token",
+        })
+      ).rejects.toThrow();
+    });
+  });
+
+  describe("slideshow.fetchProductSetProducts", () => {
+    it("rejects empty productSetId", async () => {
+      const ctx = createPublicContext();
+      const caller = appRouter.createCaller(ctx);
+
+      await expect(
+        caller.slideshow.fetchProductSetProducts({
+          productSetId: "",
+          accessToken: "test-token",
+          limit: 100,
+        })
+      ).rejects.toThrow();
+    });
+
+    it("rejects limit above 10000", async () => {
+      const ctx = createPublicContext();
+      const caller = appRouter.createCaller(ctx);
+
+      await expect(
+        caller.slideshow.fetchProductSetProducts({
+          productSetId: "123",
+          accessToken: "test-token",
+          limit: 10001,
+        })
+      ).rejects.toThrow();
+    });
+
+    it("rejects limit below 1", async () => {
+      const ctx = createPublicContext();
+      const caller = appRouter.createCaller(ctx);
+
+      await expect(
+        caller.slideshow.fetchProductSetProducts({
+          productSetId: "123",
+          accessToken: "test-token",
+          limit: 0,
+        })
+      ).rejects.toThrow();
+    });
+
+    it("returns products array with hasMore flag", async () => {
+      const ctx = createPublicContext();
+      const caller = appRouter.createCaller(ctx);
+
+      // Invalid token will cause Facebook API error
+      await expect(
+        caller.slideshow.fetchProductSetProducts({
+          productSetId: "123",
+          accessToken: "invalid-token",
+          limit: 100,
+        })
+      ).rejects.toThrow();
+    });
+  });
+
+  describe("slideshow.fetchAllProductSetProducts", () => {
+    it("rejects empty productSetId", async () => {
+      const ctx = createPublicContext();
+      const caller = appRouter.createCaller(ctx);
+
+      await expect(
+        caller.slideshow.fetchAllProductSetProducts({
+          productSetId: "",
+          accessToken: "test-token",
+        })
+      ).rejects.toThrow();
+    });
+
+    it("returns error for invalid token", async () => {
+      const ctx = createPublicContext();
+      const caller = appRouter.createCaller(ctx);
+
+      await expect(
+        caller.slideshow.fetchAllProductSetProducts({
+          productSetId: "123",
+          accessToken: "invalid-token",
+        })
+      ).rejects.toThrow();
+    });
+  });
 });

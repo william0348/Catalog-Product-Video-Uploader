@@ -737,3 +737,144 @@ export async function updateCatalogProductVideo(
   const handle = result?.handles?.[0];
   return { success: true, handle };
 }
+
+// ==================== Product Sets ====================
+
+export interface ProductSet {
+  id: string;
+  name: string;
+  productCount: number;
+}
+
+export async function fetchProductSets(
+  catalogId: string,
+  accessToken: string,
+): Promise<ProductSet[]> {
+  const fields = "id,name,product_count";
+  let url = `https://graph.facebook.com/v21.0/${catalogId}/product_sets?fields=${fields}&limit=250&access_token=${accessToken}`;
+
+  const sets: ProductSet[] = [];
+  let pageCount = 0;
+  const maxPages = 20; // Safety limit
+
+  while (url && pageCount < maxPages) {
+    const response = await fetch(url);
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(`Facebook API error: ${data?.error?.message || "Unknown error"}`);
+    }
+
+    for (const item of data.data || []) {
+      sets.push({
+        id: item.id,
+        name: item.name || "",
+        productCount: item.product_count || 0,
+      });
+    }
+
+    url = data.paging?.next || "";
+    pageCount++;
+  }
+
+  return sets;
+}
+
+export async function fetchProductSetProducts(
+  productSetId: string,
+  accessToken: string,
+  limit: number = 1000,
+): Promise<{ products: CatalogProduct[]; totalCount: number; hasMore: boolean }> {
+  const fields = "id,name,retailer_id,image_url,additional_image_urls";
+  let url = `https://graph.facebook.com/v21.0/${productSetId}/products?fields=${fields}&limit=${Math.min(limit, 250)}&access_token=${accessToken}`;
+
+  const products: CatalogProduct[] = [];
+  let pageCount = 0;
+  const maxPages = Math.ceil(limit / 250);
+  let hasMore = false;
+
+  while (url && pageCount < maxPages) {
+    const response = await fetch(url);
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(`Facebook API error: ${data?.error?.message || "Unknown error"}`);
+    }
+
+    for (const item of data.data || []) {
+      if (products.length >= limit) {
+        hasMore = true;
+        break;
+      }
+
+      const additionalImages: string[] = [];
+      if (item.additional_image_urls && Array.isArray(item.additional_image_urls)) {
+        additionalImages.push(...item.additional_image_urls);
+      }
+
+      products.push({
+        id: item.id,
+        retailerId: item.retailer_id || "",
+        name: item.name || "",
+        imageUrl: item.image_url || "",
+        additionalImages,
+      });
+    }
+
+    if (products.length >= limit) {
+      hasMore = !!data.paging?.next;
+      break;
+    }
+
+    url = data.paging?.next || "";
+    pageCount++;
+  }
+
+  // If we exhausted all pages and there's no next, hasMore is false
+  if (!url && pageCount <= maxPages) {
+    hasMore = false;
+  }
+
+  return { products, totalCount: products.length, hasMore };
+}
+
+export async function fetchAllProductSetProducts(
+  productSetId: string,
+  accessToken: string,
+): Promise<CatalogProduct[]> {
+  const fields = "id,name,retailer_id,image_url,additional_image_urls";
+  let url = `https://graph.facebook.com/v21.0/${productSetId}/products?fields=${fields}&limit=250&access_token=${accessToken}`;
+
+  const products: CatalogProduct[] = [];
+  let pageCount = 0;
+  const maxPages = 200; // Safety limit: 200 * 250 = 50,000 products max
+
+  while (url && pageCount < maxPages) {
+    const response = await fetch(url);
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(`Facebook API error: ${data?.error?.message || "Unknown error"}`);
+    }
+
+    for (const item of data.data || []) {
+      const additionalImages: string[] = [];
+      if (item.additional_image_urls && Array.isArray(item.additional_image_urls)) {
+        additionalImages.push(...item.additional_image_urls);
+      }
+
+      products.push({
+        id: item.id,
+        retailerId: item.retailer_id || "",
+        name: item.name || "",
+        imageUrl: item.image_url || "",
+        additionalImages,
+      });
+    }
+
+    url = data.paging?.next || "";
+    pageCount++;
+  }
+
+  return products;
+}

@@ -3,7 +3,7 @@ import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, router } from "./_core/trpc";
 import { z } from "zod";
-import { generateSlideshow, fetchCatalogProducts, updateCatalogProductVideo, type SlideshowOptions } from "./slideshow";
+import { generateSlideshow, fetchCatalogProducts, updateCatalogProductVideo, fetchProductSets, fetchProductSetProducts, fetchAllProductSetProducts, type SlideshowOptions } from "./slideshow";
 import { storagePut } from "./storage";
 import {
   createUploadRecord,
@@ -403,6 +403,37 @@ export const appRouter = router({
       }))
       .query(async ({ input }) => {
         return fetchCatalogProducts(input.catalogId, input.accessToken, input.limit);
+      }),
+
+    // Fetch product sets from a Facebook Catalog
+    fetchProductSets: publicProcedure
+      .input(z.object({
+        catalogId: z.string(),
+        accessToken: z.string(),
+      }))
+      .query(async ({ input }) => {
+        return fetchProductSets(input.catalogId, input.accessToken);
+      }),
+
+    // Fetch products from a specific product set (with pagination)
+    fetchProductSetProducts: publicProcedure
+      .input(z.object({
+        productSetId: z.string(),
+        accessToken: z.string(),
+        limit: z.number().min(1).max(10000).default(1000),
+      }))
+      .query(async ({ input }) => {
+        return fetchProductSetProducts(input.productSetId, input.accessToken, input.limit);
+      }),
+
+    // Fetch ALL products from a product set (no limit)
+    fetchAllProductSetProducts: publicProcedure
+      .input(z.object({
+        productSetId: z.string(),
+        accessToken: z.string(),
+      }))
+      .query(async ({ input }) => {
+        return fetchAllProductSetProducts(input.productSetId, input.accessToken);
       }),
 
     // Get available fonts for text overlay

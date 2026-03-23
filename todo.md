@@ -231,3 +231,12 @@
 - [x] 語言切換、Google 登入按鈕在側邊 Menu 底部顯示
 - [x] 手機版側邊 Menu 可收合（漢堡選單 + overlay）
 - [x] 測試通過（52/52 passed）
+
+## Phase 32: 幻燈片生成器 - 商品組合選擇 + 修復影片生成失敗
+- [x] 改善影片生成錯誤處理（顯示 HTTP 狀態碼、區分網路錯誤/伺服器錯誤/超時）
+- [x] 幻燈片生成器新增商品組合（Product Set）選擇功能
+- [x] 新增後端端點：fetchProductSets、fetchProductSetProducts、fetchAllProductSetProducts
+- [x] 首次只讀取 1000 個商品，超過時顯示「讀取全部商品」按鈕
+- [x] 前端 UI 新增商品組合下拉選單、商品計數、讀取全部按鈕
+- [x] i18n 翻譯（中/英）
+- [x] 測試通過（60/60 passed）
