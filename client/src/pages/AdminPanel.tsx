@@ -571,7 +571,7 @@ const CompanyManager = ({ t }: { t: (key: string) => string }) => {
                                 <tr>
                                     <th>{t('catalogId')}</th>
                                     <th>{t('catalogName')}</th>
-                                    <th>CSV URL</th>
+                                    <th>{t('catalogSupplementUrl')}</th>
                                     <th>{t('actions')}</th>
                                 </tr>
                             </thead>
@@ -592,7 +592,7 @@ const CompanyManager = ({ t }: { t: (key: string) => string }) => {
                                                 <button
                                                     onClick={() => handleCopyCsvUrl(catalog.id)}
                                                     className="copy-csv-btn"
-                                                    title="Copy CSV URL"
+                                                    title={t('copyCatalogSupplementUrl')}
                                                 >
                                                     {copiedCsvUrl === catalog.id ? '✓' : '📋'}
                                                 </button>
@@ -761,6 +761,20 @@ const VideoLog = ({ t, companies }: { t: (key: string) => string; companies: Com
 
     // Available catalogs from settings
     const [catalogs, setCatalogs] = useState<CatalogConfig[]>([]);
+
+    // Excel Import
+    const [showImportModal, setShowImportModal] = useState(false);
+    const [importData, setImportData] = useState<Array<{
+        catalogId: string;
+        retailerId: string;
+        videoUrl: string;
+        videoType: '4x5' | '9x16';
+        productName: string;
+    }>>([]);
+    const [importError, setImportError] = useState<string | null>(null);
+    const [isImporting, setIsImporting] = useState(false);
+    const [importSuccess, setImportSuccess] = useState<string | null>(null);
+    const importFileRef = React.useRef<HTMLInputElement>(null);
 
     // Load records from database
     const fetchRecords = useCallback(async () => {
@@ -937,6 +951,130 @@ const VideoLog = ({ t, companies }: { t: (key: string) => string; companies: Com
         XLSX.writeFile(workbook, `cpas_video_log_${new Date().toISOString().split('T')[0]}.xlsx`);
     };
 
+    // ==================== Excel Import Handlers ====================
+    const handleExcelFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        setImportError(null);
+        setImportSuccess(null);
+
+        const reader = new FileReader();
+        reader.onload = (evt) => {
+            try {
+                const data = new Uint8Array(evt.target?.result as ArrayBuffer);
+                const workbook = XLSX.read(data, { type: 'array' });
+                const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+                const jsonData = XLSX.utils.sheet_to_json<Record<string, any>>(firstSheet, { defval: '' });
+
+                if (jsonData.length === 0) {
+                    setImportError(t('excelImportNoData'));
+                    return;
+                }
+
+                // Try to find columns by various names
+                const headers = Object.keys(jsonData[0]);
+                const findCol = (candidates: string[]) => {
+                    for (const c of candidates) {
+                        const found = headers.find(h => h.toLowerCase().trim() === c.toLowerCase());
+                        if (found) return found;
+                    }
+                    // Partial match
+                    for (const c of candidates) {
+                        const found = headers.find(h => h.toLowerCase().includes(c.toLowerCase()));
+                        if (found) return found;
+                    }
+                    return null;
+                };
+
+                const catalogCol = findCol(['catalog id', 'catalogid', 'catalog_id', '\u76ee\u9304 id', '\u76ee\u9304id', '\u76ee\u9304']);
+                const retailerCol = findCol(['retailer id', 'retailerid', 'retailer_id', '\u96f6\u552e\u5546 id', '\u96f6\u552e\u5546id', '\u96f6\u552e\u5546']);
+                const videoCol = findCol(['video url', 'videourl', 'video_url', '\u5f71\u7247\u7db2\u5740', '\u5f71\u7247\u9023\u7d50', '\u5f71\u7247', 'url']);
+                const videoTypeCol = findCol(['video type', 'videotype', 'video_type', '\u5f71\u7247\u985e\u578b', '\u6bd4\u4f8b', 'type', 'ratio']);
+                const productNameCol = findCol(['product name', 'productname', 'product_name', '\u5546\u54c1\u540d\u7a31', '\u540d\u7a31', 'name']);
+
+                if (!catalogCol || !retailerCol || !videoCol) {
+                    setImportError(
+                        `${t('excelImportMissingColumns')}\n` +
+                        `Found columns: ${headers.join(', ')}\n` +
+                        `Catalog ID column: ${catalogCol || 'NOT FOUND'}\n` +
+                        `Retailer ID column: ${retailerCol || 'NOT FOUND'}\n` +
+                        `Video URL column: ${videoCol || 'NOT FOUND'}`
+                    );
+                    return;
+                }
+
+                const parsed = jsonData
+                    .map(row => {
+                        const catalogId = String(row[catalogCol] || '').trim();
+                        const retailerId = String(row[retailerCol] || '').trim();
+                        const videoUrl = String(row[videoCol] || '').trim();
+                        const rawType = videoTypeCol ? String(row[videoTypeCol] || '').trim().toLowerCase() : '';
+                        const videoType: '4x5' | '9x16' = (rawType.includes('9x16') || rawType.includes('9:16') || rawType === '9x16') ? '9x16' : '4x5';
+                        const productName = productNameCol ? String(row[productNameCol] || '').trim() : retailerId;
+                        return { catalogId, retailerId, videoUrl, videoType, productName };
+                    })
+                    .filter(r => r.catalogId && r.retailerId && r.videoUrl);
+
+                if (parsed.length === 0) {
+                    setImportError(t('excelImportNoData'));
+                    return;
+                }
+
+                setImportData(parsed);
+                setShowImportModal(true);
+            } catch (err: any) {
+                setImportError(t('excelImportError').replace('{error}', err.message));
+            }
+        };
+        reader.readAsArrayBuffer(file);
+        // Reset input so same file can be re-selected
+        e.target.value = '';
+    };
+
+    const handleImportConfirm = async () => {
+        if (importData.length === 0) return;
+        setIsImporting(true);
+        setImportError(null);
+        setImportSuccess(null);
+
+        try {
+            // Build records for batch insert
+            const batchRecords = importData.map(row => ({
+                catalogId: row.catalogId,
+                retailerId: row.retailerId,
+                productName: row.productName || row.retailerId,
+                clientName: 'Excel Import',
+                uploadedBy: 'excel_import',
+                ...(row.videoType === '9x16'
+                    ? { video9x16Download: row.videoUrl, video9x16Embed: row.videoUrl }
+                    : { video4x5Download: row.videoUrl, video4x5Embed: row.videoUrl }
+                ),
+            }));
+
+            // Send in batches of 100
+            const BATCH_SIZE = 100;
+            for (let i = 0; i < batchRecords.length; i += BATCH_SIZE) {
+                const batch = batchRecords.slice(i, i + BATCH_SIZE);
+                await trpcMutate('uploads.createBatch', batch);
+            }
+
+            setImportSuccess(t('excelImportSuccess').replace('{count}', String(importData.length)));
+            setShowImportModal(false);
+            setImportData([]);
+            fetchRecords(); // Refresh the list
+        } catch (err: any) {
+            setImportError(t('excelImportError').replace('{error}', err.message));
+        } finally {
+            setIsImporting(false);
+        }
+    };
+
+    const handleImportCancel = () => {
+        setShowImportModal(false);
+        setImportData([]);
+        setImportError(null);
+    };
+
     // Get catalog name helper
     const getCatalogDisplayName = (catalogId: string) => {
         const config = catalogs.find(c => c.id === catalogId);
@@ -1081,6 +1219,20 @@ const VideoLog = ({ t, companies }: { t: (key: string) => string; companies: Com
                             ↓ {t('exportXlsx') || 'Export XLSX'}
                         </button>
                         <button
+                            className="log-action-btn log-import-btn"
+                            onClick={() => importFileRef.current?.click()}
+                            style={{ backgroundColor: '#10b981', color: '#fff' }}
+                        >
+                            ↑ {t('excelImportBtn') || 'Import Excel'}
+                        </button>
+                        <input
+                            ref={importFileRef}
+                            type="file"
+                            accept=".xlsx,.xls,.csv"
+                            style={{ display: 'none' }}
+                            onChange={handleExcelFileSelect}
+                        />
+                        <button
                             className="log-action-btn log-clear-btn"
                             onClick={() => { setSearchTerm(''); setCompanyFilter('all'); setCatalogFilter('all'); setDateFrom(''); setDateTo(''); }}
                         >
@@ -1089,6 +1241,94 @@ const VideoLog = ({ t, companies }: { t: (key: string) => string; companies: Com
                     </div>
                 </div>
             </div>
+
+            {/* Import Success Message */}
+            {importSuccess && (
+                <div style={{ margin: '12px 0', padding: '12px 16px', backgroundColor: '#d1fae5', color: '#065f46', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <span>{importSuccess}</span>
+                    <button onClick={() => setImportSuccess(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '16px', color: '#065f46' }}>✕</button>
+                </div>
+            )}
+
+            {/* Import Error Message */}
+            {importError && !showImportModal && (
+                <div style={{ margin: '12px 0', padding: '12px 16px', backgroundColor: '#fee2e2', color: '#991b1b', borderRadius: '8px', whiteSpace: 'pre-line', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+                    <span>{importError}</span>
+                    <button onClick={() => setImportError(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '16px', color: '#991b1b', flexShrink: 0 }}>✕</button>
+                </div>
+            )}
+
+            {/* Excel Import Preview Modal */}
+            {showImportModal && (
+                <div className="image-modal-backdrop" onClick={() => { if (!isImporting) handleImportCancel(); }}>
+                    <div className="delete-confirm-modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '700px', maxHeight: '80vh', overflow: 'auto' }}>
+                        <h3>{t('excelImportPreview') || 'Preview Import Data'}</h3>
+                        <p style={{ color: '#6b7280', marginBottom: '12px' }}>
+                            {t('excelImportRowCount')?.replace('{count}', String(importData.length)) || `${importData.length} rows to import`}
+                        </p>
+                        {importError && (
+                            <p className="error-text" style={{ marginBottom: '12px', whiteSpace: 'pre-line' }}>{importError}</p>
+                        )}
+                        <div style={{ overflowX: 'auto', marginBottom: '16px' }}>
+                            <table className="log-table" style={{ fontSize: '13px' }}>
+                                <thead>
+                                    <tr>
+                                        <th>#</th>
+                                        <th>{t('catalogId') || 'Catalog ID'}</th>
+                                        <th>{t('retailerId') || 'Retailer ID'}</th>
+                                        <th>{t('name') || 'Name'}</th>
+                                        <th>{t('excelImportVideoUrl') || 'Video URL'}</th>
+                                        <th>{t('excelImportVideoType') || 'Type'}</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {importData.slice(0, 50).map((row, i) => (
+                                        <tr key={i}>
+                                            <td>{i + 1}</td>
+                                            <td><code style={{ fontSize: '11px' }}>{row.catalogId}</code></td>
+                                            <td><code style={{ fontSize: '11px' }}>{row.retailerId}</code></td>
+                                            <td style={{ maxWidth: '150px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{row.productName}</td>
+                                            <td style={{ maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                                <a href={row.videoUrl} target="_blank" rel="noopener noreferrer" style={{ fontSize: '11px' }}>{row.videoUrl}</a>
+                                            </td>
+                                            <td>{row.videoType}</td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                            {importData.length > 50 && (
+                                <p style={{ color: '#6b7280', fontSize: '13px', marginTop: '8px', textAlign: 'center' }}>
+                                    ... and {importData.length - 50} more rows
+                                </p>
+                            )}
+                        </div>
+                        <div className="delete-confirm-actions">
+                            <button
+                                className="cancel-delete-btn"
+                                onClick={handleImportCancel}
+                                disabled={isImporting}
+                            >
+                                {t('excelImportCancel') || 'Cancel'}
+                            </button>
+                            <button
+                                className="confirm-delete-btn"
+                                onClick={handleImportConfirm}
+                                disabled={isImporting}
+                                style={{ backgroundColor: '#10b981' }}
+                            >
+                                {isImporting ? (
+                                    <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                        <div className="loader-small"></div>
+                                        {t('excelImportImporting') || 'Importing...'}
+                                    </span>
+                                ) : (
+                                    `${t('excelImportConfirm') || 'Confirm Import'} (${importData.length})`
+                                )}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* Error */}
             {error && <p className="error-text" style={{ margin: '12px 0' }}>{error}</p>}

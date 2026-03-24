@@ -371,3 +371,12 @@
 - [x] 在 MainApp 加入 dataHeaderRef 和 filtersRef，監聽高度變化
 - [x] CSS 使用 var(--thead-sticky-top, 140px) 作為 fallback
 - [x] 全部 60/60 測試通過
+
+## Phase 41: Excel 批次匯入 + 側邊欄調整 + CSV URL 改名
+- [x] 前端 Excel 匯入：解析 Excel（目錄 ID、零售商 ID、影片網址），呼叫 createBatch API 批次寫入 DB
+- [x] 匯入預覽對話框：顯示前 50 筆資料讓用戶確認
+- [x] 智能欄位對應：支援中英文欄位名稱自動匹配
+- [x] 側邊欄順序：影片上傳 → 幻燈片 → 管理面板 → 服務條款
+- [x] CSV URL 改名為「目錄補充資料網址」
+- [x] i18n 翻譯更新（中英文）
+- [x] 全部 60/60 測試通過
