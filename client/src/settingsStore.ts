@@ -35,7 +35,7 @@ const COMPANY_STORAGE_KEY = 'cpv_selected_company';
 const DEFAULT_SETTINGS: AppSettings = {
   facebookAccessToken: '',
   catalogs: [],
-  accessKey: 'RhinoShield2025',
+  accessKey: '',
 };
 
 // ===== Local cache for fast reads =====
@@ -131,7 +131,7 @@ export const loadSettingsFromServer = async (): Promise<AppSettings> => {
       const settings: AppSettings = {
         facebookAccessToken: result.facebookAccessToken || DEFAULT_SETTINGS.facebookAccessToken,
         catalogs: result.catalogs ? JSON.parse(result.catalogs) : DEFAULT_SETTINGS.catalogs,
-        accessKey: result.accessKey || DEFAULT_SETTINGS.accessKey,
+        accessKey: result.accessKey ?? DEFAULT_SETTINGS.accessKey,
       };
       _cachedSettings = { ...settings };
       localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(settings));
