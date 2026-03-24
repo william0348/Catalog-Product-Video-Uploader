@@ -251,3 +251,8 @@
 - [x] 底部元素：Sponsored 標籤、用戶名+Follow、描述文字、音樂資訊、Shop Now CTA 按鈕
 - [x] 新增 Reels 開關按鈕（Instagram 漸層色）可切換顯示/隱藏 overlay
 - [x] 測試通過（60/60 passed）
+
+## Phase 35: 建立 GitHub README.md
+- [x] 分析專案結構和核心功能
+- [x] 撰寫專業的 README.md（影片上傳工具為主，幻燈片先不寫）
+- [x] 儲存 checkpoint
