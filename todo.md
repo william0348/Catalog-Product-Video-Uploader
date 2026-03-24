@@ -265,3 +265,9 @@
 - [x] 移除 gapi.client.init 中的 Sheets API discovery doc
 - [x] 更新 README.md：移除 Google Sheets Integration 章節，新增 Upload Record Management 章節
 - [x] 測試通過（60/60 passed）
+
+## Phase 37: 預覽面板 9:16 等比例放大
+- [x] 調整預覽面板為 1080x1920 (9:16) 等比例顯示（maxHeight 450→1650, grid 1:1→1:1.2）
+- [x] Step 3 影片播放器也使用 9:16 等比例容器 + Reels overlay
+- [x] 更新 previewScale 計算配合新尺寸
+- [x] 測試通過（60/60 passed）

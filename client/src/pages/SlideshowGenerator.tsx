@@ -1619,7 +1619,7 @@ export const SlideshowGenerator = () => {
               )}
             </div>
 
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 24 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr minmax(320px, 1.2fr)", gap: 24 }}>
               {/* Left: Settings */}
               <div>
                 <h3 style={{ fontSize: 16, fontWeight: 600, color: "#333", marginBottom: 16 }}>
@@ -2154,7 +2154,7 @@ export const SlideshowGenerator = () => {
                 <div ref={previewContainerRef} style={{
                   background: backgroundColor, borderRadius: 12, overflow: "hidden",
                   aspectRatio: aspectRatio === "4:5" ? "4/5" : "9/16",
-                  maxHeight: 450, position: "relative",
+                  maxHeight: 650, width: "100%", position: "relative",
                   border: "1px solid #e0e0e0",
                   cursor: isDraggingImage || isDraggingOverlay ? 'grabbing' : 'default',
                 }}>
@@ -2183,7 +2183,7 @@ export const SlideshowGenerator = () => {
                       {/* Text overlay preview - proportionally scaled to match actual video */}
                       {overlayText.trim() && (() => {
                         const canvasHeight = aspectRatio === "4:5" ? 1350 : 1920;
-                        const previewScale = 450 / canvasHeight;
+                        const previewScale = 650 / canvasHeight;
                         const previewFontSize = Math.max(8, Math.round(fontSize * previewScale));
                         return (
                           <div style={{
@@ -2206,7 +2206,7 @@ export const SlideshowGenerator = () => {
                       {overlayImageUrl && (() => {
                         const canvasWidth = aspectRatio === "4:5" ? 1080 : 1080;
                         const canvasHeight = aspectRatio === "4:5" ? 1350 : 1920;
-                        const previewScale = 450 / canvasHeight;
+                        const previewScale = 650 / canvasHeight;
                         const ovWidthPercent = overlayImageScale * 100;
                         return (
                           <img
@@ -2318,9 +2318,19 @@ export const SlideshowGenerator = () => {
                       <h3 style={{ color: "#16a34a", margin: "0 0 8px" }}>{isZh ? "影片生成成功！" : "Video Generated!"}</h3>
                     </div>
 
-                    {/* Video Player */}
-                    <div style={{ maxWidth: 400, margin: "0 auto 24px", borderRadius: 12, overflow: "hidden", boxShadow: "0 4px 20px rgba(0,0,0,0.1)" }}>
-                      <video src={generatedVideoUrl} controls style={{ width: "100%", display: "block" }} />
+                    {/* Video Player - 9:16 aspect ratio */}
+                    <div style={{ maxWidth: 365, margin: "0 auto 24px", borderRadius: 12, overflow: "hidden", boxShadow: "0 4px 20px rgba(0,0,0,0.1)", position: "relative" }}>
+                      <div style={{ aspectRatio: aspectRatio === "4:5" ? "4/5" : "9/16", width: "100%", background: "#000" }}>
+                        <video src={generatedVideoUrl} controls style={{ width: "100%", height: "100%", objectFit: "contain", display: "block" }} />
+                      </div>
+                      {showReelsOverlay && (
+                        <ReelsOverlay
+                          username={userCompanies.find(c => c.id === selectedCompanyId)?.name || "brand_name"}
+                          caption={overlayText.trim() || (isZh ? "查看這個商品 🔥" : "Check out this product! 🔥")}
+                          ctaText={isZh ? "立即購買" : "Shop Now"}
+                          showCta={true}
+                        />
+                      )}
                     </div>
 
                     {/* Action Buttons */}
