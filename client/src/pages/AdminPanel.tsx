@@ -720,6 +720,7 @@ const CompanyManager = ({ t }: { t: (key: string) => string }) => {
 // ==================== Video Log Component (Database-backed) ====================
 interface UploadRecord {
     id: number;
+    companyId: number | null;
     catalogId: string;
     retailerId: string;
     productName: string;
@@ -735,13 +736,14 @@ interface UploadRecord {
 
 const RECORDS_PER_PAGE = 50;
 
-const VideoLog = ({ t }: { t: (key: string) => string }) => {
+const VideoLog = ({ t, companies }: { t: (key: string) => string; companies: CompanyData[] }) => {
     const [records, setRecords] = useState<UploadRecord[]>([]);
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     
     // Filters
     const [searchTerm, setSearchTerm] = useState('');
+    const [companyFilter, setCompanyFilter] = useState<string>('all');
     const [catalogFilter, setCatalogFilter] = useState<string>('all');
     const [dateFrom, setDateFrom] = useState('');
     const [dateTo, setDateTo] = useState('');
@@ -784,22 +786,40 @@ const VideoLog = ({ t }: { t: (key: string) => string }) => {
         }
     }, []);
 
-    // Load catalogs from settings
+    // Load catalogs from companies (merge all company catalogs)
     useEffect(() => {
-        loadSettingsFromServer().then(s => setCatalogs(s.catalogs));
+        const allCatalogs: CatalogConfig[] = [];
+        for (const company of companies) {
+            try {
+                const parsed = JSON.parse(company.catalogs || '[]');
+                if (Array.isArray(parsed)) {
+                    allCatalogs.push(...parsed);
+                }
+            } catch { /* ignore parse errors */ }
+        }
+        // Deduplicate by catalog id
+        const uniqueMap = new Map<string, CatalogConfig>();
+        for (const cat of allCatalogs) {
+            if (!uniqueMap.has(cat.id)) uniqueMap.set(cat.id, cat);
+        }
+        setCatalogs(Array.from(uniqueMap.values()));
         fetchRecords();
-    }, [fetchRecords]);
+    }, [fetchRecords, companies]);
 
-    // Delete a record — calls FB Catalog Batch API first, then deletes from DB
+    // Delete a record — calls FB Catalog Batch API first, then ALWAYS deletes from DB
     const handleDeleteVideo = async (id: number) => {
         setIsDeleting(true);
         setDeleteError(null);
         try {
+            // Find the record to get its companyId
+            const record = records.find(r => r.id === id);
+            const companyId = record?.companyId || undefined;
+
             const response = await fetch('/api/trpc/uploads.deleteVideoFromCatalog', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 credentials: 'include',
-                body: JSON.stringify({ json: { id } }),
+                body: JSON.stringify({ json: { id, companyId } }),
             });
             const data = await response.json();
             
@@ -807,6 +827,12 @@ const VideoLog = ({ t }: { t: (key: string) => string }) => {
             if (data?.error) {
                 const errorMsg = data.error?.json?.message || data.error?.message || 'Unknown error';
                 throw new Error(errorMsg);
+            }
+
+            // Show warning if Facebook API failed but DB record was still deleted
+            const result = data?.result?.data?.json;
+            if (result?.warning) {
+                setDeleteError(result.warning);
             }
             
             setRecords(prev => prev.filter(r => r.id !== id));
@@ -818,9 +844,22 @@ const VideoLog = ({ t }: { t: (key: string) => string }) => {
         }
     };
 
+    // Helper: get company name by id
+    const getCompanyName = useCallback((companyId: number | null) => {
+        if (!companyId) return '—';
+        const company = companies.find(c => c.id === companyId);
+        return company?.name || `Company #${companyId}`;
+    }, [companies]);
+
     // Filtered records
     const filteredRecords = useMemo(() => {
         let result = [...records];
+
+        // Filter by company
+        if (companyFilter !== 'all') {
+            const cid = parseInt(companyFilter, 10);
+            result = result.filter(r => r.companyId === cid);
+        }
 
         // Filter by catalog
         if (catalogFilter !== 'all') {
@@ -850,7 +889,7 @@ const VideoLog = ({ t }: { t: (key: string) => string }) => {
         }
 
         return result;
-    }, [records, catalogFilter, dateFrom, dateTo, searchTerm]);
+    }, [records, companyFilter, catalogFilter, dateFrom, dateTo, searchTerm]);
 
     // Pagination
     const totalPages = Math.max(1, Math.ceil(filteredRecords.length / RECORDS_PER_PAGE));
@@ -862,7 +901,7 @@ const VideoLog = ({ t }: { t: (key: string) => string }) => {
     // Reset page when filters change
     useEffect(() => {
         setCurrentPage(1);
-    }, [searchTerm, catalogFilter, dateFrom, dateTo]);
+    }, [searchTerm, companyFilter, catalogFilter, dateFrom, dateTo]);
 
     // Unique catalog IDs from records
     const uniqueCatalogs = useMemo(() => {
@@ -878,6 +917,7 @@ const VideoLog = ({ t }: { t: (key: string) => string }) => {
         if (filteredRecords.length === 0) return;
 
         const exportData = filteredRecords.map(r => ({
+            'Company': getCompanyName(r.companyId),
             'Catalog ID': r.catalogId,
             'Retailer ID': r.retailerId,
             'Product Name': r.productName,
@@ -979,6 +1019,20 @@ const VideoLog = ({ t }: { t: (key: string) => string }) => {
                             onChange={e => setSearchTerm(e.target.value)}
                         />
                     </div>
+                    {companies.length > 0 && (
+                        <div className="log-filter-item">
+                            <label>{t('company') || 'Company'}</label>
+                            <select
+                                value={companyFilter}
+                                onChange={e => setCompanyFilter(e.target.value)}
+                            >
+                                <option value="all">{t('showAll')}</option>
+                                {companies.map(c => (
+                                    <option key={c.id} value={String(c.id)}>{c.name}</option>
+                                ))}
+                            </select>
+                        </div>
+                    )}
                     <div className="log-filter-item">
                         <label>{t('filterByCatalog') || 'Catalog'}</label>
                         <select
@@ -1028,7 +1082,7 @@ const VideoLog = ({ t }: { t: (key: string) => string }) => {
                         </button>
                         <button
                             className="log-action-btn log-clear-btn"
-                            onClick={() => { setSearchTerm(''); setCatalogFilter('all'); setDateFrom(''); setDateTo(''); }}
+                            onClick={() => { setSearchTerm(''); setCompanyFilter('all'); setCatalogFilter('all'); setDateFrom(''); setDateTo(''); }}
                         >
                             ✕ {t('clearFilters') || 'Clear'}
                         </button>
@@ -1065,6 +1119,7 @@ const VideoLog = ({ t }: { t: (key: string) => string }) => {
                                         <th className="col-product">{t('name')}</th>
                                         <th className="col-retailer">{t('retailerId')}</th>
                                         <th className="col-catalog">{t('catalogId')}</th>
+                                        <th className="col-company">{t('company') || 'Company'}</th>
                                         <th className="col-client">{t('clientNameLabel')}</th>
                                         <th className="col-video">4:5</th>
                                         <th className="col-video">9:16</th>
@@ -1096,6 +1151,9 @@ const VideoLog = ({ t }: { t: (key: string) => string }) => {
                                             </td>
                                             <td className="col-catalog">
                                                 <span className="log-catalog-badge">{getCatalogDisplayName(record.catalogId)}</span>
+                                            </td>
+                                            <td className="col-company">
+                                                <span className="log-company-name">{getCompanyName(record.companyId)}</span>
                                             </td>
                                             <td className="col-client">{record.clientName}</td>
                                             <td className="col-video">
@@ -1183,6 +1241,17 @@ const VideoLog = ({ t }: { t: (key: string) => string }) => {
 export const AdminPanel = ({ onBack }: AdminPanelProps) => {
     const [activeTab, setActiveTab] = useState<'log' | 'company'>('log');
     const { t } = useContext(LanguageContext);
+    const [companies, setCompanies] = useState<CompanyData[]>([]);
+
+    // Load all companies for the current user
+    useEffect(() => {
+        const email = localStorage.getItem('cpv_user_email');
+        if (email) {
+            trpcQuery('company.getByEmail', { email: email.toLowerCase() })
+                .then(result => setCompanies(Array.isArray(result) ? result : []))
+                .catch(() => setCompanies([]));
+        }
+    }, []);
 
     return (
         <main className="container data-view">
@@ -1212,7 +1281,7 @@ export const AdminPanel = ({ onBack }: AdminPanelProps) => {
                 
                 {/* Log Tab */}
                 {activeTab === 'log' && (
-                    <VideoLog t={t} />
+                    <VideoLog t={t} companies={companies} />
                 )}
 
                 {/* Company Management Tab */}

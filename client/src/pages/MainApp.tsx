@@ -395,6 +395,7 @@ export const MainApp = () => {
 
     try {
         const success = await saveUploadRecord({
+            companyId: selectedCompanyId || undefined,
             catalogId,
             retailerId: product.retailer_id,
             productName: product.name,

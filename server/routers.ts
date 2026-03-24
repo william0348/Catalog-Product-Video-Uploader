@@ -268,6 +268,7 @@ export const appRouter = router({
       }),
 
     // Delete video from Facebook Catalog via Batch API, then delete DB record
+    // ALWAYS deletes the DB record, even if Facebook API fails
     deleteVideoFromCatalog: publicProcedure
       .input(z.object({
         id: z.number(),
@@ -280,82 +281,98 @@ export const appRouter = router({
           throw new Error("Record not found");
         }
 
-        // 2. Get the access token - try company first, then global settings
+        let fbSuccess = false;
+        let fbWarning: string | null = null;
+        let handle: string | null = null;
+
+        // 2. Get the access token - try company first, then record's companyId, then global settings
         let accessToken: string | null = null;
-        if (input.companyId) {
-          const company = await getCompanyById(input.companyId);
+        const companyId = input.companyId ?? record.companyId;
+        if (companyId) {
+          const company = await getCompanyById(companyId);
           accessToken = company?.facebookAccessToken ?? null;
         }
         if (!accessToken) {
           accessToken = await getSetting("facebookAccessToken");
         }
-        if (!accessToken) {
-          throw new Error("Facebook Access Token not configured. Please set it in company settings or Admin Settings.");
-        }
 
-        // 3. Call Facebook Catalog Batch API to remove videos
-        const batchUrl = `https://graph.facebook.com/v21.0/${record.catalogId}/items_batch`;
-        const batchPayload = {
-          access_token: accessToken,
-          item_type: "PRODUCT_ITEM",
-          requests: [
-            {
-              method: "UPDATE",
-              data: {
-                id: record.retailerId,
-                video: [],
-              },
-            },
-          ],
-        };
+        if (accessToken) {
+          // 3. Try to call Facebook Catalog Batch API to remove videos
+          try {
+            const batchUrl = `https://graph.facebook.com/v21.0/${record.catalogId}/items_batch`;
+            const batchPayload = {
+              access_token: accessToken,
+              item_type: "PRODUCT_ITEM",
+              requests: [
+                {
+                  method: "UPDATE",
+                  data: {
+                    id: record.retailerId,
+                    video: [],
+                  },
+                },
+              ],
+            };
 
-        console.log(`[DeleteVideo] Sending batch API request for retailer ${record.retailerId} in catalog ${record.catalogId}`);
+            console.log(`[DeleteVideo] Sending batch API request for retailer ${record.retailerId} in catalog ${record.catalogId}`);
 
-        const fbResponse = await fetch(batchUrl, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(batchPayload),
-        });
+            const fbResponse = await fetch(batchUrl, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(batchPayload),
+            });
 
-        const fbResult = await fbResponse.json();
-        console.log(`[DeleteVideo] Facebook API response:`, JSON.stringify(fbResult));
+            const fbResult = await fbResponse.json();
+            console.log(`[DeleteVideo] Facebook API response:`, JSON.stringify(fbResult));
 
-        if (!fbResponse.ok) {
-          const errorMsg = fbResult?.error?.message || "Unknown Facebook API error";
-          throw new Error(`Facebook API error: ${errorMsg}`);
-        }
+            if (!fbResponse.ok) {
+              const errorMsg = fbResult?.error?.message || "Unknown Facebook API error";
+              fbWarning = `Facebook API warning: ${errorMsg}. Record will still be deleted from database.`;
+              console.warn(`[DeleteVideo] ${fbWarning}`);
+            } else {
+              fbSuccess = true;
+              handle = fbResult?.handles?.[0] || null;
+              if (handle) {
+                console.log(`[DeleteVideo] Batch accepted with handle: ${handle}`);
+              }
 
-        // 4. Check if the batch was accepted
-        const handle = fbResult?.handles?.[0];
-        if (handle) {
-          console.log(`[DeleteVideo] Batch accepted with handle: ${handle}`);
-        }
-
-        // 5. Verify the product no longer has videos
-        await new Promise(resolve => setTimeout(resolve, 2000));
-
-        try {
-          const verifyUrl = `https://graph.facebook.com/v21.0/${record.catalogId}/products?filter={"retailer_id":{"eq":"${record.retailerId}"}}&fields=id,retailer_id,name,video&access_token=${accessToken}`;
-          const verifyResponse = await fetch(verifyUrl);
-          const verifyResult = await verifyResponse.json();
-          
-          if (verifyResult?.data?.[0]?.video && verifyResult.data[0].video.length > 0) {
-            console.warn(`[DeleteVideo] Warning: Product ${record.retailerId} still has videos after deletion attempt.`);
-          } else {
-            console.log(`[DeleteVideo] Verified: Product ${record.retailerId} has no videos in catalog.`);
+              // 4. Verify the product no longer has videos
+              await new Promise(resolve => setTimeout(resolve, 2000));
+              try {
+                const verifyUrl = `https://graph.facebook.com/v21.0/${record.catalogId}/products?filter={"retailer_id":{"eq":"${record.retailerId}"}}&fields=id,retailer_id,name,video&access_token=${accessToken}`;
+                const verifyResponse = await fetch(verifyUrl);
+                const verifyResult = await verifyResponse.json();
+                
+                if (verifyResult?.data?.[0]?.video && verifyResult.data[0].video.length > 0) {
+                  console.warn(`[DeleteVideo] Warning: Product ${record.retailerId} still has videos after deletion attempt.`);
+                } else {
+                  console.log(`[DeleteVideo] Verified: Product ${record.retailerId} has no videos in catalog.`);
+                }
+              } catch (verifyError) {
+                console.warn(`[DeleteVideo] Could not verify video deletion:`, verifyError);
+              }
+            }
+          } catch (fbError: any) {
+            fbWarning = `Facebook API error: ${fbError.message}. Record will still be deleted from database.`;
+            console.warn(`[DeleteVideo] ${fbWarning}`);
           }
-        } catch (verifyError) {
-          console.warn(`[DeleteVideo] Could not verify video deletion:`, verifyError);
+        } else {
+          fbWarning = "No Facebook Access Token configured. Video was not removed from catalog, but record will be deleted from database.";
+          console.warn(`[DeleteVideo] ${fbWarning}`);
         }
 
-        // 6. Delete from our database
+        // 5. ALWAYS delete from our database regardless of Facebook API result
         await deleteUploadRecord(input.id);
         console.log(`[DeleteVideo] Deleted record ${input.id} from database.`);
 
         return {
           success: true,
-          message: `Video removed from catalog and record deleted.`,
-          handle: handle || null,
+          fbSuccess,
+          message: fbSuccess
+            ? "Video removed from catalog and record deleted."
+            : `Record deleted from database. ${fbWarning || ''}`,
+          warning: fbWarning,
+          handle,
         };
       }),
   }),

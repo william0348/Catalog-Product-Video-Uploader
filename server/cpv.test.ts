@@ -453,7 +453,7 @@ describe("deleteVideoFromCatalog", () => {
     ).rejects.toThrow("Record not found");
   });
 
-  it("throws error when access token is not configured", async () => {
+  it("deletes DB record even when access token is not configured", async () => {
     const ctx = createPublicContext();
     const caller = appRouter.createCaller(ctx);
 
@@ -464,9 +464,11 @@ describe("deleteVideoFromCatalog", () => {
       clientName: "Acme Corp",
     });
 
-    await expect(
-      caller.uploads.deleteVideoFromCatalog({ id: 1 })
-    ).rejects.toThrow("Facebook Access Token not configured");
+    const result = await caller.uploads.deleteVideoFromCatalog({ id: 1 });
+    expect(result.success).toBe(true);
+    expect(result.fbSuccess).toBe(false);
+    expect(result.warning).toContain("No Facebook Access Token configured");
+    expect(records.length).toBe(0);
   });
 
   it("uses company access token when companyId is provided", async () => {
@@ -553,7 +555,7 @@ describe("deleteVideoFromCatalog", () => {
     expect(records.length).toBe(0);
   });
 
-  it("throws error when Facebook API returns error", async () => {
+  it("deletes DB record even when Facebook API returns error", async () => {
     const ctx = createPublicContext();
     const caller = appRouter.createCaller(ctx);
 
@@ -573,11 +575,11 @@ describe("deleteVideoFromCatalog", () => {
       }),
     });
 
-    await expect(
-      caller.uploads.deleteVideoFromCatalog({ id: 1 })
-    ).rejects.toThrow("Facebook API error: Invalid access token");
-
-    expect(records.length).toBe(1);
+    const result = await caller.uploads.deleteVideoFromCatalog({ id: 1 });
+    expect(result.success).toBe(true);
+    expect(result.fbSuccess).toBe(false);
+    expect(result.warning).toContain("Invalid access token");
+    expect(records.length).toBe(0);
   });
 
   it("still deletes DB record even if verification fails", async () => {

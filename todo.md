@@ -294,3 +294,13 @@
 - [x] 移除 AdminPanel 中重複的「系統設定」tab（SettingsManager 組件）
 - [x] 系統設定現在只存在於公司設定（CompanyDetail）中
 - [x] 測試通過（60/60 passed）
+
+## Bug Fix: 刪除影片紀錄後仍然顯示 + 管理面板未連接公司設定
+- [x] 修復 deleteVideoFromCatalog：Facebook API 失敗時仍應刪除 DB 記錄（改為 try-catch 包裹 FB API 呼叫）
+- [x] 管理面板 Video Log 連接公司設定：使用公司的 catalogs 和 access token
+- [x] 刪除時正確傳遞 companyId
+- [x] 管理面板新增公司篩選器 + 公司欄位
+- [x] MainApp saveUploadRecord 傳入 companyId
+- [x] XLSX 匯出加入公司名稱
+- [x] 更新測試用例以匹配新行為
+- [x] 全部 60/60 測試通過
