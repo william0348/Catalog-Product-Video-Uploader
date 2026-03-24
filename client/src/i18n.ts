@@ -134,7 +134,7 @@ export const translations = {
         deleteConfirmMessage: "Are you sure you want to delete this record? This action cannot be undone.",
         switchAccount: "Switch Account",
         // Company Management
-        companyManagement: "Company Management",
+        companyManagement: "Company, Catalog & Member Management",
         companyManagementDesc: "Create and manage companies. Each company has its own Access Token and catalog settings shared among all members.",
         createCompany: "Create Company",
         companyName: "Company Name",
@@ -448,7 +448,7 @@ export const translations = {
         deleteConfirmMessage: "確定要刪除此記錄嗎？此操作無法復原。",
         switchAccount: "切換帳號",
         // Company Management
-        companyManagement: "公司管理",
+        companyManagement: "公司,目錄,人員管理",
         companyManagementDesc: "建立和管理公司。每個公司擁有獨立的 Access Token 和目錄設定，所有成員共用。",
         createCompany: "建立公司",
         companyName: "公司名稱",

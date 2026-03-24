@@ -83,6 +83,7 @@ const PageRouter = () => {
             onGoogleLogin={handleGoogleLogin}
             onLogout={handleLogout}
             isGoogleReady={isGoogleReady}
+            fullWidthContent={currentPage === 'main'}
         >
             {renderPage()}
         </AppLayout>

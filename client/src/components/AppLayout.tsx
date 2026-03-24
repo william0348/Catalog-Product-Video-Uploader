@@ -10,6 +10,7 @@ interface AppLayoutProps {
   onGoogleLogin?: () => void;
   onLogout?: () => void;
   isGoogleReady?: boolean;
+  fullWidthContent?: boolean;
 }
 
 const NAV_ITEMS = [
@@ -27,6 +28,7 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
   onGoogleLogin,
   onLogout,
   isGoogleReady = true,
+  fullWidthContent = false,
 }) => {
   const { t } = useContext(LanguageContext);
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -135,7 +137,7 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
             <div style={{ width: 40 }} />
           </div>
         )}
-        <div className="app-content">
+        <div className={`app-content${fullWidthContent ? ' app-content--full-width' : ''}`}>
           {children}
         </div>
       </div>

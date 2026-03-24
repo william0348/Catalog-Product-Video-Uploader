@@ -356,3 +356,12 @@
 - [x] 表格行穿越上方 sticky 功能區塊 → 改用不透明白色背景（#ffffff）取代半透明 rgba
 - [x] 上方功能區塊整塊填滿寬度 → 移除 card 的 border-radius 和 shadow，加入 border-bottom 分隔線
 - [x] 全部 60/60 測試通過
+
+## Bug Fix: Sticky 表頭重疊 + 內容未置中對齊（方案重寫 v2）
+- [x] 新方案：加入 app-content--full-width class，移除 app-content padding，讓 data-header/filters 自然填滿寬度
+- [x] AppLayout 加入 fullWidthContent prop，在 data-view 頁面時傳入 true
+- [x] data-header 和 filters 用 var(--content-pad) 保持內容水平間距
+- [x] table-container 在 full-width 模式下加 padding 保持對齊
+- [x] z-index 層級：data-header(100) > filters(90) > thead(10)
+- [x] 翻譯更新：「公司管理」→「公司,目錄,人員管理」
+- [x] 全部 60/60 測試通過

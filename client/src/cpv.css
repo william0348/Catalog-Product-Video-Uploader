@@ -3727,9 +3727,15 @@ tbody tr.selected:hover td {
 
 .app-content {
   flex: 1;
-  padding: 24px;
+  --content-pad: 24px;
+  padding: var(--content-pad);
   overflow-y: auto;
   overflow-x: hidden;
+}
+
+/* When content needs full-width sticky headers (data-view pages) */
+.app-content--full-width {
+  padding: 0;
 }
 
 /* Mobile Top Bar */
@@ -3778,48 +3784,63 @@ tbody tr.selected:hover td {
   padding-top: 0;
 }
 
-/* In sidebar layout, data-header should be sticky inside app-content scroll container */
+/* ===== Sticky header system for data-view inside sidebar layout =====
+ * Strategy: app-content--full-width has padding:0 so data-header and filters
+ * naturally fill the full width. Horizontal padding is added to data-header
+ * and filters content via padding, and to the table area via padding on container.
+ */
+
+/* data-header: sticky at top, full width, opaque background */
 .app-content .data-header {
   position: -webkit-sticky;
   position: sticky;
   top: 0;
   left: auto;
-  z-index: 30;
+  z-index: 100;
   background-color: #ffffff;
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
-  /* Break out of app-content padding to fill full width */
-  margin-left: -24px;
-  margin-right: -24px;
-  padding-left: 24px;
-  padding-right: 24px;
   width: auto;
+  padding: 12px var(--content-pad, 24px);
   box-shadow: 0 1px 0 var(--separator);
 }
 
-/* Adjust filters sticky position in sidebar layout */
+/* filters: sticky below data-header, full width, opaque background */
 .app-content .filters {
   position: -webkit-sticky;
   position: sticky;
   top: 58px;
-  z-index: 20;
+  z-index: 90;
   border-radius: 0;
-  /* Break out of app-content padding to fill full width */
-  margin-left: -24px;
-  margin-right: -24px;
-  padding: 16px 24px;
+  padding: 16px var(--content-pad, 24px);
   background-color: #ffffff;
   border-bottom: 1px solid var(--separator);
   box-shadow: none;
   margin-bottom: 0;
 }
 
-/* Remove overflow-x from table-container in sidebar layout so thead sticky works */
+/* Add horizontal padding to table area and other content in full-width mode */
+.app-content--full-width .table-container {
+  padding: 0 var(--content-pad, 24px);
+  overflow-x: visible;
+}
+
+/* Also add padding to bulk actions and footer in full-width mode */
+.app-content--full-width .bulk-actions-container {
+  margin-left: var(--content-pad, 24px);
+  margin-right: var(--content-pad, 24px);
+}
+
+.app-content--full-width .app-footer {
+  padding: 24px var(--content-pad, 24px);
+}
+
+/* Remove overflow-x from table-container so thead sticky works */
 .app-content .table-container {
   overflow-x: visible;
 }
 
-/* Make thead sticky below data-header + filters in sidebar layout */
+/* thead: sticky below data-header + filters */
 .app-content .table-container thead th {
   position: sticky;
   top: 140px;
@@ -3837,24 +3858,15 @@ tbody tr.selected:hover td {
   max-width: 100%;
 }
 
-/* Desktop: wider content area for data views */
+/* Desktop: wider content area */
 @media (min-width: 1024px) {
   .app-content {
-    padding: 32px 40px;
+    --content-pad: 40px;
+    padding: 32px var(--content-pad);
   }
 
-  /* Match desktop padding for full-width sticky elements */
-  .app-content .data-header {
-    margin-left: -40px;
-    margin-right: -40px;
-    padding-left: 40px;
-    padding-right: 40px;
-  }
-
-  .app-content .filters {
-    margin-left: -40px;
-    margin-right: -40px;
-    padding: 16px 40px;
+  .app-content--full-width {
+    padding: 0;
   }
 }
 
