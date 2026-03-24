@@ -389,3 +389,9 @@
 - [x] 清理不再使用的 import（loadSettings、saveSettings、loadSettingsFromServer）
 - [x] 更新測試：將 2 個使用全域 token 的測試改為使用公司 token
 - [x] 全部 60/60 測試通過
+
+## Phase 43: 移除 CSV 中的廠商名稱和 Product Name 欄位
+- [x] 找到 CSV 生成程式碼（server/_core/index.ts 的 /api/export/csv/:catalogId 端點）
+- [x] 移除 #廠商名稱 和 #Product Name 欄位（header 和 row data）
+- [x] 清理不再使用的 clientName 變數和 getSetting import
+- [x] 全部 60/60 測試通過

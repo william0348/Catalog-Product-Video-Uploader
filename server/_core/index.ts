@@ -48,13 +48,12 @@ async function startServer() {
   // CSV export endpoint for Meta Catalog
   app.get("/api/export/csv/:catalogId", async (req, res) => {
     try {
-      const { getUploadRecordsByCatalog, getSetting } = await import("../db");
+      const { getUploadRecordsByCatalog } = await import("../db");
       const catalogId = req.params.catalogId;
       const records = await getUploadRecordsByCatalog(catalogId);
-      const clientName = records.length > 0 ? records[0].clientName : "";
 
       // CSV header
-      const headers = ["id", "video[0].url", "video[1].url", "#\u5EE0\u5546\u540D\u7A31", "#Product Name"];
+      const headers = ["id", "video[0].url", "video[1].url"];
       const csvRows = [headers.join(",")];
 
       for (const record of records) {
@@ -62,8 +61,6 @@ async function startServer() {
           record.retailerId,
           record.video4x5Download || "",
           record.video9x16Download || "",
-          clientName,
-          `"${(record.productName || "").replace(/"/g, '""')}"`
         ];
         csvRows.push(row.join(","));
       }
