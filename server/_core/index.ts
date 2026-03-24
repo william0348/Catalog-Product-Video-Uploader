@@ -33,6 +33,15 @@ async function startServer() {
   // Configure body parser with larger size limit for file uploads
   app.use(express.json({ limit: "50mb" }));
   app.use(express.urlencoded({ limit: "50mb", extended: true }));
+
+  // Enable SharedArrayBuffer for FFmpeg WASM (requires COOP + COEP headers)
+  // Using "credentialless" instead of "require-corp" to allow cross-origin resources
+  // (Google APIs, Facebook CDN images, etc.) without requiring CORP headers on them
+  app.use((req, res, next) => {
+    res.setHeader("Cross-Origin-Opener-Policy", "same-origin");
+    res.setHeader("Cross-Origin-Embedder-Policy", "credentialless");
+    next();
+  });
   // OAuth callback under /api/oauth/callback
   registerOAuthRoutes(app);
 

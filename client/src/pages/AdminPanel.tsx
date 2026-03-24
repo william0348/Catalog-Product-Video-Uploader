@@ -715,232 +715,6 @@ const CompanyManager = ({ t }: { t: (key: string) => string }) => {
 };
 
 
-// ==================== Settings Management Component (Legacy/Global) ====================
-const SettingsManager = ({ t }: { t: (key: string) => string }) => {
-    const [settings, setSettings] = useState<AppSettings>(loadSettings());
-    const [newCatalogId, setNewCatalogId] = useState('');
-    const [isAddingCatalog, setIsAddingCatalog] = useState(false);
-    const [isValidatingToken, setIsValidatingToken] = useState(false);
-    const [tokenStatus, setTokenStatus] = useState<{ type: 'success' | 'error' | null; message: string }>({ type: null, message: '' });
-    const [catalogError, setCatalogError] = useState<string | null>(null);
-    const [showToken, setShowToken] = useState(false);
-    const [isSaved, setIsSaved] = useState(false);
-    const [copiedCsvUrl, setCopiedCsvUrl] = useState<string | null>(null);
-
-    useEffect(() => {
-        loadSettingsFromServer().then(s => setSettings(s));
-    }, []);
-
-    const handleTokenChange = (value: string) => {
-        const updated = { ...settings, facebookAccessToken: value };
-        setSettings(updated);
-        setTokenStatus({ type: null, message: '' });
-        setIsSaved(false);
-    };
-
-    const handleSaveToken = async () => {
-        await saveSettings(settings);
-        setIsSaved(true);
-        setTimeout(() => setIsSaved(false), 2000);
-    };
-
-    const handleValidateToken = async () => {
-        if (!settings.facebookAccessToken) {
-            setTokenStatus({ type: 'error', message: t('tokenRequired') });
-            return;
-        }
-        setIsValidatingToken(true);
-        setTokenStatus({ type: null, message: '' });
-        try {
-            const result = await validateAccessToken(settings.facebookAccessToken);
-            setTokenStatus({ type: result.valid ? 'success' : 'error', message: result.message });
-        } catch (e: any) {
-            setTokenStatus({ type: 'error', message: e.message });
-        } finally {
-            setIsValidatingToken(false);
-        }
-    };
-
-    const handleAddCatalog = async () => {
-        const trimmedId = newCatalogId.trim();
-        if (!trimmedId) { setCatalogError(t('catalogIdRequired')); return; }
-        if (!settings.facebookAccessToken) { setCatalogError(t('tokenRequiredForCatalog')); return; }
-        if (settings.catalogs.some(c => c.id === trimmedId)) { setCatalogError(t('catalogAlreadyExists')); return; }
-
-        setIsAddingCatalog(true);
-        setCatalogError(null);
-        try {
-            const name = await fetchCatalogName(trimmedId, settings.facebookAccessToken);
-            const newCatalog: CatalogConfig = { id: trimmedId, name, addedAt: new Date().toISOString() };
-            const updated = { ...settings, catalogs: [...settings.catalogs, newCatalog] };
-            setSettings(updated);
-            await saveSettings(updated);
-            setNewCatalogId('');
-        } catch (e: any) {
-            setCatalogError(`${t('fetchCatalogFailed')}: ${e.message}`);
-        } finally {
-            setIsAddingCatalog(false);
-        }
-    };
-
-    const handleRemoveCatalog = async (catalogId: string) => {
-        const updated = { ...settings, catalogs: settings.catalogs.filter(c => c.id !== catalogId) };
-        setSettings(updated);
-        await saveSettings(updated);
-    };
-
-    const handleRefreshCatalogName = async (catalogId: string) => {
-        if (!settings.facebookAccessToken) { setCatalogError(t('tokenRequiredForCatalog')); return; }
-        setCatalogError(null);
-        try {
-            const name = await fetchCatalogName(catalogId, settings.facebookAccessToken);
-            const updated = { ...settings, catalogs: settings.catalogs.map(c => c.id === catalogId ? { ...c, name } : c) };
-            setSettings(updated);
-            await saveSettings(updated);
-        } catch (e: any) {
-            setCatalogError(`${t('refreshFailed')}: ${e.message}`);
-        }
-    };
-
-    const getCsvUrl = (catalogId: string) => `${window.location.origin}/api/export/csv/${catalogId}`;
-
-    const handleCopyCsvUrl = (catalogId: string) => {
-        navigator.clipboard.writeText(getCsvUrl(catalogId)).then(() => {
-            setCopiedCsvUrl(catalogId);
-            setTimeout(() => setCopiedCsvUrl(null), 2000);
-        });
-    };
-
-    return (
-        <div className="settings-manager">
-            <h2>{t('systemSettings')}</h2>
-            <p className="info-text">{t('settingsDescription')}</p>
-
-            {/* Facebook Access Token Section */}
-            <div className="settings-section">
-                <h3>{t('fbAccessToken')}</h3>
-                <div className="form-group">
-                    <label htmlFor="fbToken">{t('accessToken')}</label>
-                    <div className="token-input-group">
-                        <input
-                            id="fbToken"
-                            type={showToken ? 'text' : 'password'}
-                            value={settings.facebookAccessToken}
-                            onChange={(e) => handleTokenChange(e.target.value)}
-                            placeholder={t('enterAccessToken')}
-                            className="token-input"
-                        />
-                        <button
-                            onClick={() => setShowToken(!showToken)}
-                            className="toggle-visibility-button"
-                            title={showToken ? t('hideToken') : t('showToken')}
-                        >
-                            {showToken ? '🙈' : '👁️'}
-                        </button>
-                    </div>
-                    <div className="token-actions">
-                        <button onClick={handleSaveToken} className="save-token-button">
-                            {isSaved ? `✓ ${t('saved')}` : t('saveToken')}
-                        </button>
-                        <button onClick={handleValidateToken} disabled={isValidatingToken} className="validate-token-button">
-                            {isValidatingToken ? <div className="loader-small"></div> : t('validateToken')}
-                        </button>
-                    </div>
-                    {tokenStatus.type && (
-                        <p className={tokenStatus.type === 'success' ? 'success-text' : 'error-text'}>
-                            {tokenStatus.message}
-                        </p>
-                    )}
-                </div>
-            </div>
-
-            {/* Catalog Management Section */}
-            <div className="settings-section">
-                <h3>{t('catalogManagement')}</h3>
-                <p className="info-text">{t('catalogManagementDesc')}</p>
-
-                <div className="add-catalog-form">
-                    <div className="form-group">
-                        <label htmlFor="newCatalogId">{t('addNewCatalog')}</label>
-                        <div className="add-catalog-input-group">
-                            <input
-                                id="newCatalogId"
-                                type="text"
-                                value={newCatalogId}
-                                onChange={(e) => { setNewCatalogId(e.target.value.trim()); setCatalogError(null); }}
-                                placeholder={t('enterCatalogId')}
-                                onKeyDown={(e) => { if (e.key === 'Enter') handleAddCatalog(); }}
-                            />
-                            <button onClick={handleAddCatalog} disabled={isAddingCatalog || !newCatalogId.trim()} className="add-catalog-button">
-                                {isAddingCatalog ? <div className="loader-small"></div> : `+ ${t('addCatalog')}`}
-                            </button>
-                        </div>
-                        {catalogError && <p className="error-text">{catalogError}</p>}
-                    </div>
-                </div>
-
-                <div className="catalogs-list">
-                    {settings.catalogs.length === 0 ? (
-                        <p className="info-text empty-catalogs">{t('noCatalogsConfigured')}</p>
-                    ) : (
-                        <table className="catalogs-table">
-                            <thead>
-                                <tr>
-                                    <th>{t('catalogId')}</th>
-                                    <th>{t('catalogName')}</th>
-                                    <th>CSV URL</th>
-                                    <th>{t('actions')}</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {settings.catalogs.map((catalog) => (
-                                    <tr key={catalog.id}>
-                                        <td><code>{catalog.id}</code></td>
-                                        <td>{catalog.name}</td>
-                                        <td className="csv-url-cell">
-                                            <div className="csv-url-group">
-                                                <input
-                                                    type="text"
-                                                    readOnly
-                                                    value={getCsvUrl(catalog.id)}
-                                                    className="csv-url-input"
-                                                    onClick={(e) => (e.target as HTMLInputElement).select()}
-                                                />
-                                                <button
-                                                    onClick={() => handleCopyCsvUrl(catalog.id)}
-                                                    className="copy-csv-btn"
-                                                    title="Copy CSV URL"
-                                                >
-                                                    {copiedCsvUrl === catalog.id ? '✓' : '📋'}
-                                                </button>
-                                            </div>
-                                        </td>
-                                        <td className="catalog-actions">
-                                            <button
-                                                onClick={() => handleRefreshCatalogName(catalog.id)}
-                                                className="refresh-catalog-button"
-                                                title={t('refreshName')}
-                                            >
-                                                ↻
-                                            </button>
-                                            <button
-                                                onClick={() => handleRemoveCatalog(catalog.id)}
-                                                className="remove-catalog-button"
-                                                title={t('removeCatalog')}
-                                            >
-                                                ✕
-                                            </button>
-                                        </td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    )}
-                </div>
-            </div>
-        </div>
-    );
-};
 
 
 // ==================== Video Log Component (Database-backed) ====================
@@ -1407,7 +1181,7 @@ const VideoLog = ({ t }: { t: (key: string) => string }) => {
 
 // ==================== Main AdminPanel Component ====================
 export const AdminPanel = ({ onBack }: AdminPanelProps) => {
-    const [activeTab, setActiveTab] = useState<'log' | 'settings' | 'company'>('log');
+    const [activeTab, setActiveTab] = useState<'log' | 'company'>('log');
     const { t } = useContext(LanguageContext);
 
     return (
@@ -1433,12 +1207,7 @@ export const AdminPanel = ({ onBack }: AdminPanelProps) => {
                     >
                         🏢 {t('companyManagement')}
                     </button>
-                    <button
-                        className={`admin-tab ${activeTab === 'settings' ? 'active' : ''}`}
-                        onClick={() => setActiveTab('settings')}
-                    >
-                        ⚙️ {t('systemSettings')}
-                    </button>
+
                 </div>
                 
                 {/* Log Tab */}
@@ -1451,10 +1220,7 @@ export const AdminPanel = ({ onBack }: AdminPanelProps) => {
                     <CompanyManager t={t} />
                 )}
 
-                {/* Settings Tab (Legacy/Global) */}
-                {activeTab === 'settings' && (
-                    <SettingsManager t={t} />
-                )}
+
             </div>
             <AppFooter />
         </main>

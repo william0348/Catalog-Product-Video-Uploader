@@ -57,7 +57,6 @@ export const MainApp = () => {
   const [fbAccessToken, setFbAccessToken] = useState<string>('');
 
   // ===== Inline settings management state =====
-  const [showSettings, setShowSettings] = useState(false);
   const [tokenInput, setTokenInput] = useState('');
   const [showToken, setShowToken] = useState(false);
   const [isValidatingToken, setIsValidatingToken] = useState(false);
@@ -825,99 +824,7 @@ export const MainApp = () => {
             </div>
           )}
 
-          {/* ===== Settings Toggle ===== */}
-          <div className="settings-toggle-section">
-            <button
-              className={`settings-toggle-btn ${showSettings ? 'active' : ''}`}
-              onClick={() => setShowSettings(!showSettings)}
-            >
-              <span className="settings-toggle-icon">{showSettings ? '▲' : '⚙️'}</span>
-              <span>{t('systemSettings')}</span>
-              {hasToken && <span className="settings-status-dot green"></span>}
-              {!hasToken && <span className="settings-status-dot red"></span>}
-            </button>
-          </div>
 
-          {/* ===== Inline Settings Panel ===== */}
-          {showSettings && (
-            <div className="inline-settings-panel">
-              {/* Token Section */}
-              <div className="inline-settings-group">
-                <label htmlFor="fbTokenInline">{t('fbAccessToken')}</label>
-                <div className="inline-token-row">
-                  <input
-                    id="fbTokenInline"
-                    type={showToken ? 'text' : 'password'}
-                    value={tokenInput}
-                    onChange={(e) => { setTokenInput(e.target.value); setTokenStatus({ type: null, message: '' }); setIsSaved(false); }}
-                    placeholder={t('enterAccessToken')}
-                    className="inline-token-input"
-                  />
-                  <button
-                    onClick={() => setShowToken(!showToken)}
-                    className="inline-icon-btn"
-                    title={showToken ? t('hideToken') : t('showToken')}
-                  >
-                    {showToken ? '🙈' : '👁️'}
-                  </button>
-                </div>
-                <div className="inline-btn-row">
-                  <button onClick={handleSaveToken} className="inline-action-btn save">
-                    {isSaved ? `✓ ${t('saved')}` : t('saveToken')}
-                  </button>
-                  <button onClick={handleValidateToken} disabled={isValidatingToken} className="inline-action-btn validate">
-                    {isValidatingToken ? '...' : t('validateToken')}
-                  </button>
-                </div>
-                {tokenStatus.type && (
-                  <p className={tokenStatus.type === 'success' ? 'success-text-sm' : 'error-text-sm'}>
-                    {tokenStatus.message}
-                  </p>
-                )}
-              </div>
-
-              {/* Add Catalog Section */}
-              <div className="inline-settings-group">
-                <label htmlFor="newCatalogInline">{t('addNewCatalog')}</label>
-                <div className="inline-catalog-row">
-                  <input
-                    id="newCatalogInline"
-                    type="text"
-                    value={newCatalogId}
-                    onChange={(e) => { setNewCatalogId(e.target.value.trim()); setCatalogError(null); }}
-                    placeholder={t('enterCatalogId')}
-                    onKeyDown={(e) => { if (e.key === 'Enter') handleAddCatalog(); }}
-                    className="inline-catalog-input"
-                  />
-                  <button onClick={handleAddCatalog} disabled={isAddingCatalog || !newCatalogId.trim()} className="inline-action-btn add">
-                    {isAddingCatalog ? '...' : `+ ${t('addCatalog')}`}
-                  </button>
-                </div>
-                {catalogError && <p className="error-text-sm">{catalogError}</p>}
-              </div>
-
-              {/* Configured Catalogs List */}
-              {configuredCatalogs.length > 0 && (
-                <div className="inline-catalogs-list">
-                  {configuredCatalogs.map(catalog => (
-                    <div key={catalog.id} className="inline-catalog-chip">
-                      <div className="inline-catalog-chip-info">
-                        <span className="inline-catalog-chip-name">{catalog.name}</span>
-                        <span className="inline-catalog-chip-id">{catalog.id}</span>
-                      </div>
-                      <button
-                        onClick={() => handleRemoveCatalog(catalog.id)}
-                        className="inline-catalog-chip-remove"
-                        title={t('removeCatalog')}
-                      >
-                        ✕
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
           
           {/* ===== Catalog Dropdown ===== */}
           <div className="form-group">

@@ -271,3 +271,26 @@
 - [x] Step 3 影片播放器也使用 9:16 等比例容器 + Reels overlay
 - [x] 更新 previewScale 計算配合新尺寸
 - [x] 測試通過（60/60 passed）
+
+## Phase 38: 修復影片生成 503 錯誤（部署環境）
+- [ ] 調查 503 錯誤原因（FFmpeg 在部署環境可能不可用）
+- [ ] 修復根本原因
+- [ ] 測試並驗證
+
+## Phase 38: 修復影片生成 503 錯誤 + 移除系統設定
+- [ ] 調查部署環境 FFmpeg 不可用的替代方案
+- [ ] 實作替代方案（瀏覽器端影片生成 or 其他）
+- [ ] 移除系統設定區塊（已有公司設定取代）
+- [ ] 測試並驗證
+
+## Phase 38: FFmpeg WASM 瀏覽器端影片生成 + 移除重複系統設定
+- [x] 建立 client/src/lib/videoGenerator.ts - 瀏覽器端 FFmpeg WASM 影片生成器
+- [x] 整合到 SlideshowGenerator.tsx handleGenerate（優先使用瀏覽器端，fallback 到伺服器端）
+- [x] 整合到 SlideshowGenerator.tsx handleBatchGenerate（同上）
+- [x] 新增 uploadVideoToS3 函數：瀏覽器生成的影片上傳到 S3
+- [x] 新增 isFFmpegWASMSupported 檢查函數
+- [x] 新增 COOP + COEP headers（Cross-Origin-Opener-Policy: same-origin, Cross-Origin-Embedder-Policy: credentialless）啟用 SharedArrayBuffer
+- [x] 使用 credentialless（而非 require-corp）避免阻擋 Google APIs 和 Facebook CDN 等外部資源
+- [x] 移除 AdminPanel 中重複的「系統設定」tab（SettingsManager 組件）
+- [x] 系統設定現在只存在於公司設定（CompanyDetail）中
+- [x] 測試通過（60/60 passed）

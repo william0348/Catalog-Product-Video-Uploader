@@ -18,6 +18,7 @@ import {
   GOOGLE_API_SCOPES,
 } from "@/constants";
 import { getDriveFolderId } from "@/lib/google";
+import { generateVideoInBrowser, uploadVideoToS3, isFFmpegWASMSupported } from "@/lib/videoGenerator";
 
 declare const google: any;
 declare const gapi: any;
@@ -961,48 +962,94 @@ export const SlideshowGenerator = () => {
     setGenerationProgress(isZh ? "正在準備圖片..." : "Preparing images...");
 
     try {
-      // Step 1: Proxy upload Facebook CDN images to S3
+      // Step 1: Proxy upload Facebook CDN images to S3 (to get permanent URLs)
       const allUrls = selectedImages.map(img => img.url);
       const urlMap = await proxyUploadImagesToS3(allUrls);
       
-      setGenerationProgress(isZh ? "正在生成影片..." : "Generating video...");
-      
-      // Step 2: Generate slideshow with S3 URLs
-      const result = await trpcMutate("slideshow.generate", {
-        images: selectedImages.map((img) => ({
-          url: urlMap.get(img.url) || img.url,
-          label: img.label,
-        })),
-        aspectRatio,
-        durationPerImage,
-        transition,
-        transitionDuration,
-        overlayText: overlayText.trim() || undefined,
-        textPosition,
-        fontSize,
-        fontFamily,
-        fontColor,
-        backgroundColor,
-        imageScale,
-        imageOffsetX,
-        imageOffsetY,
-        overlayImageUrl: overlayImageUrl || undefined,
-        overlayImageScale: overlayImageUrl ? overlayImageScale : undefined,
-        overlayImageX: overlayImageUrl ? overlayImageX : undefined,
-        overlayImageY: overlayImageUrl ? overlayImageY : undefined,
-        backgroundVideoUrl: backgroundVideoUrl || undefined,
-        introVideoUrl: introVideoUrl || undefined,
-        outroVideoUrl: outroVideoUrl || undefined,
-        audioUrl: audioUrl || undefined,
-        audioVolume: audioUrl ? audioVolume : undefined,
-      });
+      const s3Images = selectedImages.map((img) => ({
+        url: urlMap.get(img.url) || img.url,
+        label: img.label,
+      }));
 
-      if (result?.success) {
-        setGeneratedVideoUrl(result.videoUrl);
+      // Step 2: Try browser-based generation first, fallback to server
+      if (isFFmpegWASMSupported()) {
+        setGenerationProgress(isZh ? "正在載入影片引擎..." : "Loading video engine...");
+        
+        const blobUrl = await generateVideoInBrowser({
+          images: s3Images,
+          aspectRatio: aspectRatio as "4:5" | "9:16",
+          durationPerImage,
+          transition: transition as any,
+          transitionDuration,
+          overlayText: overlayText.trim() || undefined,
+          textPosition: textPosition as any,
+          fontSize,
+          fontColor,
+          backgroundColor,
+          imageScale,
+          imageOffsetX,
+          imageOffsetY,
+          overlayImageUrl: overlayImageUrl || undefined,
+          overlayImageScale: overlayImageUrl ? overlayImageScale : undefined,
+          overlayImageX: overlayImageUrl ? overlayImageX : undefined,
+          overlayImageY: overlayImageUrl ? overlayImageY : undefined,
+          backgroundVideoUrl: backgroundVideoUrl || undefined,
+          introVideoUrl: introVideoUrl || undefined,
+          outroVideoUrl: outroVideoUrl || undefined,
+          audioUrl: audioUrl || undefined,
+          audioVolume: audioUrl ? audioVolume : undefined,
+          onProgress: (msg, percent) => {
+            const progressText = percent ? `${msg} (${percent}%)` : msg;
+            setGenerationProgress(progressText);
+          },
+        });
+
+        // Upload the browser-generated video to S3 for permanent storage
+        setGenerationProgress(isZh ? "正在上傳影片到雲端..." : "Uploading video to cloud...");
+        const s3Url = await uploadVideoToS3(blobUrl, trpcMutate);
+        
+        // Revoke the blob URL to free memory
+        URL.revokeObjectURL(blobUrl);
+        
+        setGeneratedVideoUrl(s3Url);
         setCurrentStep(3);
       } else {
-        setGenerationError("Failed to generate video");
-        setCurrentStep(3);
+        // Fallback: use server-side generation (may not work in all deployments)
+        setGenerationProgress(isZh ? "正在生成影片（伺服器端）..." : "Generating video (server-side)...");
+        
+        const result = await trpcMutate("slideshow.generate", {
+          images: s3Images,
+          aspectRatio,
+          durationPerImage,
+          transition,
+          transitionDuration,
+          overlayText: overlayText.trim() || undefined,
+          textPosition,
+          fontSize,
+          fontFamily,
+          fontColor,
+          backgroundColor,
+          imageScale,
+          imageOffsetX,
+          imageOffsetY,
+          overlayImageUrl: overlayImageUrl || undefined,
+          overlayImageScale: overlayImageUrl ? overlayImageScale : undefined,
+          overlayImageX: overlayImageUrl ? overlayImageX : undefined,
+          overlayImageY: overlayImageUrl ? overlayImageY : undefined,
+          backgroundVideoUrl: backgroundVideoUrl || undefined,
+          introVideoUrl: introVideoUrl || undefined,
+          outroVideoUrl: outroVideoUrl || undefined,
+          audioUrl: audioUrl || undefined,
+          audioVolume: audioUrl ? audioVolume : undefined,
+        });
+
+        if (result?.success) {
+          setGeneratedVideoUrl(result.videoUrl);
+          setCurrentStep(3);
+        } else {
+          setGenerationError("Failed to generate video");
+          setCurrentStep(3);
+        }
       }
     } catch (e: any) {
       setGenerationError(e.message || "Failed to generate video");
@@ -1106,37 +1153,71 @@ export const SlideshowGenerator = () => {
         
         // Proxy upload Facebook CDN images to S3 first
         const urlMap = await proxyUploadImagesToS3(productImages);
-        
-        const result = await trpcMutate("slideshow.generate", {
-          images: productImages.map((url) => ({
-            url: urlMap.get(url) || url,
-            label: items[i].product.name,
-          })),
-          aspectRatio,
-          durationPerImage,
-          transition,
-          transitionDuration,
-          overlayText: overlayText.trim() || undefined,
-          textPosition,
-          fontSize,
-          fontFamily,
-          fontColor,
-          backgroundColor,
-          imageScale,
-          imageOffsetX,
-          imageOffsetY,
-          overlayImageUrl: overlayImageUrl || undefined,
-          overlayImageScale: overlayImageUrl ? overlayImageScale : undefined,
-          overlayImageX: overlayImageUrl ? overlayImageX : undefined,
-          overlayImageY: overlayImageUrl ? overlayImageY : undefined,
-          backgroundVideoUrl: backgroundVideoUrl || undefined,
-          introVideoUrl: introVideoUrl || undefined,
-          outroVideoUrl: outroVideoUrl || undefined,
-          audioUrl: audioUrl || undefined,
-          audioVolume: audioUrl ? audioVolume : undefined,
-        });
+        const s3Images = productImages.map((url) => ({
+          url: urlMap.get(url) || url,
+          label: items[i].product.name,
+        }));
 
-        if (!result?.success) throw new Error("Generation failed");
+        let videoUrl: string;
+
+        if (isFFmpegWASMSupported()) {
+          // Browser-based generation
+          const blobUrl = await generateVideoInBrowser({
+            images: s3Images,
+            aspectRatio: aspectRatio as "4:5" | "9:16",
+            durationPerImage,
+            transition: transition as any,
+            transitionDuration,
+            overlayText: overlayText.trim() || undefined,
+            textPosition: textPosition as any,
+            fontSize,
+            fontColor,
+            backgroundColor,
+            imageScale,
+            imageOffsetX,
+            imageOffsetY,
+            overlayImageUrl: overlayImageUrl || undefined,
+            overlayImageScale: overlayImageUrl ? overlayImageScale : undefined,
+            overlayImageX: overlayImageUrl ? overlayImageX : undefined,
+            overlayImageY: overlayImageUrl ? overlayImageY : undefined,
+            backgroundVideoUrl: backgroundVideoUrl || undefined,
+            introVideoUrl: introVideoUrl || undefined,
+            outroVideoUrl: outroVideoUrl || undefined,
+            audioUrl: audioUrl || undefined,
+            audioVolume: audioUrl ? audioVolume : undefined,
+          });
+          videoUrl = await uploadVideoToS3(blobUrl, trpcMutate);
+          URL.revokeObjectURL(blobUrl);
+        } else {
+          // Fallback: server-side generation
+          const result = await trpcMutate("slideshow.generate", {
+            images: s3Images,
+            aspectRatio,
+            durationPerImage,
+            transition,
+            transitionDuration,
+            overlayText: overlayText.trim() || undefined,
+            textPosition,
+            fontSize,
+            fontFamily,
+            fontColor,
+            backgroundColor,
+            imageScale,
+            imageOffsetX,
+            imageOffsetY,
+            overlayImageUrl: overlayImageUrl || undefined,
+            overlayImageScale: overlayImageUrl ? overlayImageScale : undefined,
+            overlayImageX: overlayImageUrl ? overlayImageX : undefined,
+            overlayImageY: overlayImageUrl ? overlayImageY : undefined,
+            backgroundVideoUrl: backgroundVideoUrl || undefined,
+            introVideoUrl: introVideoUrl || undefined,
+            outroVideoUrl: outroVideoUrl || undefined,
+            audioUrl: audioUrl || undefined,
+            audioVolume: audioUrl ? audioVolume : undefined,
+          });
+          if (!result?.success) throw new Error("Generation failed");
+          videoUrl = result.videoUrl;
+        }
 
         let driveLink: string | undefined;
 
@@ -1146,7 +1227,7 @@ export const SlideshowGenerator = () => {
           try {
             gapi.client.setToken({ access_token: googleAccessToken });
             const folderId = await getDriveFolderId();
-            const videoResponse = await fetch(result.videoUrl);
+            const videoResponse = await fetch(videoUrl);
             const videoBlob = await videoResponse.blob();
             const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, "");
             const suffix = Math.random().toString(36).substring(2, 6);
@@ -1186,7 +1267,7 @@ export const SlideshowGenerator = () => {
 
         setBatchItems((prev) =>
           prev.map((item, idx) =>
-            idx === i ? { ...item, status: "done", videoUrl: result.videoUrl, driveLink } : item
+            idx === i ? { ...item, status: "done", videoUrl, driveLink } : item
           )
         );
       } catch (e: any) {
