@@ -341,3 +341,11 @@
 - [x] data-header sticky z-index:30, filters sticky z-index:20, thead sticky z-index:10
 - [x] 移除 table-container overflow-x 避免破壞 sticky 定位
 - [x] 全部 60/60 測試通過
+
+## Bug Fix: 頂部區塊 sticky 未生效（根本原因修復）
+- [x] 確認根本原因：app-layout 和 app-main 沒有固定高度，導致滾動發生在 body 而非 app-content
+- [x] 修復 app-layout: height: 100vh + overflow: hidden
+- [x] 修復 app-main: height: 100vh + overflow: hidden
+- [x] 修復 app-content: overflow-y: auto + overflow-x: hidden（唯一滾動容器）
+- [x] 修復 .app-content .filters 明確設定 position: sticky + 背景色
+- [x] 全部 60/60 測試通過

@@ -3462,8 +3462,9 @@ tbody tr.selected:hover td {
 
 .app-layout {
   display: flex;
-  min-height: 100vh;
+  height: 100vh;
   width: 100%;
+  overflow: hidden;
 }
 
 /* Override the old #root centering */
@@ -3720,12 +3721,15 @@ tbody tr.selected:hover td {
   display: flex;
   flex-direction: column;
   background: var(--bg-primary);
+  height: 100vh;
+  overflow: hidden;
 }
 
 .app-content {
   flex: 1;
   padding: 24px;
   overflow-y: auto;
+  overflow-x: hidden;
 }
 
 /* Mobile Top Bar */
@@ -3788,6 +3792,8 @@ tbody tr.selected:hover td {
 
 /* Adjust filters sticky position in sidebar layout */
 .app-content .filters {
+  position: -webkit-sticky;
+  position: sticky;
   top: 58px;
   z-index: 20;
   border-radius: 0;
@@ -3795,6 +3801,7 @@ tbody tr.selected:hover td {
   margin-right: -24px;
   padding-left: 24px;
   padding-right: 24px;
+  background-color: var(--bg-primary);
 }
 
 /* Remove overflow-x from table-container in sidebar layout so thead sticky works */
