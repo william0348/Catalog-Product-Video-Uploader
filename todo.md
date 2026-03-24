@@ -330,3 +330,8 @@
 - [x] 修改 handleFetchData 驗證邏輯：無密碼設定時跳過驗證
 - [x] 修改 allFieldsFilled 判斷：無密碼設定時不要求 accessKey
 - [x] 全部 60/60 測試通過
+
+## Bug Fix: 上傳畫面表格第一列（表頭）被擋住
+- [x] 調查表格 thead 被遮擋的 CSS 問題：data-header fixed 定位在 sidebar 佈局中遮擋內容
+- [x] 修復：app-content 內 data-header 改為 sticky，filters 調整 top 值，thead th 加入 sticky 定位
+- [x] 全部 60/60 測試通過

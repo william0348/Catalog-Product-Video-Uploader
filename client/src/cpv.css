@@ -3774,6 +3774,27 @@ tbody tr.selected:hover td {
   padding-top: 0;
 }
 
+/* In sidebar layout, data-header should be sticky inside app-content scroll container */
+.app-content .data-header {
+  position: sticky;
+  top: 0;
+  left: auto;
+  width: 100%;
+}
+
+/* Adjust filters sticky position in sidebar layout */
+.app-content .filters {
+  top: 62px;
+}
+
+/* Make thead sticky below filters in sidebar layout */
+.app-content .table-container thead th {
+  position: sticky;
+  top: 130px;
+  z-index: 10;
+  background-color: var(--gray-6);
+}
+
 /* Override the card to not center */
 .app-content .card {
   max-width: 640px;
