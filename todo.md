@@ -335,3 +335,9 @@
 - [x] 調查表格 thead 被遮擋的 CSS 問題：data-header fixed 定位在 sidebar 佈局中遮擋內容
 - [x] 修復：app-content 內 data-header 改為 sticky，filters 調整 top 值，thead th 加入 sticky 定位
 - [x] 全部 60/60 測試通過
+
+## Bug Fix: 表格標題未對齊 + 頂部區域固定
+- [x] 讓標題欄 + 篩選欄 + 表頭行全部 sticky 固定在頂部
+- [x] data-header sticky z-index:30, filters sticky z-index:20, thead sticky z-index:10
+- [x] 移除 table-container overflow-x 避免破壞 sticky 定位
+- [x] 全部 60/60 測試通過

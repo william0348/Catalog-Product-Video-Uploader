@@ -3780,19 +3780,35 @@ tbody tr.selected:hover td {
   top: 0;
   left: auto;
   width: 100%;
+  z-index: 30;
+  background-color: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
 }
 
 /* Adjust filters sticky position in sidebar layout */
 .app-content .filters {
-  top: 62px;
+  top: 58px;
+  z-index: 20;
+  border-radius: 0;
+  margin-left: -24px;
+  margin-right: -24px;
+  padding-left: 24px;
+  padding-right: 24px;
 }
 
-/* Make thead sticky below filters in sidebar layout */
+/* Remove overflow-x from table-container in sidebar layout so thead sticky works */
+.app-content .table-container {
+  overflow-x: visible;
+}
+
+/* Make thead sticky below data-header + filters in sidebar layout */
 .app-content .table-container thead th {
   position: sticky;
-  top: 130px;
+  top: 140px;
   z-index: 10;
   background-color: var(--gray-6);
+  box-shadow: 0 1px 0 var(--separator);
 }
 
 /* Override the card to not center */
