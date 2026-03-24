@@ -3780,14 +3780,21 @@ tbody tr.selected:hover td {
 
 /* In sidebar layout, data-header should be sticky inside app-content scroll container */
 .app-content .data-header {
+  position: -webkit-sticky;
   position: sticky;
   top: 0;
   left: auto;
-  width: 100%;
   z-index: 30;
-  background-color: rgba(255, 255, 255, 0.95);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
+  background-color: #ffffff;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  /* Break out of app-content padding to fill full width */
+  margin-left: -24px;
+  margin-right: -24px;
+  padding-left: 24px;
+  padding-right: 24px;
+  width: auto;
+  box-shadow: 0 1px 0 var(--separator);
 }
 
 /* Adjust filters sticky position in sidebar layout */
@@ -3797,11 +3804,14 @@ tbody tr.selected:hover td {
   top: 58px;
   z-index: 20;
   border-radius: 0;
+  /* Break out of app-content padding to fill full width */
   margin-left: -24px;
   margin-right: -24px;
-  padding-left: 24px;
-  padding-right: 24px;
-  background-color: var(--bg-primary);
+  padding: 16px 24px;
+  background-color: #ffffff;
+  border-bottom: 1px solid var(--separator);
+  box-shadow: none;
+  margin-bottom: 0;
 }
 
 /* Remove overflow-x from table-container in sidebar layout so thead sticky works */
@@ -3831,6 +3841,20 @@ tbody tr.selected:hover td {
 @media (min-width: 1024px) {
   .app-content {
     padding: 32px 40px;
+  }
+
+  /* Match desktop padding for full-width sticky elements */
+  .app-content .data-header {
+    margin-left: -40px;
+    margin-right: -40px;
+    padding-left: 40px;
+    padding-right: 40px;
+  }
+
+  .app-content .filters {
+    margin-left: -40px;
+    margin-right: -40px;
+    padding: 16px 40px;
   }
 }
 

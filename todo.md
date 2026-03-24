@@ -349,3 +349,10 @@
 - [x] 修復 app-content: overflow-y: auto + overflow-x: hidden（唯一滾動容器）
 - [x] 修復 .app-content .filters 明確設定 position: sticky + 背景色
 - [x] 全部 60/60 測試通過
+
+## Bug Fix: Sticky 區塊視覺問題修復
+- [x] data-header 滾動時寬度縮進去 → 使用負 margin 突破 app-content padding，填滿整個寬度
+- [x] 篩選區塊（filters）左右沒有對齊 → 同樣使用負 margin + 對應 padding，桌面版 40px / 手機版 24px
+- [x] 表格行穿越上方 sticky 功能區塊 → 改用不透明白色背景（#ffffff）取代半透明 rgba
+- [x] 上方功能區塊整塊填滿寬度 → 移除 card 的 border-radius 和 shadow，加入 border-bottom 分隔線
+- [x] 全部 60/60 測試通過
