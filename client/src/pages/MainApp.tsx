@@ -421,16 +421,19 @@ export const MainApp = () => {
         return; 
     }
     if (GOOGLE_CLIENT_ID.includes("YOUR_GOOGLE_CLIENT_ID")) { setError("Please replace the placeholder Google Client ID in index.tsx."); return; }
-    if (!catalogId || !clientName || !accessKey) { 
-        setError("Please fill all required fields: Catalog, Client Name, and Access Key."); 
+    if (!catalogId || !clientName) { 
+        setError("Please fill all required fields: Catalog and Client Name."); 
         return; 
     }
     
     // Validate access key — use company access key if available, otherwise global settings
+    // If no access key is configured, skip validation
     const expectedAccessKey = selectedCompanyId ? companyAccessKeyValue : loadSettings().accessKey;
-    if (accessKey !== expectedAccessKey) {
+    if (expectedAccessKey) {
+      if (accessKey !== expectedAccessKey) {
         setError(t('invalidAccessKey'));
         return;
+      }
     }
     
     setIsLoading(true);
@@ -658,7 +661,9 @@ export const MainApp = () => {
 
   // ===== INPUT VIEW — Integrated settings + catalog selection =====
   if (view === "input") {
-    const allFieldsFilled = catalogId && clientName && accessKey;
+    const expectedAccessKeyForUI = selectedCompanyId ? companyAccessKeyValue : loadSettings().accessKey;
+    const needsAccessKey = !!expectedAccessKeyForUI;
+    const allFieldsFilled = catalogId && clientName && (needsAccessKey ? accessKey : true);
     const hasCatalogs = configuredCatalogs.length > 0;
     const hasToken = !!fbAccessToken;
     
@@ -765,10 +770,12 @@ export const MainApp = () => {
               <label htmlFor="clientName">{t('clientNameLabel')}</label>
               <input id="clientName" type="text" value={clientName} onChange={(e) => setClientName(e.target.value)} placeholder={t('clientNamePlaceholder')} />
           </div>
+          {needsAccessKey && (
           <div className="form-group">
               <label htmlFor="accessKey">{t('accessKeyLabel')}</label>
               <input id="accessKey" type="password" value={accessKey} onChange={(e) => setAccessKey(e.target.value.trim())} placeholder={t('accessKeyPlaceholder')} />
           </div>
+          )}
 
           <button className="fetch-btn" onClick={handleFetchData} disabled={isLoading || !allFieldsFilled}>
               {isLoading ? <div className="loader-small"></div> : t('fetchProducts')}

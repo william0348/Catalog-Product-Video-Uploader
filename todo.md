@@ -323,3 +323,10 @@
 - [x] 更新 routers.ts 移除影片相關參數
 - [x] 更新 videoGenerator.ts 移除影片合成邏輯
 - [x] 全部 60/60 測試通過
+
+## Phase 40: 存取密碼改為可選
+- [x] 如果管理員未設定存取密碼，使用者不需要輸入密碼
+- [x] 密碼欄位在無需密碼時自動隱藏
+- [x] 修改 handleFetchData 驗證邏輯：無密碼設定時跳過驗證
+- [x] 修改 allFieldsFilled 判斷：無密碼設定時不要求 accessKey
+- [x] 全部 60/60 測試通過
