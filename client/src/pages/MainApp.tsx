@@ -1,6 +1,7 @@
 
 import React, { useState, useMemo, useCallback, useEffect, useRef, useContext } from "react";
 import { LanguageContext } from '@/contexts/LanguageContext';
+import { useGoogleAuth } from '@/contexts/GoogleAuthContext';
 import { IntroGuide } from '@/components/IntroGuide';
 import { ToastContainer } from '@/components/Toast';
 import { ImagePreview } from '@/components/ImagePreview';
@@ -8,7 +9,7 @@ import { ProductTable } from '@/components/ProductTable';
 import { GoogleDriveUploader } from '@/components/GoogleDriveUploader';
 import { AppFooter } from '@/components/AppFooter';
 import { 
-    BASE_URL, GOOGLE_CLIENT_ID, GOOGLE_API_SCOPES, GOOGLE_AUTH_TOKEN_KEY,
+    BASE_URL, GOOGLE_CLIENT_ID,
     SESSION_DATA_KEY, INTRO_GUIDE_KEY
 } from '@/constants';
 import { loadSettings, saveSettings, fetchCatalogName, validateAccessToken, loadSettingsFromServer, saveUploadRecord, getUploadRecords, getCompaniesByEmail, loadCompanySettings, saveCompanySettings, saveSelectedCompany, getSelectedCompany, activateMemberships, type CatalogConfig, type AppSettings, type CompanyInfo } from '@/settingsStore';
@@ -20,6 +21,9 @@ declare const gapi: any;
 declare const window: any;
 
 export const MainApp = () => {
+  // Google Auth from shared context
+  const { googleAccessToken, userEmail, isGapiClientReady, isGoogleReady, handleGoogleLogin, handleLogout } = useGoogleAuth();
+
   const [catalogId, setCatalogId] = useState("");
   const [clientName, setClientName] = useState("");
   const [accessKey, setAccessKey] = useState("");
@@ -32,10 +36,6 @@ export const MainApp = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<React.ReactNode | null>(null);
   const [hoveredImage, setHoveredImage] = useState<HoveredImage | null>(null);
-  const [googleTokenClient, setGoogleTokenClient] = useState<any>(null);
-  const [googleAccessToken, setGoogleAccessToken] = useState<string|null>(null);
-  const [userEmail, setUserEmail] = useState<string|null>(null);
-  const [isGapiClientReady, setIsGapiClientReady] = useState(false);
   const [uploadedVideos, setUploadedVideos] = useState<Record<string, ProductVideos>>({});
   const [isSyncing, setIsSyncing] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
@@ -288,104 +288,12 @@ export const MainApp = () => {
     setSelectedRetailerIds(new Set());
   }, []);
 
-  const handleLogout = useCallback(() => {
-    // Revoke the Google token so the account chooser appears on next login
-    const token = googleAccessToken || localStorage.getItem(GOOGLE_AUTH_TOKEN_KEY);
-    if (token && window.google?.accounts?.oauth2) {
-      window.google.accounts.oauth2.revoke(token, () => {
-        console.log('[Google] Token revoked');
-      });
+  // Clear uploaded videos on logout
+  useEffect(() => {
+    if (!googleAccessToken) {
+      setUploadedVideos({});
     }
-    localStorage.removeItem(GOOGLE_AUTH_TOKEN_KEY);
-    sessionStorage.removeItem('google_drive_folder_id');
-    if (window.gapi?.client) {
-      gapi.client.setToken(null);
-    }
-    setGoogleAccessToken(null);
-    setUserEmail(null);
-    setUploadedVideos({});
   }, [googleAccessToken]);
-  
-  useEffect(() => {
-      const checkGapi = () => {
-          if (window.gapi) {
-              gapi.load('client', () => {
-                   gapi.client.init({
-                       discoveryDocs: [
-                           "https://www.googleapis.com/discovery/v1/apis/drive/v3/rest"
-                        ]
-                   }).then(() => setIsGapiClientReady(true))
-                   .catch((err:any) => setError(prev => prev || `Failed to initialize Google APIs. Error: ${err.message}`));
-              });
-          } else { setTimeout(checkGapi, 100); }
-      };
-      checkGapi();
-  }, []);
-
-  useEffect(() => {
-      if (!isGapiClientReady) return;
-      
-      const checkGis = () => {
-          if (window.google) {
-              const tokenClient = window.google.accounts.oauth2.initTokenClient({
-                  client_id: GOOGLE_CLIENT_ID, scope: GOOGLE_API_SCOPES,
-                  callback: (tokenResponse: any) => {
-                      if (tokenResponse.error) {
-                          setError(`Google login error: ${tokenResponse.error_description || tokenResponse.error}`);
-                          setGoogleAccessToken(null); 
-                          localStorage.removeItem(GOOGLE_AUTH_TOKEN_KEY);
-                          return;
-                      }
-                      const token = tokenResponse.access_token;
-                      setGoogleAccessToken(token);
-                      gapi.client.setToken({ access_token: token });
-                      localStorage.setItem(GOOGLE_AUTH_TOKEN_KEY, token);
-                  },
-              });
-              setGoogleTokenClient(tokenClient);
-          } else { setTimeout(checkGis, 100); }
-      };
-      checkGis();
-  }, [isGapiClientReady]);
-
-    useEffect(() => {
-        const storedToken = localStorage.getItem(GOOGLE_AUTH_TOKEN_KEY);
-        if (storedToken && isGapiClientReady) {
-            setGoogleAccessToken(storedToken);
-            gapi.client.setToken({ access_token: storedToken });
-        }
-    }, [isGapiClientReady]);
-
-  useEffect(() => {
-    if (googleAccessToken && isGapiClientReady) {
-        fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
-            headers: { 'Authorization': `Bearer ${googleAccessToken}` }
-        })
-        .then(response => {
-            if (!response.ok) {
-                 if (response.status === 401) {
-                    handleLogout();
-                    throw new Error('Google session expired. Please log in again.');
-                }
-                throw new Error('Failed to fetch user info');
-            }
-            return response.json();
-        })
-        .then(data => {
-            if (data.email) {
-                setUserEmail(data.email);
-            } else {
-                console.error("Email not found in userinfo response:", data);
-                setError("Could not retrieve your Google email address.");
-            }
-        }).catch((err: any) => {
-            console.error("Error fetching user profile:", err);
-            if (!err.message.includes('session expired')) {
-                setError("Could not fetch your Google user profile. Please try logging in again.");
-            }
-        });
-    }
-  }, [googleAccessToken, isGapiClientReady, handleLogout]);
 
   const writeDataToDatabase = async (product: Product, video: UploadedVideo, videoType: VideoType) => {
     const currentStateOfThisProduct = uploadedVideos[product.retailer_id] || {};
@@ -421,11 +329,7 @@ export const MainApp = () => {
     }
   };
 
-  const handleGoogleLogin = () => {
-    if (googleTokenClient) {
-        googleTokenClient.requestAccessToken();
-    }
-  };
+  // handleGoogleLogin is now provided by GoogleAuthContext
 
   const syncVideosFromDatabase = useCallback(async () => {
     if (!catalogId) {
@@ -750,7 +654,7 @@ export const MainApp = () => {
         return set ? set.name : t('selectSetPlaceholder');
     }, [selectedSet, productSets, t]);
 
-  const isGoogleReady = isGapiClientReady && !!googleTokenClient;
+  // isGoogleReady is now provided by GoogleAuthContext
 
   // ===== INPUT VIEW — Integrated settings + catalog selection =====
   if (view === "input") {

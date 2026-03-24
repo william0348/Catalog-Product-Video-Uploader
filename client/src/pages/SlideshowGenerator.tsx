@@ -1,5 +1,6 @@
 import { useState, useEffect, useContext, useRef, useMemo, useCallback } from "react";
 import { LanguageContext } from "@/contexts/LanguageContext";
+import { useGoogleAuth } from "@/contexts/GoogleAuthContext";
 import { AppFooter } from "@/components/AppFooter";
 import { ReelsOverlay } from "@/components/ReelsOverlay";
 import {
@@ -12,11 +13,6 @@ import {
   type CatalogConfig,
   type CompanyInfo,
 } from "@/settingsStore";
-import {
-  GOOGLE_CLIENT_ID,
-  GOOGLE_AUTH_TOKEN_KEY,
-  GOOGLE_API_SCOPES,
-} from "@/constants";
 import { getDriveFolderId } from "@/lib/google";
 import { generateVideoInBrowser, uploadVideoToS3, isFFmpegWASMSupported } from "@/lib/videoGenerator";
 
@@ -183,10 +179,8 @@ export const SlideshowGenerator = () => {
   const { t, language } = useContext(LanguageContext);
   const isZh = language === "zh-TW";
 
-  // Auth state
-  const [userEmail, setUserEmail] = useState<string | null>(null);
-  const [googleAccessToken, setGoogleAccessToken] = useState<string | null>(null);
-  const [googleTokenClient, setGoogleTokenClient] = useState<any>(null);
+  // Auth state from shared context
+  const { googleAccessToken, userEmail, isGapiClientReady, handleGoogleLogin } = useGoogleAuth();
   const [isGapiReady, setIsGapiReady] = useState(false);
 
   // Company state
@@ -370,42 +364,8 @@ export const SlideshowGenerator = () => {
     xhr.send();
   }, []);
 
-  // ===== Google Auth =====
-  useEffect(() => {
-    const savedToken = sessionStorage.getItem(GOOGLE_AUTH_TOKEN_KEY);
-    if (savedToken) {
-      setGoogleAccessToken(savedToken);
-      fetchUserEmail(savedToken);
-    }
-    const initGoogleAuth = () => {
-      if (typeof google !== "undefined" && google.accounts) {
-        const client = google.accounts.oauth2.initTokenClient({
-          client_id: GOOGLE_CLIENT_ID,
-          scope: GOOGLE_API_SCOPES,
-          callback: (response: any) => {
-            if (response.access_token) {
-              setGoogleAccessToken(response.access_token);
-              sessionStorage.setItem(GOOGLE_AUTH_TOKEN_KEY, response.access_token);
-              fetchUserEmail(response.access_token);
-            }
-          },
-        });
-        setGoogleTokenClient(client);
-      }
-    };
-    if (typeof google !== "undefined") {
-      initGoogleAuth();
-    } else {
-      const interval = setInterval(() => {
-        if (typeof google !== "undefined") {
-          initGoogleAuth();
-          clearInterval(interval);
-        }
-      }, 200);
-      return () => clearInterval(interval);
-    }
-  }, []);
-
+  // ===== Google Auth (from shared context) =====
+  // Load gapi drive client when gapi is ready
   useEffect(() => {
     const initGapi = () => {
       if (typeof gapi !== "undefined" && gapi.client) {
@@ -424,18 +384,6 @@ export const SlideshowGenerator = () => {
       return () => clearInterval(interval);
     }
   }, []);
-
-  const fetchUserEmail = async (token: string) => {
-    try {
-      const res = await fetch("https://www.googleapis.com/oauth2/v2/userinfo", {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      const data = await res.json();
-      if (data.email) setUserEmail(data.email);
-    } catch (e) {
-      console.error("Failed to fetch user email:", e);
-    }
-  };
 
   useEffect(() => {
     if (!userEmail) return;
@@ -1311,7 +1259,7 @@ export const SlideshowGenerator = () => {
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
           {!googleAccessToken && (
             <button
-              onClick={() => googleTokenClient?.requestAccessToken()}
+              onClick={handleGoogleLogin}
               style={{ background: "#fff", color: "#667eea", border: "none", borderRadius: 8, padding: "8px 16px", fontSize: 13, fontWeight: 600, cursor: "pointer" }}
             >
               {t("loginWithGoogle") || "Login with Google"}

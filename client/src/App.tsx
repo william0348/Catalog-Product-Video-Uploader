@@ -1,5 +1,6 @@
 import { useState, useEffect, useContext, useCallback } from "react";
 import { LanguageProvider, LanguageContext } from "@/contexts/LanguageContext";
+import { GoogleAuthProvider, useGoogleAuth } from "@/contexts/GoogleAuthContext";
 import { AppLayout } from "@/components/AppLayout";
 import { AdminPanel } from "@/pages/AdminPanel";
 import { TermsOfServicePage } from "@/pages/TermsOfServicePage";
@@ -29,6 +30,7 @@ const pageToHash = (page: string): string => {
 
 const PageRouter = () => {
     const { t } = useContext(LanguageContext);
+    const { userEmail, isGoogleReady, handleGoogleLogin, handleLogout } = useGoogleAuth();
     const [currentPage, setCurrentPage] = useState(() => hashToPage(window.location.hash || '#/'));
     
     useEffect(() => {
@@ -77,6 +79,10 @@ const PageRouter = () => {
         <AppLayout
             currentPage={currentPage}
             onNavigate={handleNavigate}
+            userEmail={userEmail}
+            onGoogleLogin={handleGoogleLogin}
+            onLogout={handleLogout}
+            isGoogleReady={isGoogleReady}
         >
             {renderPage()}
         </AppLayout>
@@ -86,7 +92,9 @@ const PageRouter = () => {
 function App() {
     return (
         <LanguageProvider>
-            <PageRouter />
+            <GoogleAuthProvider>
+                <PageRouter />
+            </GoogleAuthProvider>
         </LanguageProvider>
     );
 }

@@ -304,3 +304,11 @@
 - [x] XLSX 匯出加入公司名稱
 - [x] 更新測試用例以匹配新行為
 - [x] 全部 60/60 測試通過
+
+## Bug Fix: 側邊欄 Google 登入按鈕無法點擊
+- [x] 調查原因：App.tsx 沒有傳遞 auth props 給 AppLayout
+- [x] 建立 GoogleAuthContext 共享 Google 登入狀態
+- [x] 更新 App.tsx 傳遞 auth props 給 AppLayout
+- [x] 重構 MainApp 使用 GoogleAuthContext（移除重複的 Google 初始化邏輯）
+- [x] 重構 SlideshowGenerator 使用 GoogleAuthContext
+- [x] 全部 60/60 測試通過
