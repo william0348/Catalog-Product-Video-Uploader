@@ -3,7 +3,7 @@ import React, { useState, useEffect, useCallback, useMemo, useContext } from 're
 import * as XLSX from 'xlsx';
 import { AppFooter } from '@/components/AppFooter';
 import { LanguageContext } from '@/contexts/LanguageContext';
-import { loadSettings, saveSettings, fetchCatalogName, validateAccessToken, loadSettingsFromServer, type AppSettings, type CatalogConfig } from '@/settingsStore';
+import { fetchCatalogName, validateAccessToken, type AppSettings, type CatalogConfig } from '@/settingsStore';
 
 interface AdminPanelProps {
     onBack: () => void;

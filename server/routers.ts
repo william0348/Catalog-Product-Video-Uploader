@@ -285,15 +285,12 @@ export const appRouter = router({
         let fbWarning: string | null = null;
         let handle: string | null = null;
 
-        // 2. Get the access token - try company first, then record's companyId, then global settings
+        // 2. Get the access token from company settings only (no legacy global fallback)
         let accessToken: string | null = null;
         const companyId = input.companyId ?? record.companyId;
         if (companyId) {
           const company = await getCompanyById(companyId);
           accessToken = company?.facebookAccessToken ?? null;
-        }
-        if (!accessToken) {
-          accessToken = await getSetting("facebookAccessToken");
         }
 
         if (accessToken) {

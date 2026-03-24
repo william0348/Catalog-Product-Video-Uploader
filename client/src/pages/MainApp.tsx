@@ -12,7 +12,7 @@ import {
     BASE_URL, GOOGLE_CLIENT_ID,
     SESSION_DATA_KEY, INTRO_GUIDE_KEY
 } from '@/constants';
-import { loadSettings, saveSettings, fetchCatalogName, validateAccessToken, loadSettingsFromServer, saveUploadRecord, getUploadRecords, getCompaniesByEmail, loadCompanySettings, saveCompanySettings, saveSelectedCompany, getSelectedCompany, activateMemberships, type CatalogConfig, type AppSettings, type CompanyInfo } from '@/settingsStore';
+import { fetchCatalogName, validateAccessToken, saveUploadRecord, getUploadRecords, getCompaniesByEmail, loadCompanySettings, saveCompanySettings, saveSelectedCompany, getSelectedCompany, activateMemberships, type CatalogConfig, type AppSettings, type CompanyInfo } from '@/settingsStore';
 import type { Product, ProductSet, Catalog, HoveredImage, ProductVideos, VideoType, ToastMessage, UploadedVideo, VideoFilterType } from '@/types';
 import { apiFetch, fetchAllPages } from '@/api';
 
@@ -96,7 +96,7 @@ export const MainApp = () => {
   const [isLoadingCompanies, setIsLoadingCompanies] = useState(false);
   const [companyAccessKeyValue, setCompanyAccessKeyValue] = useState<string>('');
 
-  // Load settings on mount — first from localStorage (fast), then from server (authoritative)
+  // Load settings on mount — only from company settings (no legacy global fallback)
   useEffect(() => {
     const savedCompanyId = getSelectedCompany();
     if (savedCompanyId) {
@@ -108,16 +108,10 @@ export const MainApp = () => {
         setCompanyAccessKeyValue(companySettings.accessKey);
       }).catch(console.error);
     } else {
-      // Fallback to global settings
-      const settings = loadSettings();
-      setConfiguredCatalogs(settings.catalogs);
-      setFbAccessToken(settings.facebookAccessToken);
-      setTokenInput(settings.facebookAccessToken);
-      loadSettingsFromServer().then(serverSettings => {
-        setConfiguredCatalogs(serverSettings.catalogs);
-        setFbAccessToken(serverSettings.facebookAccessToken);
-        setTokenInput(serverSettings.facebookAccessToken);
-      }).catch(console.error);
+      // No company selected — clear all settings
+      setConfiguredCatalogs([]);
+      setFbAccessToken('');
+      setTokenInput('');
     }
   }, []);
 
@@ -132,11 +126,10 @@ export const MainApp = () => {
           setCompanyAccessKeyValue(companySettings.accessKey);
         }).catch(console.error);
       } else {
-        loadSettingsFromServer().then(serverSettings => {
-          setConfiguredCatalogs(serverSettings.catalogs);
-          setFbAccessToken(serverSettings.facebookAccessToken);
-          setTokenInput(serverSettings.facebookAccessToken);
-        }).catch(console.error);
+        // No company selected — clear all settings
+        setConfiguredCatalogs([]);
+        setFbAccessToken('');
+        setTokenInput('');
       }
     }
   }, [view, selectedCompanyId]);
@@ -181,10 +174,8 @@ export const MainApp = () => {
       // Save to company
       await saveCompanySettings(selectedCompanyId, { facebookAccessToken: tokenInput });
     } else {
-      // Fallback to global settings
-      const settings = loadSettings();
-      const updated = { ...settings, facebookAccessToken: tokenInput };
-      saveSettings(updated);
+      // No company selected — cannot save token
+      console.warn('No company selected, token not saved');
     }
     setFbAccessToken(tokenInput);
     setIsSaved(true);
@@ -232,9 +223,8 @@ export const MainApp = () => {
       if (selectedCompanyId) {
         await saveCompanySettings(selectedCompanyId, { catalogs: newCatalogs });
       } else {
-        const settings = loadSettings();
-        const updated = { ...settings, catalogs: newCatalogs };
-        saveSettings(updated);
+        // No company selected — cannot save catalogs
+        console.warn('No company selected, catalog not saved');
       }
       setConfiguredCatalogs(newCatalogs);
       setNewCatalogId('');
@@ -250,9 +240,8 @@ export const MainApp = () => {
     if (selectedCompanyId) {
       await saveCompanySettings(selectedCompanyId, { catalogs: newCatalogs });
     } else {
-      const settings = loadSettings();
-      const updated = { ...settings, catalogs: newCatalogs };
-      saveSettings(updated);
+      // No company selected — cannot save catalogs
+      console.warn('No company selected, catalog not saved');
     }
     setConfiguredCatalogs(newCatalogs);
     if (catalogId === catalogIdToRemove) {
@@ -452,7 +441,7 @@ export const MainApp = () => {
     
     // Validate access key — use company access key if available, otherwise global settings
     // If no access key is configured, skip validation
-    const expectedAccessKey = selectedCompanyId ? companyAccessKeyValue : loadSettings().accessKey;
+    const expectedAccessKey = selectedCompanyId ? companyAccessKeyValue : '';
     if (expectedAccessKey) {
       if (accessKey !== expectedAccessKey) {
         setError(t('invalidAccessKey'));
@@ -685,7 +674,7 @@ export const MainApp = () => {
 
   // ===== INPUT VIEW — Integrated settings + catalog selection =====
   if (view === "input") {
-    const expectedAccessKeyForUI = selectedCompanyId ? companyAccessKeyValue : loadSettings().accessKey;
+    const expectedAccessKeyForUI = selectedCompanyId ? companyAccessKeyValue : '';
     const needsAccessKey = !!expectedAccessKeyForUI;
     const allFieldsFilled = catalogId && clientName && (needsAccessKey ? accessKey : true);
     const hasCatalogs = configuredCatalogs.length > 0;

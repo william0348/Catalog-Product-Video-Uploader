@@ -380,3 +380,12 @@
 - [x] CSV URL 改名為「目錄補充資料網址」
 - [x] i18n 翻譯更新（中英文）
 - [x] 全部 60/60 測試通過
+
+## Phase 42: 移除舊系統設定（目錄 + Access Token）
+- [x] 分析並找到所有使用舊系統設定的地方（MainApp、SlideshowGenerator、AdminPanel、routers.ts）
+- [x] MainApp：移除 loadSettings/loadSettingsFromServer/saveSettings fallback，沒有公司時清空 catalogs 和 token
+- [x] SlideshowGenerator：移除 XHR settings.getAll 和 loadSettings fallback
+- [x] 後端 deleteVideoFromCatalog：移除 getSetting("facebookAccessToken") fallback，只用公司 token
+- [x] 清理不再使用的 import（loadSettings、saveSettings、loadSettingsFromServer）
+- [x] 更新測試：將 2 個使用全域 token 的測試改為使用公司 token
+- [x] 全部 60/60 測試通過

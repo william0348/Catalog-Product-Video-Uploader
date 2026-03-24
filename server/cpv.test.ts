@@ -517,14 +517,24 @@ describe("deleteVideoFromCatalog", () => {
     const ctx = createPublicContext();
     const caller = appRouter.createCaller(ctx);
 
+    // Create a company with access token (no more global settings fallback)
+    companiesStore.push({
+      id: 10,
+      name: "TestCo",
+      facebookAccessToken: "test-fb-token-123",
+      catalogs: "[]",
+      accessKey: null,
+      createdBy: 0,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+
     await caller.uploads.create({
       catalogId: "cat-123",
       retailerId: "ret-001",
       productName: "Product A",
       clientName: "Acme Corp",
     });
-
-    settings["facebookAccessToken"] = "test-fb-token-123";
 
     mockFetch
       .mockResolvedValueOnce({
@@ -536,7 +546,7 @@ describe("deleteVideoFromCatalog", () => {
         json: async () => ({ data: [{ id: "123", retailer_id: "ret-001", video: [] }] }),
       });
 
-    const result = await caller.uploads.deleteVideoFromCatalog({ id: 1 });
+    const result = await caller.uploads.deleteVideoFromCatalog({ id: 1, companyId: 10 });
 
     expect(result.success).toBe(true);
     expect(result.handle).toBe("handle-abc-123");
@@ -559,14 +569,24 @@ describe("deleteVideoFromCatalog", () => {
     const ctx = createPublicContext();
     const caller = appRouter.createCaller(ctx);
 
+    // Create a company with access token (no more global settings fallback)
+    companiesStore.push({
+      id: 11,
+      name: "TestCo2",
+      facebookAccessToken: "test-fb-token-123",
+      catalogs: "[]",
+      accessKey: null,
+      createdBy: 0,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+
     await caller.uploads.create({
       catalogId: "cat-123",
       retailerId: "ret-001",
       productName: "Product A",
       clientName: "Acme Corp",
     });
-
-    settings["facebookAccessToken"] = "test-fb-token-123";
 
     mockFetch.mockResolvedValueOnce({
       ok: false,
@@ -575,7 +595,7 @@ describe("deleteVideoFromCatalog", () => {
       }),
     });
 
-    const result = await caller.uploads.deleteVideoFromCatalog({ id: 1 });
+    const result = await caller.uploads.deleteVideoFromCatalog({ id: 1, companyId: 11 });
     expect(result.success).toBe(true);
     expect(result.fbSuccess).toBe(false);
     expect(result.warning).toContain("Invalid access token");

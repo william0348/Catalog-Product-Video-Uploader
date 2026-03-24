@@ -6,8 +6,6 @@ import { ReelsOverlay } from "@/components/ReelsOverlay";
 import {
   getCompaniesByEmail,
   loadCompanySettings,
-  loadSettings,
-  loadSettingsFromServer,
   getSelectedCompany,
   saveSelectedCompany,
   type CatalogConfig,
@@ -307,43 +305,15 @@ export const SlideshowGenerator = () => {
   const [editingTemplateId, setEditingTemplateId] = useState<number | null>(null);
   const [editingTemplateName, setEditingTemplateName] = useState("");
 
-  // ===== Load settings on mount =====
+  // ===== Load settings on mount — only from company settings (no legacy global fallback) =====
   useEffect(() => {
-    const xhr = new XMLHttpRequest();
-    xhr.open("GET", "/api/trpc/settings.getAll", true);
-    xhr.withCredentials = true;
-    xhr.onload = function () {
-      try {
-        const data = JSON.parse(xhr.responseText);
-        const result = data?.result?.data?.json;
-        if (result) {
-          const catalogs = result.catalogs ? JSON.parse(result.catalogs) : [];
-          const token = result.facebookAccessToken || "";
-          setConfiguredCatalogs(catalogs);
-          setFbAccessToken(token);
-        }
-      } catch (e) {
-        console.error("[Slideshow] Failed to parse settings:", e);
-        const localSettings = loadSettings();
-        setConfiguredCatalogs(localSettings.catalogs);
-        setFbAccessToken(localSettings.facebookAccessToken);
-      }
+    // Settings will be loaded when selectedCompanyId is set (see useEffect below)
+    // If no company is selected, keep defaults (empty catalogs, no token)
+    if (!selectedCompanyId) {
+      setConfiguredCatalogs([]);
+      setFbAccessToken('');
       setIsLoadingSettings(false);
-    };
-    xhr.onerror = function () {
-      const localSettings = loadSettings();
-      setConfiguredCatalogs(localSettings.catalogs);
-      setFbAccessToken(localSettings.facebookAccessToken);
-      setIsLoadingSettings(false);
-    };
-    xhr.timeout = 15000;
-    xhr.ontimeout = function () {
-      const localSettings = loadSettings();
-      setConfiguredCatalogs(localSettings.catalogs);
-      setFbAccessToken(localSettings.facebookAccessToken);
-      setIsLoadingSettings(false);
-    };
-    xhr.send();
+    }
   }, []);
 
   // ===== Google Auth (from shared context) =====
