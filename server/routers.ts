@@ -483,9 +483,6 @@ export const appRouter = router({
         overlayImageScale: z.number().min(0.05).max(1.0).optional(),
         overlayImageX: z.number().min(-50).max(50).optional(),
         overlayImageY: z.number().min(-50).max(50).optional(),
-        backgroundVideoUrl: z.string().url().optional(),
-        introVideoUrl: z.string().url().optional(),
-        outroVideoUrl: z.string().url().optional(),
         audioUrl: z.string().url().optional(),
         audioVolume: z.number().min(0).max(1).optional(),
       }))
@@ -647,8 +644,10 @@ export const appRouter = router({
         return { success: true, url };
       }),
 
-    // Upload a custom video file (base64) to S3 for intro/outro/background
-    uploadVideo: publicProcedure
+
+
+    // Upload a browser-generated slideshow video to S3
+    uploadGeneratedVideo: publicProcedure
       .input(z.object({
         base64Data: z.string(),
         fileName: z.string(),
@@ -656,16 +655,15 @@ export const appRouter = router({
       }))
       .mutation(async ({ input }) => {
         const buffer = Buffer.from(input.base64Data, "base64");
-        if (buffer.length > 50 * 1024 * 1024) {
-          throw new Error("Video file too large. Maximum 50MB.");
+        if (buffer.length > 100 * 1024 * 1024) {
+          throw new Error("Video file too large. Maximum 100MB.");
         }
         const suffix = Math.random().toString(36).substring(2, 8);
         const ext = input.fileName.split(".").pop() || "mp4";
-        const fileKey = `slideshow-videos-upload/${Date.now()}-${suffix}.${ext}`;
+        const fileKey = `slideshow-videos/${Date.now()}-${suffix}.${ext}`;
         const { url } = await storagePut(fileKey, buffer, input.mimeType);
         return { success: true, url };
       }),
-
     // Upload a custom audio file (base64) to S3 for background music
     uploadAudio: publicProcedure
       .input(z.object({

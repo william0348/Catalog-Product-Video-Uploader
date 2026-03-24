@@ -312,3 +312,14 @@
 - [x] 重構 MainApp 使用 GoogleAuthContext（移除重複的 Google 初始化邏輯）
 - [x] 重構 SlideshowGenerator 使用 GoogleAuthContext
 - [x] 全部 60/60 測試通過
+
+## Phase 39: 移除幻燈片生成器中所有影片結合功能
+- [x] 移除背景影片（backgroundVideo）相關 UI 和狀態
+- [x] 移除片頭影片（introVideo）相關 UI 和狀態
+- [x] 移除片尾影片（outroVideo）相關 UI 和狀態
+- [x] 移除後端 uploadVideo endpoint（替換為 uploadGeneratedVideo）
+- [x] 移除後端 FFmpeg 影片合成邏輯（背景影片、片頭片尾 concat）
+- [x] 移除前端影片預覽播放器
+- [x] 更新 routers.ts 移除影片相關參數
+- [x] 更新 videoGenerator.ts 移除影片合成邏輯
+- [x] 全部 60/60 測試通過

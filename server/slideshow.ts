@@ -138,9 +138,6 @@ export interface SlideshowOptions {
   overlayImageScale?: number; // 0.05 to 1.0, default 0.2 (20% of canvas width)
   overlayImageX?: number; // -50 to 50 (percentage of canvas width), default 0 (center)
   overlayImageY?: number; // -50 to 50 (percentage of canvas height), default 0 (center)
-  backgroundVideoUrl?: string; // URL of background video (plays behind product images)
-  introVideoUrl?: string; // URL of intro video (prepended before slideshow)
-  outroVideoUrl?: string; // URL of outro video (appended after slideshow)
   audioUrl?: string;
   audioVolume?: number;
 }
@@ -291,9 +288,6 @@ export async function generateSlideshow(options: SlideshowOptions): Promise<Buff
     overlayImageScale = 0.2,
     overlayImageX = 0,
     overlayImageY = 0,
-    backgroundVideoUrl,
-    introVideoUrl,
-    outroVideoUrl,
     audioUrl,
     audioVolume = 0.5,
   } = options;
@@ -405,57 +399,8 @@ export async function generateSlideshow(options: SlideshowOptions): Promise<Buff
       fontColor: ffmpegFontColor, fontPath, durationPerImage, transitionDuration,
     };
 
-    // 4. Apply background video if provided
-    // Background video plays behind product images (images overlaid on video frames)
-    if (backgroundVideoUrl) {
-      console.log(`[Slideshow] Applying background video...`);
-      const bgVideoPath = path.join(tmpDir, "bg_video_raw.mp4");
-      await downloadFile(backgroundVideoUrl, bgVideoPath);
-      
-      // Normalize background video to target resolution and framerate
-      const bgNormPath = path.join(tmpDir, "bg_video_norm.mp4");
-      await runFFmpeg([
-        "-i", bgVideoPath,
-        "-vf", `scale=${resolution.width}:${resolution.height}:force_original_aspect_ratio=decrease,pad=${resolution.width}:${resolution.height}:(ow-iw)/2:(oh-ih)/2:color=black,fps=30`,
-        "-c:v", "libx264", "-preset", "fast", "-crf", "23",
-        "-an", // strip audio from bg video (we use separate audio track)
-        "-movflags", "+faststart",
-        bgNormPath,
-      ]);
-      
-      // For each processed image, overlay it on a frame extracted from the bg video
-      // We loop the bg video to cover all images
-      for (let i = 0; i < processedPaths.length; i++) {
-        const timeOffset = (i * durationPerImage) % 60; // loop within 60s
-        const bgFramePath = path.join(tmpDir, `bgframe_${String(i).padStart(3, "0")}.png`);
-        // Extract a frame from the bg video at the time offset for this image
-        await runFFmpeg([
-          "-ss", String(timeOffset),
-          "-i", bgNormPath,
-          "-frames:v", "1",
-          "-vf", `scale=${resolution.width}:${resolution.height}`,
-          bgFramePath,
-        ]);
-        
-        // Overlay the processed product image directly on top of the bg video frame
-        // NO colorkey removal - keep the original product image intact
-        const withBgPath = path.join(tmpDir, `withbg_${String(i).padStart(3, "0")}.png`);
-        await runFFmpeg([
-          "-i", bgFramePath,
-          "-i", processedPaths[i],
-          "-filter_complex", `[0:v][1:v]overlay=0:0,format=yuv420p`,
-          "-frames:v", "1",
-          withBgPath,
-        ]);
-        processedPaths[i] = withBgPath;
-      }
-      console.log(`[Slideshow] Background video applied to ${processedPaths.length} frames.`);
-    }
-
-    // 5. Generate slideshow video (without audio first)
-    const slideshowPath = path.join(tmpDir, "slideshow_only.mp4");
-    const needsConcat = !!(introVideoUrl || outroVideoUrl);
-    const videoBeforeAudio = needsConcat ? slideshowPath : (audioUrl ? videoOnlyPath : outputPath);
+    // 4. Generate slideshow video (without audio first)
+    const videoBeforeAudio = audioUrl ? videoOnlyPath : outputPath;
     
     if (images.length === 1 || transition === "none") {
       await generateSimpleSlideshow(processedPaths, videoBeforeAudio, durationPerImage, textOpts);
@@ -463,62 +408,7 @@ export async function generateSlideshow(options: SlideshowOptions): Promise<Buff
       await generateTransitionSlideshow(processedPaths, videoBeforeAudio, durationPerImage, transitionDuration, transition, textOpts);
     }
 
-    // 6. Concatenate intro + slideshow + outro if provided
-    let videoAfterConcat = videoBeforeAudio;
-    if (needsConcat) {
-      console.log(`[Slideshow] Concatenating intro/outro videos...`);
-      const concatParts: string[] = [];
-      
-      if (introVideoUrl) {
-        const introRawPath = path.join(tmpDir, "intro_raw.mp4");
-        const introNormPath = path.join(tmpDir, "intro_norm.mp4");
-        await downloadFile(introVideoUrl, introRawPath);
-        // Normalize intro to same resolution, framerate, codec
-        await runFFmpeg([
-          "-i", introRawPath,
-          "-vf", `scale=${resolution.width}:${resolution.height}:force_original_aspect_ratio=decrease,pad=${resolution.width}:${resolution.height}:(ow-iw)/2:(oh-ih)/2:color=black,fps=30`,
-          "-c:v", "libx264", "-preset", "fast", "-crf", "23",
-          "-an",
-          "-movflags", "+faststart",
-          introNormPath,
-        ]);
-        concatParts.push(introNormPath);
-      }
-      
-      concatParts.push(videoBeforeAudio);
-      
-      if (outroVideoUrl) {
-        const outroRawPath = path.join(tmpDir, "outro_raw.mp4");
-        const outroNormPath = path.join(tmpDir, "outro_norm.mp4");
-        await downloadFile(outroVideoUrl, outroRawPath);
-        // Normalize outro to same resolution, framerate, codec
-        await runFFmpeg([
-          "-i", outroRawPath,
-          "-vf", `scale=${resolution.width}:${resolution.height}:force_original_aspect_ratio=decrease,pad=${resolution.width}:${resolution.height}:(ow-iw)/2:(oh-ih)/2:color=black,fps=30`,
-          "-c:v", "libx264", "-preset", "fast", "-crf", "23",
-          "-an",
-          "-movflags", "+faststart",
-          outroNormPath,
-        ]);
-        concatParts.push(outroNormPath);
-      }
-      
-      // Write concat file
-      const concatListPath = path.join(tmpDir, "concat_parts.txt");
-      fs.writeFileSync(concatListPath, concatParts.map(p => `file '${p}'`).join("\n"));
-      
-      videoAfterConcat = audioUrl ? videoOnlyPath : outputPath;
-      await runFFmpeg([
-        "-f", "concat", "-safe", "0", "-i", concatListPath,
-        "-c:v", "libx264", "-preset", "fast", "-crf", "23",
-        "-pix_fmt", "yuv420p",
-        "-movflags", "+faststart",
-        videoAfterConcat,
-      ]);
-      console.log(`[Slideshow] Concatenation complete (${concatParts.length} parts).`);
-    }
-
-    // 7. Add background music if provided
+    // 5. Add background music if provided
     if (audioUrl) {
       console.log(`[Slideshow] Adding background music...`);
       const audioPath = path.join(tmpDir, "audio_input.mp3");
@@ -526,11 +416,10 @@ export async function generateSlideshow(options: SlideshowOptions): Promise<Buff
 
       // Get actual video duration using ffprobe
       let totalDuration = calculateVideoDuration(images.length, durationPerImage, transition, transitionDuration);
-      // If we have intro/outro, the total duration is longer but we use -shortest
       const vol = Math.max(0, Math.min(1, audioVolume));
 
       await runFFmpeg([
-        "-i", videoAfterConcat,
+        "-i", videoBeforeAudio,
         "-stream_loop", "-1", "-i", audioPath,
         "-filter_complex", `[1:a]volume=${vol},afade=t=in:st=0:d=1,afade=t=out:st=${Math.max(0, totalDuration - 2)}:d=2[aout]`,
         "-map", "0:v",
@@ -545,7 +434,7 @@ export async function generateSlideshow(options: SlideshowOptions): Promise<Buff
       console.log(`[Slideshow] Background music added successfully.`);
     }
 
-    // 8. Read output
+    // 6. Read output
     console.log(`[Slideshow] Video generated: ${outputPath}`);
     const videoBuffer = fs.readFileSync(outputPath);
     return videoBuffer;

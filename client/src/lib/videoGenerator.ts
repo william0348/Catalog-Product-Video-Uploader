@@ -30,9 +30,6 @@ export interface VideoGeneratorOptions {
   overlayImageScale?: number;
   overlayImageX?: number;
   overlayImageY?: number;
-  backgroundVideoUrl?: string;
-  introVideoUrl?: string;
-  outroVideoUrl?: string;
   audioUrl?: string;
   audioVolume?: number;
   onProgress?: (message: string, percent?: number) => void;
@@ -112,9 +109,6 @@ export async function generateVideoInBrowser(options: VideoGeneratorOptions): Pr
     imageScale = 1.0,
     imageOffsetX = 0,
     imageOffsetY = 0,
-    backgroundVideoUrl,
-    introVideoUrl,
-    outroVideoUrl,
     audioUrl,
     audioVolume = 0.5,
     onProgress,
@@ -177,54 +171,7 @@ export async function generateVideoInBrowser(options: VideoGeneratorOptions): Pr
       ]);
     }
 
-    // 4. Handle background video if provided
-    if (backgroundVideoUrl) {
-      onProgress?.("Applying background video...", 60);
-      await writeUrlToFS(ff, backgroundVideoUrl, "bg_video.mp4");
-      
-      // Normalize background video
-      await ff.exec([
-        "-i", "bg_video.mp4",
-        "-vf", `scale=${resolution.width}:${resolution.height}:force_original_aspect_ratio=decrease,pad=${resolution.width}:${resolution.height}:(ow-iw)/2:(oh-ih)/2:color=black,fps=30`,
-        "-c:v", "libx264", "-preset", "ultrafast", "-crf", "28",
-        "-an",
-        "-y", "bg_norm.mp4",
-      ]);
-
-      for (let i = 0; i < images.length; i++) {
-        const timeOffset = (i * durationPerImage) % 60;
-        const bgFrame = `bgframe_${String(i).padStart(3, "0")}.png`;
-        const processedFile = `processed_${String(i).padStart(3, "0")}.png`;
-        const withBgFile = `withbg_${String(i).padStart(3, "0")}.png`;
-
-        // Extract frame from bg video
-        await ff.exec([
-          "-ss", String(timeOffset),
-          "-i", "bg_norm.mp4",
-          "-frames:v", "1",
-          "-vf", `scale=${resolution.width}:${resolution.height}`,
-          "-y", bgFrame,
-        ]);
-
-        // Overlay product image on bg frame
-        await ff.exec([
-          "-i", bgFrame,
-          "-i", processedFile,
-          "-filter_complex", `[0:v][1:v]overlay=0:0,format=yuv420p`,
-          "-frames:v", "1",
-          "-y", withBgFile,
-        ]);
-
-        // Rename for consistency
-        await ff.exec([
-          "-i", withBgFile,
-          "-frames:v", "1",
-          "-y", processedFile,
-        ]);
-      }
-    }
-
-    // 5. Generate the slideshow video
+    // 4. Generate the slideshow video
     reportProgress("Encoding video...");
     
     if (images.length === 1 || transition === "none") {
@@ -288,54 +235,8 @@ export async function generateVideoInBrowser(options: VideoGeneratorOptions): Pr
       await ff.exec(args);
     }
 
-    // 6. Handle intro/outro concatenation
-    let mainVideoFile = "slideshow.mp4";
-    
-    if (introVideoUrl || outroVideoUrl) {
-      onProgress?.("Adding intro/outro...", 80);
-      const concatParts: string[] = [];
-
-      if (introVideoUrl) {
-        await writeUrlToFS(ff, introVideoUrl, "intro_raw.mp4");
-        await ff.exec([
-          "-i", "intro_raw.mp4",
-          "-vf", `scale=${resolution.width}:${resolution.height}:force_original_aspect_ratio=decrease,pad=${resolution.width}:${resolution.height}:(ow-iw)/2:(oh-ih)/2:color=black,fps=30`,
-          "-c:v", "libx264", "-preset", "ultrafast", "-crf", "28",
-          "-an",
-          "-y", "intro_norm.mp4",
-        ]);
-        concatParts.push("intro_norm.mp4");
-      }
-
-      concatParts.push("slideshow.mp4");
-
-      if (outroVideoUrl) {
-        await writeUrlToFS(ff, outroVideoUrl, "outro_raw.mp4");
-        await ff.exec([
-          "-i", "outro_raw.mp4",
-          "-vf", `scale=${resolution.width}:${resolution.height}:force_original_aspect_ratio=decrease,pad=${resolution.width}:${resolution.height}:(ow-iw)/2:(oh-ih)/2:color=black,fps=30`,
-          "-c:v", "libx264", "-preset", "ultrafast", "-crf", "28",
-          "-an",
-          "-y", "outro_norm.mp4",
-        ]);
-        concatParts.push("outro_norm.mp4");
-      }
-
-      const concatContent = concatParts.map(p => `file '${p}'`).join("\n");
-      const encoder = new TextEncoder();
-      await ff.writeFile("concat_parts.txt", encoder.encode(concatContent));
-
-      await ff.exec([
-        "-f", "concat", "-safe", "0", "-i", "concat_parts.txt",
-        "-c:v", "libx264", "-preset", "ultrafast", "-crf", "28",
-        "-pix_fmt", "yuv420p",
-        "-movflags", "+faststart",
-        "-y", "concat_output.mp4",
-      ]);
-      mainVideoFile = "concat_output.mp4";
-    }
-
-    // 7. Add audio if provided
+    // 6. Add audio if provided
+    const mainVideoFile = "slideshow.mp4";
     let finalVideoFile = mainVideoFile;
     
     if (audioUrl) {
@@ -413,7 +314,7 @@ export async function uploadVideoToS3(blobUrl: string, trpcMutate: (path: string
   }
   const base64 = btoa(binary);
 
-  const result = await trpcMutate("slideshow.uploadVideo", {
+  const result = await trpcMutate("slideshow.uploadGeneratedVideo", {
     base64Data: base64,
     fileName: `slideshow_${Date.now()}.mp4`,
     mimeType: "video/mp4",
