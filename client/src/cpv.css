@@ -3840,10 +3840,10 @@ tbody tr.selected:hover td {
   overflow-x: visible;
 }
 
-/* thead: sticky below data-header + filters */
+/* thead: sticky below data-header + filters (top is dynamically set via JS --thead-sticky-top) */
 .app-content .table-container thead th {
   position: sticky;
-  top: 140px;
+  top: var(--thead-sticky-top, 140px);
   z-index: 10;
   background-color: var(--gray-6);
   box-shadow: 0 1px 0 var(--separator);

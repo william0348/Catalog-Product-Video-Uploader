@@ -50,7 +50,31 @@ export const MainApp = () => {
   const productSetRef = useRef(null);
   const googleLoginRef = useRef(null);
   const searchableSetRef = useRef<HTMLDivElement>(null);
+  const dataHeaderRef = useRef<HTMLElement>(null);
+  const filtersRef = useRef<HTMLDivElement>(null);
   const { t } = useContext(LanguageContext);
+
+  // Dynamically calculate thead sticky top based on data-header + filters height
+  useEffect(() => {
+    const headerEl = dataHeaderRef.current;
+    const filtersEl = filtersRef.current;
+    if (!headerEl || !filtersEl) return;
+
+    const updateTheadTop = () => {
+      const headerHeight = headerEl.getBoundingClientRect().height;
+      const filtersHeight = filtersEl.getBoundingClientRect().height;
+      const totalTop = headerHeight + filtersHeight;
+      document.documentElement.style.setProperty('--thead-sticky-top', `${totalTop}px`);
+    };
+
+    updateTheadTop();
+
+    const ro = new ResizeObserver(() => updateTheadTop());
+    ro.observe(headerEl);
+    ro.observe(filtersEl);
+
+    return () => ro.disconnect();
+  }, [view]);
 
   // ===== Settings-based state =====
   const [configuredCatalogs, setConfiguredCatalogs] = useState<CatalogConfig[]>([]);
@@ -796,7 +820,7 @@ export const MainApp = () => {
         />
         <ToastContainer toasts={toasts} onDismiss={removeToast} />
         <ImagePreview image={hoveredImage} />
-        <header className="data-header">
+        <header className="data-header" ref={dataHeaderRef}>
             <div className="header-left">
                 <button onClick={resetAndGoBack} className="back-nav-button" style={{ marginRight: '8px' }}>
                     ←
@@ -815,7 +839,7 @@ export const MainApp = () => {
                 <button onClick={resetAndGoBack} className="back-button">{t('changeCatalog')}</button>
             </div>
         </header>
-        <div className="filters card">
+        <div className="filters card" ref={filtersRef}>
              <div className="form-group" ref={searchableSetRef}>
                 <label htmlFor="productSetButton">{t('filterBySet')}</label>
                 <div className="searchable-select-container">

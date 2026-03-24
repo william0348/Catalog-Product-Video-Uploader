@@ -365,3 +365,9 @@
 - [x] z-index 層級：data-header(100) > filters(90) > thead(10)
 - [x] 翻譯更新：「公司管理」→「公司,目錄,人員管理」
 - [x] 全部 60/60 測試通過
+
+## Bug Fix: 表頭（thead）要永遠 fixed 不隨滾動消失
+- [x] 用 ResizeObserver + CSS custom property (--thead-sticky-top) 動態計算 thead top 值
+- [x] 在 MainApp 加入 dataHeaderRef 和 filtersRef，監聽高度變化
+- [x] CSS 使用 var(--thead-sticky-top, 140px) 作為 fallback
+- [x] 全部 60/60 測試通過
