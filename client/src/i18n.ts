@@ -332,6 +332,15 @@ export const translations = {
         slideshowUploadIntroVideo: "Upload Intro Video",
         slideshowUploadOutroVideo: "Upload Outro Video",
         slideshowVideoFormats: "Supports MP4, MOV, WebM (max 50MB)",
+        // Uploader Personnel
+        uploaderPersonnel: "Upload Personnel",
+        uploaderEmail: "Uploader",
+        totalUploads: "Total Uploads",
+        lastUploadDate: "Last Upload",
+        relatedCatalogs: "Related Catalogs",
+        noUploaders: "No upload records found. Personnel will appear here after videos are uploaded.",
+        uploaderCount: "{count} uploaders",
+        totalUploadCount: "{count} uploads",
     },
     'zh-TW': {
         // General
@@ -665,5 +674,14 @@ export const translations = {
         slideshowUploadIntroVideo: "上傳片頭影片",
         slideshowUploadOutroVideo: "上傳片尾影片",
         slideshowVideoFormats: "支援 MP4, MOV, WebM（最大 50MB）",
+        // Uploader Personnel
+        uploaderPersonnel: "上傳人員",
+        uploaderEmail: "上傳者",
+        totalUploads: "上傳次數",
+        lastUploadDate: "最後上傳",
+        relatedCatalogs: "相關目錄",
+        noUploaders: "尚無上傳紀錄。影片上傳後，操作人員將顯示在此處。",
+        uploaderCount: "{count} 位上傳人員",
+        totalUploadCount: "{count} 筆上傳",
     }
 };

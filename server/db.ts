@@ -1,4 +1,4 @@
-import { eq, and, or } from "drizzle-orm";
+import { eq, and, or, sql, desc, isNotNull } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import {
   InsertUser, users,
@@ -262,6 +262,64 @@ export async function deleteUploadRecord(id: number): Promise<void> {
   const db = await getDb();
   if (!db) return;
   await db.delete(uploadRecords).where(eq(uploadRecords.id, id));
+}
+
+// ==================== Uploader Statistics ====================
+
+export interface UploaderStats {
+  uploadedBy: string;
+  totalUploads: number;
+  lastUploadDate: string;
+  catalogs: string[]; // distinct catalog IDs
+}
+
+export async function getUploadersByCompany(companyId: number): Promise<UploaderStats[]> {
+  const db = await getDb();
+  if (!db) return [];
+  const rows = await db
+    .select({
+      uploadedBy: uploadRecords.uploadedBy,
+      totalUploads: sql<number>`COUNT(*)`.as('totalUploads'),
+      lastUploadDate: sql<string>`MAX(${uploadRecords.uploadTimestamp})`.as('lastUploadDate'),
+      catalogList: sql<string>`GROUP_CONCAT(DISTINCT ${uploadRecords.catalogId})`.as('catalogList'),
+    })
+    .from(uploadRecords)
+    .where(and(
+      eq(uploadRecords.companyId, companyId),
+      isNotNull(uploadRecords.uploadedBy),
+    ))
+    .groupBy(uploadRecords.uploadedBy)
+    .orderBy(desc(sql`MAX(${uploadRecords.uploadTimestamp})`));
+
+  return rows.map(r => ({
+    uploadedBy: r.uploadedBy || '',
+    totalUploads: Number(r.totalUploads),
+    lastUploadDate: r.lastUploadDate || '',
+    catalogs: r.catalogList ? r.catalogList.split(',') : [],
+  }));
+}
+
+export async function getAllUploaders(): Promise<UploaderStats[]> {
+  const db = await getDb();
+  if (!db) return [];
+  const rows = await db
+    .select({
+      uploadedBy: uploadRecords.uploadedBy,
+      totalUploads: sql<number>`COUNT(*)`.as('totalUploads'),
+      lastUploadDate: sql<string>`MAX(${uploadRecords.uploadTimestamp})`.as('lastUploadDate'),
+      catalogList: sql<string>`GROUP_CONCAT(DISTINCT ${uploadRecords.catalogId})`.as('catalogList'),
+    })
+    .from(uploadRecords)
+    .where(isNotNull(uploadRecords.uploadedBy))
+    .groupBy(uploadRecords.uploadedBy)
+    .orderBy(desc(sql`MAX(${uploadRecords.uploadTimestamp})`));
+
+  return rows.map(r => ({
+    uploadedBy: r.uploadedBy || '',
+    totalUploads: Number(r.totalUploads),
+    lastUploadDate: r.lastUploadDate || '',
+    catalogs: r.catalogList ? r.catalogList.split(',') : [],
+  }));
 }
 
 // ==================== App Settings ====================

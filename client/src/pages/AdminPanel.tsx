@@ -1477,9 +1477,169 @@ const VideoLog = ({ t, companies }: { t: (key: string) => string; companies: Com
 };
 
 
+// ==================== Uploader Personnel Component ====================
+interface UploaderStatsData {
+    uploadedBy: string;
+    totalUploads: number;
+    lastUploadDate: string;
+    catalogs: string[];
+}
+
+const UploaderPersonnel = ({ t, companies }: { t: (key: string, replacements?: {[key: string]: any}) => string; companies: CompanyData[] }) => {
+    const [uploaders, setUploaders] = useState<UploaderStatsData[]>([]);
+    const [isLoading, setIsLoading] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+    const [companyFilter, setCompanyFilter] = useState<string>('all');
+
+    // Catalogs map for display names
+    const catalogNameMap = useMemo(() => {
+        const map = new Map<string, string>();
+        for (const company of companies) {
+            try {
+                const parsed = JSON.parse(company.catalogs || '[]');
+                if (Array.isArray(parsed)) {
+                    for (const cat of parsed) {
+                        if (cat.id && cat.name) map.set(cat.id, cat.name);
+                    }
+                }
+            } catch { /* ignore */ }
+        }
+        return map;
+    }, [companies]);
+
+    const fetchUploaders = useCallback(async () => {
+        setIsLoading(true);
+        setError(null);
+        try {
+            let result;
+            if (companyFilter !== 'all') {
+                result = await trpcQuery('uploads.uploadersByCompany', { companyId: parseInt(companyFilter, 10) });
+            } else {
+                result = await trpcQuery('uploads.allUploaders');
+            }
+            setUploaders(Array.isArray(result) ? result : []);
+        } catch (e: any) {
+            setError(e.message);
+            setUploaders([]);
+        } finally {
+            setIsLoading(false);
+        }
+    }, [companyFilter]);
+
+    useEffect(() => {
+        fetchUploaders();
+    }, [fetchUploaders]);
+
+    // Summary stats
+    const totalUploaderCount = uploaders.length;
+    const totalUploadSum = uploaders.reduce((sum, u) => sum + u.totalUploads, 0);
+
+    const getCatalogDisplayName = (catalogId: string) => {
+        return catalogNameMap.get(catalogId) || catalogId;
+    };
+
+    return (
+        <div className="uploader-personnel">
+            {/* Filters */}
+            <div className="uploader-filters">
+                <div className="uploader-filter-row">
+                    {companies.length > 0 && (
+                        <select
+                            value={companyFilter}
+                            onChange={(e) => setCompanyFilter(e.target.value)}
+                            className="uploader-company-filter"
+                        >
+                            <option value="all">{t('company') || 'Company'}: All</option>
+                            {companies.map(c => (
+                                <option key={c.id} value={c.id.toString()}>{c.name}</option>
+                            ))}
+                        </select>
+                    )}
+                </div>
+            </div>
+
+            {/* Summary Stats */}
+            {!isLoading && !error && uploaders.length > 0 && (
+                <div className="uploader-summary">
+                    <div className="uploader-stat-card">
+                        <span className="uploader-stat-number">{totalUploaderCount}</span>
+                        <span className="uploader-stat-label">{t('uploaderPersonnel')}</span>
+                    </div>
+                    <div className="uploader-stat-card">
+                        <span className="uploader-stat-number">{totalUploadSum}</span>
+                        <span className="uploader-stat-label">{t('totalUploads')}</span>
+                    </div>
+                </div>
+            )}
+
+            {/* Content */}
+            {isLoading ? (
+                <div className="log-loading">
+                    <div className="loader-small"></div>
+                    <p>Loading...</p>
+                </div>
+            ) : error ? (
+                <div className="log-error">
+                    <p>{error}</p>
+                </div>
+            ) : uploaders.length === 0 ? (
+                <div className="log-empty">
+                    <p>{t('noUploaders')}</p>
+                </div>
+            ) : (
+                <div className="log-table-container">
+                    <table className="log-table">
+                        <thead>
+                            <tr>
+                                <th style={{ width: '40px' }}>#</th>
+                                <th>{t('uploaderEmail')}</th>
+                                <th style={{ width: '100px', textAlign: 'center' }}>{t('totalUploads')}</th>
+                                <th style={{ width: '140px' }}>{t('lastUploadDate')}</th>
+                                <th>{t('relatedCatalogs')}</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {uploaders.map((uploader, index) => (
+                                <tr key={uploader.uploadedBy}>
+                                    <td style={{ color: 'var(--apple-text-secondary, #86868b)' }}>{index + 1}</td>
+                                    <td>
+                                        <div className="uploader-email-cell">
+                                            <div className="uploader-avatar">
+                                                {uploader.uploadedBy.charAt(0).toUpperCase()}
+                                            </div>
+                                            <span className="uploader-email-text">{uploader.uploadedBy}</span>
+                                        </div>
+                                    </td>
+                                    <td style={{ textAlign: 'center' }}>
+                                        <span className="uploader-count-badge">{uploader.totalUploads}</span>
+                                    </td>
+                                    <td>
+                                        <span className="log-date">{new Date(uploader.lastUploadDate).toLocaleDateString()}</span>
+                                        <span className="log-time">{new Date(uploader.lastUploadDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                                    </td>
+                                    <td>
+                                        <div className="uploader-catalogs">
+                                            {uploader.catalogs.map(catId => (
+                                                <span key={catId} className="uploader-catalog-badge">
+                                                    {getCatalogDisplayName(catId)}
+                                                </span>
+                                            ))}
+                                        </div>
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+            )}
+        </div>
+    );
+};
+
+
 // ==================== Main AdminPanel Component ====================
 export const AdminPanel = ({ onBack }: AdminPanelProps) => {
-    const [activeTab, setActiveTab] = useState<'log' | 'company'>('log');
+    const [activeTab, setActiveTab] = useState<'log' | 'company' | 'uploaders'>('log');
     const { t } = useContext(LanguageContext);
     const [companies, setCompanies] = useState<CompanyData[]>([]);
 
@@ -1511,12 +1671,17 @@ export const AdminPanel = ({ onBack }: AdminPanelProps) => {
                         📋 Video Log
                     </button>
                     <button
+                        className={`admin-tab ${activeTab === 'uploaders' ? 'active' : ''}`}
+                        onClick={() => setActiveTab('uploaders')}
+                    >
+                        👥 {t('uploaderPersonnel')}
+                    </button>
+                    <button
                         className={`admin-tab ${activeTab === 'company' ? 'active' : ''}`}
                         onClick={() => setActiveTab('company')}
                     >
                         🏢 {t('companyManagement')}
                     </button>
-
                 </div>
                 
                 {/* Log Tab */}
@@ -1524,12 +1689,15 @@ export const AdminPanel = ({ onBack }: AdminPanelProps) => {
                     <VideoLog t={t} companies={companies} />
                 )}
 
+                {/* Uploader Personnel Tab */}
+                {activeTab === 'uploaders' && (
+                    <UploaderPersonnel t={t} companies={companies} />
+                )}
+
                 {/* Company Management Tab */}
                 {activeTab === 'company' && (
                     <CompanyManager t={t} />
                 )}
-
-
             </div>
             <AppFooter />
         </main>

@@ -16,6 +16,8 @@ import {
   setSetting,
   getAllSettings,
   getUploadRecordById,
+  getUploadersByCompany,
+  getAllUploaders,
   createCompany,
   getCompanyById,
   updateCompany,
@@ -266,6 +268,18 @@ export const appRouter = router({
         await deleteUploadRecord(input.id);
         return { success: true };
       }),
+
+    // Get uploaders (people who uploaded videos) by company
+    uploadersByCompany: publicProcedure
+      .input(z.object({ companyId: z.number() }))
+      .query(async ({ input }) => {
+        return getUploadersByCompany(input.companyId);
+      }),
+
+    // Get all uploaders across all companies
+    allUploaders: publicProcedure.query(async () => {
+      return getAllUploaders();
+    }),
 
     // Delete video from Facebook Catalog via Batch API, then delete DB record
     // ALWAYS deletes the DB record, even if Facebook API fails
