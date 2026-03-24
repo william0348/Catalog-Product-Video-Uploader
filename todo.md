@@ -395,3 +395,11 @@
 - [x] 移除 #廠商名稱 和 #Product Name 欄位（header 和 row data）
 - [x] 清理不再使用的 clientName 變數和 getSetting import
 - [x] 全部 60/60 測試通過
+
+## Phase 44: CSV 匯出改為 XML 格式（RSS/Google Merchant）
+- [x] 新增 /api/export/xml/:catalogId 端點，輸出 RSS/Google Merchant XML 格式
+- [x] XML 格式使用 RSS + g: namespace，每個 item 包含 g:id 和兩個 video > url
+- [x] 舊 CSV 端點自動 redirect 到 XML 端點（向後相容）
+- [x] 更新前端 AdminPanel 的 URL 生成為 /api/export/xml/
+- [x] 更新 CSS 註解
+- [x] 全部 60/60 測試通過

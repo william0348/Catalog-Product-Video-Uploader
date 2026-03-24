@@ -278,7 +278,7 @@ const CompanyManager = ({ t }: { t: (key: string) => string }) => {
         }
     };
 
-    const getCsvUrl = (catalogId: string) => `${window.location.origin}/api/export/csv/${catalogId}`;
+    const getCsvUrl = (catalogId: string) => `${window.location.origin}/api/export/xml/${catalogId}`;
 
     const handleCopyCsvUrl = (catalogId: string) => {
         navigator.clipboard.writeText(getCsvUrl(catalogId)).then(() => {

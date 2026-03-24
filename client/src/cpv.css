@@ -3014,7 +3014,7 @@ tbody tr.selected:hover td {
     cursor: not-allowed;
 }
 
-/* ==================== CSV URL Display ==================== */
+/* ==================== XML URL Display ==================== */
 .csv-url-section {
     margin-top: 16px;
     padding: 16px;
