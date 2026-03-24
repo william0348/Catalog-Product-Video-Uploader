@@ -1,14 +1,3 @@
-
-export const getColumnLetter = (colIndex: number): string => {
-    let temp, letter = '';
-    while (colIndex > 0) {
-        temp = (colIndex - 1) % 26;
-        letter = String.fromCharCode(temp + 65) + letter;
-        colIndex = (colIndex - temp - 1) / 26;
-    }
-    return letter;
-};
-
 export const getVideoMetadata = (file: File): Promise<{ width: number; height: number; duration: number }> => {
     return new Promise((resolve, reject) => {
         const video = document.createElement('video');

@@ -256,3 +256,12 @@
 - [x] 分析專案結構和核心功能
 - [x] 撰寫專業的 README.md（影片上傳工具為主，幻燈片先不寫）
 - [x] 儲存 checkpoint
+
+## Phase 36: 移除 Google Sheets 相關功能（已改用資料庫）
+- [x] 審計所有 Google Sheets 相關程式碼
+- [x] 移除 Google Sheets 相關常數（MASTER_GOOGLE_SHEET_ID, SHEET_TAB_NAME, GOOGLE_APPS_SCRIPT_URL, SHEET_DATA_HEADER, ADMIN_ACCESS_SHEET_TAB_NAME）
+- [x] 移除 getColumnLetter 函數（僅用於 Sheets）
+- [x] 移除 GOOGLE_API_SCOPES 中的 spreadsheets scope
+- [x] 移除 gapi.client.init 中的 Sheets API discovery doc
+- [x] 更新 README.md：移除 Google Sheets Integration 章節，新增 Upload Record Management 章節
+- [x] 測試通過（60/60 passed）

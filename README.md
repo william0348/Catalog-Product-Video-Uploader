@@ -10,7 +10,7 @@ CPV Uploader is a web-based tool designed for brands and retailers running **Met
 
 Meta CPAS allows brands and retail marketplaces to collaborate on targeted Facebook and Instagram ads by sharing product catalog segments. While Meta supports video creatives at the product level, manually uploading videos to each product in a catalog is time-consuming and error-prone, especially for catalogs containing thousands of SKUs.
 
-CPV Uploader solves this by providing a unified interface that connects directly to the **Facebook Graph API**, allowing users to browse product catalogs, match videos to products, and upload them in bulk with a single workflow. The tool supports both **4:5** (feed) and **9:16** (Reels/Stories) aspect ratios, and integrates with **Google Sheets** for record-keeping and **Google Drive** for video file management.
+CPV Uploader solves this by providing a unified interface that connects directly to the **Facebook Graph API**, allowing users to browse product catalogs, match videos to products, and upload them in bulk with a single workflow. The tool supports both **4:5** (feed) and **9:16** (Reels/Stories) aspect ratios, with all upload records stored in a **MySQL database** and video files managed via **Google Drive** integration.
 
 ---
 
@@ -24,9 +24,9 @@ The tool connects to the Facebook Marketing API to fetch product catalogs associ
 
 Users can upload videos to multiple products simultaneously. The upload engine handles the Facebook Graph API's asynchronous video upload flow, including polling for encoding completion. Videos are uploaded with proper aspect ratio metadata and associated with the correct product via the retailer ID. The tool supports drag-and-drop file selection and provides real-time progress tracking for each upload.
 
-### Google Sheets Integration
+### Upload Record Management
 
-Every successful upload is automatically logged to a shared Google Sheet, creating a persistent record of all video assignments. The sheet captures the catalog ID, retailer ID, product name, video URLs (both download and embed), client name, timestamp, and the uploader's email. This integration uses the Google Sheets API and requires Google OAuth authentication.
+Every successful upload is automatically recorded in the database, creating a persistent history of all video assignments. Records capture the catalog ID, retailer ID, product name, video URLs (both download and embed), client name, timestamp, and the uploader's email. The admin panel provides a searchable upload history view.
 
 ### Google Drive Integration
 
@@ -135,7 +135,7 @@ All API calls use the Graph API **v23.0** and require a valid User or System Use
 - pnpm 10+
 - MySQL 8+ or TiDB database
 - Facebook Business Manager account with catalog access
-- Google Cloud project with OAuth 2.0 credentials (for Sheets/Drive integration)
+- Google Cloud project with OAuth 2.0 credentials (for Drive integration)
 
 ### Installation
 
@@ -191,13 +191,13 @@ Runs the Vitest test suite covering server-side logic, API endpoints, and video 
 
 ## Usage Workflow
 
-1. **Authenticate** with Google OAuth to enable Sheets/Drive integration.
+1. **Authenticate** with Google OAuth to enable Drive integration and user identification.
 2. **Select a company** (if multiple are configured) to load the associated Facebook token and catalogs.
 3. **Choose a catalog** from the dropdown to browse its products.
 4. **Filter products** by product set, search term, stock status, or video upload status.
 5. **Select products** and assign video files (4:5 and/or 9:16 aspect ratios).
 6. **Upload videos** in bulk. The tool handles the Facebook API upload flow and polls for completion.
-7. **Review results** in the product table or the linked Google Sheet.
+7. **Review results** in the product table or the admin panel upload history.
 
 ---
 
@@ -209,4 +209,4 @@ MIT
 
 ## Acknowledgments
 
-Built with the [Meta Marketing API](https://developers.facebook.com/docs/marketing-apis/) and [Google Workspace APIs](https://developers.google.com/workspace). Designed for the RhinoShield x Meta CPAS partnership workflow.
+Built with the [Meta Marketing API](https://developers.facebook.com/docs/marketing-apis/) and [Google APIs](https://developers.google.com/). Designed for the RhinoShield x Meta CPAS partnership workflow.

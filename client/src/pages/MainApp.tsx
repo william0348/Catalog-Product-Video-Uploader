@@ -9,13 +9,12 @@ import { GoogleDriveUploader } from '@/components/GoogleDriveUploader';
 import { AppFooter } from '@/components/AppFooter';
 import { 
     BASE_URL, GOOGLE_CLIENT_ID, GOOGLE_API_SCOPES, GOOGLE_AUTH_TOKEN_KEY,
-    MASTER_GOOGLE_SHEET_ID, SHEET_TAB_NAME, GOOGLE_APPS_SCRIPT_URL,
-    SESSION_DATA_KEY, INTRO_GUIDE_KEY, SHEET_DATA_HEADER
+    SESSION_DATA_KEY, INTRO_GUIDE_KEY
 } from '@/constants';
 import { loadSettings, saveSettings, fetchCatalogName, validateAccessToken, loadSettingsFromServer, saveUploadRecord, getUploadRecords, getCompaniesByEmail, loadCompanySettings, saveCompanySettings, saveSelectedCompany, getSelectedCompany, activateMemberships, type CatalogConfig, type AppSettings, type CompanyInfo } from '@/settingsStore';
 import type { Product, ProductSet, Catalog, HoveredImage, ProductVideos, VideoType, ToastMessage, UploadedVideo, VideoFilterType } from '@/types';
 import { apiFetch, fetchAllPages } from '@/api';
-import { getColumnLetter } from '@/lib/helpers';
+
 
 declare const gapi: any;
 declare const window: any;
@@ -314,8 +313,7 @@ export const MainApp = () => {
               gapi.load('client', () => {
                    gapi.client.init({
                        discoveryDocs: [
-                           "https://www.googleapis.com/discovery/v1/apis/drive/v3/rest",
-                           "https://www.googleapis.com/discovery/v1/apis/sheets/v4/rest"
+                           "https://www.googleapis.com/discovery/v1/apis/drive/v3/rest"
                         ]
                    }).then(() => setIsGapiClientReady(true))
                    .catch((err:any) => setError(prev => prev || `Failed to initialize Google APIs. Error: ${err.message}`));
