@@ -59,9 +59,9 @@ async function startServer() {
         return `    <item>
       <g:id>${escapeXml(record.retailerId)}</g:id>
       <video>
-      <url>${escapeXml(record.video4x5Download || "")}</url></video>
+      <url><![CDATA[${record.video4x5Download || ""}]]></url></video>
       <video>
-      <url>${escapeXml(record.video9x16Download || "")}</url></video>
+      <url><![CDATA[${record.video9x16Download || ""}]]></url></video>
     </item>`;
       }).join("\n");
 
