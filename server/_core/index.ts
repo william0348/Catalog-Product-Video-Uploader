@@ -56,12 +56,14 @@ async function startServer() {
         str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&apos;");
 
       const items = records.map(record => {
+        const v4x5 = record.video4x5Download || "";
+        const v9x16 = record.video9x16Download || "";
         return `    <item>
       <g:id>${escapeXml(record.retailerId)}</g:id>
       <video>
-      <url>${record.video4x5Download || ""}</url></video>
+      <url><![CDATA[${v4x5}]]></url></video>
       <video>
-      <url>${record.video9x16Download || ""}</url></video>
+      <url><![CDATA[${v9x16}]]></url></video>
     </item>`;
       }).join("\n");
 
