@@ -73,10 +73,19 @@ async function startServer() {
 
       const csvContent = header + '\n' + rows;
 
+      // UTF-8 BOM for proper encoding detection by Meta's crawler
+      const BOM = '\uFEFF';
+      const csvWithBom = BOM + csvContent;
+
+      // Headers optimized for Meta Commerce Manager feed fetching:
+      // - text/csv inline (no Content-Disposition: attachment which can confuse crawlers)
+      // - Cache-Control to ensure Meta always gets fresh data
       res.setHeader("Content-Type", "text/csv; charset=utf-8");
-      res.setHeader("Content-Disposition", `attachment; filename="catalog_${catalogId}_video_feed.csv"`);
       res.setHeader("Access-Control-Allow-Origin", "*");
-      res.send(csvContent);
+      res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+      res.setHeader("Pragma", "no-cache");
+      res.setHeader("Expires", "0");
+      res.send(csvWithBom);
     } catch (error) {
       console.error("[CSV Export] Error:", error);
       res.status(500).json({ error: "Failed to export CSV" });

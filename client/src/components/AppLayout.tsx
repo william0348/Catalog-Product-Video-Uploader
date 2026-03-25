@@ -61,8 +61,8 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
         {/* Sidebar Header */}
         <div className="sidebar-header">
           <img
-            src="https://d2xsxph8kpxj0f.cloudfront.net/310519663317876169/nN7fRv522pr6qmVvUdeAQB/cpv-favicon-mm647eWJko9itpHnxyFRzi.png"
-            alt="CPV"
+            src="https://d2xsxph8kpxj0f.cloudfront.net/310519663317876169/nN7fRv522pr6qmVvUdeAQB/liontech-favicon-192_96eb40b0.png"
+            alt="Lion Tech"
             className="sidebar-logo"
           />
           <div className="sidebar-brand">

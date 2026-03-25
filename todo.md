@@ -434,3 +434,17 @@
 - [x] 研究 Meta Catalog 的 Feed 規格（supplementary feed / data feed）
 - [x] 修復格式：從自訂 XML 改為 Meta 標準 CSV 格式（id, video[0].url, video[1].url）
 - [x] 測試並驗證（63/63 passed，CSV 輸出正確）
+
+## Bug Fix: Meta 透過 feed URL 抓取 CSV 失敗（手動上傳成功）
+- [ ] 診斷 Meta crawler 無法抓取 feed URL 的原因
+- [ ] 修復 feed endpoint 以相容 Meta 的爬蟲
+- [ ] 測試並驗證
+
+## Phase 47: 設定 Lion Tech Logo 為網站 favicon
+- [x] 處理 Logo 圖片為 favicon 格式
+- [x] 上傳並設定為網站 site icon（favicon、sidebar、footer）
+
+## Phase 48: 製作 Lion Tech Solution 介紹影片
+- [ ] 撰寫影片腳本（痛點、解決方案、功能介紹）
+- [ ] 生成參考圖片和視覺素材
+- [ ] 生成影片片段並組裝最終影片
