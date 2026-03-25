@@ -45,51 +45,47 @@ async function startServer() {
   // OAuth callback under /api/oauth/callback
   registerOAuthRoutes(app);
 
-  // XML export endpoint for Meta Catalog (RSS/Google Merchant format)
-  app.get("/api/export/xml/:catalogId", async (req, res) => {
+  // CSV export endpoint for Meta Catalog Supplementary Feed
+  // Format: id, video[0].url, video[1].url (per Meta specification)
+  // Ref: https://www.facebook.com/business/help/412185511855836
+  app.get("/api/export/csv/:catalogId", async (req, res) => {
     try {
       const { getUploadRecordsByCatalog } = await import("../db");
       const catalogId = req.params.catalogId;
       const records = await getUploadRecordsByCatalog(catalogId);
 
-      const escapeXml = (str: string) =>
-        str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&apos;");
+      const escapeCsvField = (str: string) => {
+        if (!str) return '';
+        // Wrap in quotes if contains comma, quote, or newline
+        if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+          return '"' + str.replace(/"/g, '""') + '"';
+        }
+        return str;
+      };
 
-      const items = records.map(record => {
-        const v4x5 = record.video4x5Download || "";
-        const v9x16 = record.video9x16Download || "";
-        return `    <item>
-      <g:id>${escapeXml(record.retailerId)}</g:id>
-      <video>
-      <url><![CDATA[${v4x5}]]></url></video>
-      <video>
-      <url><![CDATA[${v9x16}]]></url></video>
-    </item>`;
-      }).join("\n");
+      const header = 'id,video[0].url,video[1].url';
+      const rows = records.map(record => {
+        const id = escapeCsvField(record.retailerId);
+        const v4x5 = escapeCsvField(record.video4x5Download || '');
+        const v9x16 = escapeCsvField(record.video9x16Download || '');
+        return `${id},${v4x5},${v9x16}`;
+      }).join('\n');
 
-      const xmlContent = `<?xml version="1.0" encoding="utf-8"?>
-<rss xmlns:atom="http://www.w3.org/2005/Atom" xmlns:g="http://base.google.com/ns/1.0">
-  <channel>
-    <title>catalog_${escapeXml(catalogId)}_feed</title>
-    <link>https://catalog-video-uploder.manus.space</link>
-    <description>Meta Catalog Video Feed</description>
-${items}
-  </channel>
-</rss>`;
+      const csvContent = header + '\n' + rows;
 
-      res.setHeader("Content-Type", "application/xml; charset=utf-8");
-      res.setHeader("Content-Disposition", `attachment; filename="catalog_${catalogId}.xml"`);
+      res.setHeader("Content-Type", "text/csv; charset=utf-8");
+      res.setHeader("Content-Disposition", `attachment; filename="catalog_${catalogId}_video_feed.csv"`);
       res.setHeader("Access-Control-Allow-Origin", "*");
-      res.send(xmlContent);
+      res.send(csvContent);
     } catch (error) {
-      console.error("[XML Export] Error:", error);
-      res.status(500).json({ error: "Failed to export XML" });
+      console.error("[CSV Export] Error:", error);
+      res.status(500).json({ error: "Failed to export CSV" });
     }
   });
 
-  // Keep legacy CSV endpoint as redirect to XML
-  app.get("/api/export/csv/:catalogId", (req, res) => {
-    res.redirect(`/api/export/xml/${req.params.catalogId}`);
+  // Keep legacy XML endpoint as redirect to CSV
+  app.get("/api/export/xml/:catalogId", (req, res) => {
+    res.redirect(`/api/export/csv/${req.params.catalogId}`);
   });
 
   // JSON export endpoint (alternative)

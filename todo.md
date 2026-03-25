@@ -429,3 +429,8 @@
 - [x] 檢查 XML 生成程式碼中 CDATA 包裹是否正確
 - [x] 修復 video URL 中的 & 字元（使用 CDATA 包裹）
 - [x] 測試並驗證 XML 格式正確（63/63 passed + Python XML 驗證通過）
+
+## Bug Fix: Meta Catalog 無法正確匯入 XML feed
+- [x] 研究 Meta Catalog 的 Feed 規格（supplementary feed / data feed）
+- [x] 修復格式：從自訂 XML 改為 Meta 標準 CSV 格式（id, video[0].url, video[1].url）
+- [x] 測試並驗證（63/63 passed，CSV 輸出正確）
