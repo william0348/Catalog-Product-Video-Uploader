@@ -157,7 +157,7 @@ export const translations = {
         companyManagementDesc: "Create and manage companies. Each company has its own Access Token and catalog settings shared among all members.",
         createCompany: "Create Company",
         companyName: "Company Name",
-        companyNamePlaceholder: "e.g., RhinoShield",
+        companyNamePlaceholder: "e.g., Acme Corp",
         yourEmail: "Your Email",
         yourEmailPlaceholder: "your@email.com",
         createCompanyBtn: "Create",

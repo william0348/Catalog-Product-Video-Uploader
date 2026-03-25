@@ -463,3 +463,7 @@
 
 ## Phase 50: 更新 GitHub README.md
 - [x] 加入 Manus 整合說明：需移除內建 Manus Login，用戶只需整合自己的 Google Login Client ID
+
+## Phase 51: 移除 RhinoShield + Google Client ID 移至環境變數
+- [x] 移除所有 RhinoShield 相關引用（README.md, i18n.ts）
+- [x] 將 Google Client ID 從硬編碼移至 VITE_GOOGLE_CLIENT_ID 環境變數（65/65 passed）

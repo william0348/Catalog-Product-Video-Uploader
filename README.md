@@ -224,4 +224,4 @@ MIT
 
 ## Acknowledgments
 
-Built on the [Manus AI platform](https://manus.im) with the [Meta Marketing API](https://developers.facebook.com/docs/marketing-apis/) and [Google APIs](https://developers.google.com/). Originally designed for the RhinoShield x Meta CPAS partnership workflow.
+Built on the [Manus AI platform](https://manus.im) with the [Meta Marketing API](https://developers.facebook.com/docs/marketing-apis/) and [Google APIs](https://developers.google.com/). Designed for Meta CPAS partnership workflows.
