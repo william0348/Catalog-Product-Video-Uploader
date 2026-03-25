@@ -42,16 +42,16 @@ const PageRouter = () => {
     }, []);
     
     useEffect(() => {
-        let title = 'CPAS Video Uploader';
+        let title = 'CPV Uploader';
         switch (currentPage) {
             case 'admin':
-                title = `${t('adminPanel')} - CPAS Video Uploader`;
+                title = `${t('adminPanel')} - CPV Uploader`;
                 break;
             case 'terms':
-                title = `${t('termsOfService')} - CPAS Video Uploader`;
+                title = `${t('termsOfService')} - CPV Uploader`;
                 break;
             case 'slideshow':
-                title = `${t('slideshowTitle') || 'Slideshow Generator'} - CPAS Video Uploader`;
+                title = `${t('slideshowTitle') || 'Slideshow Generator'} - CPV Uploader`;
                 break;
         }
         document.title = title;

@@ -1,8 +1,8 @@
 # CPV Uploader
 
-**Meta CPAS Video Upload Tool for Brands and Retailers**
+**Meta Catalog Product Video Uploader**
 
-CPV Uploader is a web-based tool designed for brands and retailers running **Meta Collaborative Performance Advertising Solution (CPAS)** campaigns. It streamlines the process of uploading product-level video (PLV) ads to Facebook/Instagram product catalogs, enabling dynamic video creatives across Advantage+ catalog ads, Reels placements, and collaborative ad campaigns.
+CPV Uploader is a web-based tool designed for brands and retailers who manage **Meta (Facebook/Instagram) product catalogs**. It streamlines the process of uploading product-level videos to catalog items, enabling dynamic video creatives across Advantage+ catalog ads, Reels placements, and collaborative ad campaigns.
 
 ---
 
@@ -22,7 +22,7 @@ The current deployment already uses Google Login for user authentication and Goo
 
 ## Overview
 
-Meta CPAS allows brands and retail marketplaces to collaborate on targeted Facebook and Instagram ads by sharing product catalog segments. While Meta supports video creatives at the product level, manually uploading videos to each product in a catalog is time-consuming and error-prone, especially for catalogs containing thousands of SKUs.
+Meta supports video creatives at the product level in its product catalogs, but manually uploading videos to each product is time-consuming and error-prone, especially for catalogs containing thousands of SKUs. Even when videos are uploaded manually through Commerce Manager, they get replaced every time the data feed updates.
 
 CPV Uploader solves this by providing a unified interface that connects directly to the **Facebook Graph API**, allowing users to browse product catalogs, match videos to products, and upload them in bulk with a single workflow. The tool supports both **4:5** (feed) and **9:16** (Reels/Stories) aspect ratios, with all upload records stored in a **MySQL database** and video files managed via **Google Drive** integration.
 
@@ -224,4 +224,4 @@ MIT
 
 ## Acknowledgments
 
-Built on the [Manus AI platform](https://manus.im) with the [Meta Marketing API](https://developers.facebook.com/docs/marketing-apis/) and [Google APIs](https://developers.google.com/). Designed for Meta CPAS partnership workflows.
+Built on the [Manus AI platform](https://manus.im) with the [Meta Marketing API](https://developers.facebook.com/docs/marketing-apis/) and [Google APIs](https://developers.google.com/). Designed for Meta Catalog product video management workflows.

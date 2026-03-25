@@ -467,3 +467,7 @@
 ## Phase 51: 移除 RhinoShield + Google Client ID 移至環境變數
 - [x] 移除所有 RhinoShield 相關引用（README.md, i18n.ts）
 - [x] 將 Google Client ID 從硬編碼移至 VITE_GOOGLE_CLIENT_ID 環境變數（65/65 passed）
+
+## Phase 52: 重新命名為 Meta Catalog Product Video Uploader
+- [x] 搜尋並替換所有 CPAS Video Upload 相關名稱
+- [x] 移除所有 CPAS 專屬描述，改為通用的 Meta Catalog 定位（65/65 passed）

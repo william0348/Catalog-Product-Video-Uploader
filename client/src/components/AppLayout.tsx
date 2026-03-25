@@ -67,7 +67,7 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
           />
           <div className="sidebar-brand">
             <span className="sidebar-brand-title">CPV Uploader</span>
-            <span className="sidebar-brand-subtitle">Meta CPAS Tools</span>
+            <span className="sidebar-brand-subtitle">Meta Catalog Tools</span>
           </div>
         </div>
 

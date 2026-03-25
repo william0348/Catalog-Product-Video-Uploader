@@ -948,7 +948,7 @@ const VideoLog = ({ t, companies }: { t: (key: string) => string; companies: Com
         const worksheet = XLSX.utils.json_to_sheet(exportData);
         const workbook = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(workbook, worksheet, 'Upload Records');
-        XLSX.writeFile(workbook, `cpas_video_log_${new Date().toISOString().split('T')[0]}.xlsx`);
+        XLSX.writeFile(workbook, `cpv_video_log_${new Date().toISOString().split('T')[0]}.xlsx`);
     };
 
     // ==================== Excel Import Handlers ====================

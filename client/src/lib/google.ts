@@ -2,9 +2,9 @@
 import { GOOGLE_AUTH_TOKEN_KEY } from '@/constants';
 declare const gapi: any;
 
-// Finds or creates a "CPAS Video Uploads" folder in the user's Google Drive.
+// Finds or creates a "CPV Uploads" folder in the user's Google Drive.
 export const getDriveFolderId = async (): Promise<string> => {
-    const FOLDER_NAME = 'CPAS Video Uploads';
+    const FOLDER_NAME = 'CPV Uploads';
     const cachedFolderId = sessionStorage.getItem('google_drive_folder_id');
     if (cachedFolderId) {
         return cachedFolderId;
