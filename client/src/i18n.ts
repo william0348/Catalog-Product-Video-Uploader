@@ -341,6 +341,17 @@ export const translations = {
         noUploaders: "No upload records found. Personnel will appear here after videos are uploaded.",
         uploaderCount: "{count} uploaders",
         totalUploadCount: "{count} uploads",
+        // Token Expiration
+        tokenExpirationWarning: "⚠️ Access Token Expiring Soon",
+        tokenExpired: "❌ Access Token Expired",
+        tokenExpiresIn: "Your access token will expire in {days} days.",
+        tokenExpiredMessage: "Your access token has expired. Please update it to continue using the tool.",
+        tokenExpiresOn: "Expires on: {date}",
+        tokenUpdateNow: "Update Token",
+        tokenRefresh: "Check Expiration",
+        tokenNeverExpires: "Token does not expire",
+        tokenNoExpiration: "Token expiration unknown. Click to check.",
+        tokenValid: "Token is valid",
     },
     'zh-TW': {
         // General
@@ -683,5 +694,16 @@ export const translations = {
         noUploaders: "尚無上傳紀錄。影片上傳後，操作人員將顯示在此處。",
         uploaderCount: "{count} 位上傳人員",
         totalUploadCount: "{count} 筆上傳",
+        // Token Expiration
+        tokenExpirationWarning: "⚠️ Access Token 即將到期",
+        tokenExpired: "❌ Access Token 已過期",
+        tokenExpiresIn: "您的 Access Token 將在 {days} 天後到期。",
+        tokenExpiredMessage: "您的 Access Token 已過期，請更新以繼續使用工具。",
+        tokenExpiresOn: "到期日：{date}",
+        tokenUpdateNow: "更新 Token",
+        tokenRefresh: "檢查到期日",
+        tokenNeverExpires: "Token 不會過期",
+        tokenNoExpiration: "Token 到期日未知，點擊檢查。",
+        tokenValid: "Token 有效",
     }
 };

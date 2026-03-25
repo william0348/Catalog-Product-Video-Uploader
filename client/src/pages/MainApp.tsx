@@ -12,7 +12,7 @@ import {
     BASE_URL, GOOGLE_CLIENT_ID,
     SESSION_DATA_KEY, INTRO_GUIDE_KEY
 } from '@/constants';
-import { fetchCatalogName, validateAccessToken, saveUploadRecord, getUploadRecords, getCompaniesByEmail, loadCompanySettings, saveCompanySettings, saveSelectedCompany, getSelectedCompany, activateMemberships, type CatalogConfig, type AppSettings, type CompanyInfo } from '@/settingsStore';
+import { fetchCatalogName, validateAccessToken, saveUploadRecord, getUploadRecords, getCompaniesByEmail, loadCompanySettings, saveCompanySettings, saveSelectedCompany, getSelectedCompany, activateMemberships, getTokenExpiration, refreshTokenExpiration, isTokenExpiringSoon, type CatalogConfig, type AppSettings, type CompanyInfo } from '@/settingsStore';
 import type { Product, ProductSet, Catalog, HoveredImage, ProductVideos, VideoType, ToastMessage, UploadedVideo, VideoFilterType } from '@/types';
 import { apiFetch, fetchAllPages } from '@/api';
 
@@ -96,6 +96,11 @@ export const MainApp = () => {
   const [isLoadingCompanies, setIsLoadingCompanies] = useState(false);
   const [companyAccessKeyValue, setCompanyAccessKeyValue] = useState<string>('');
 
+  // ===== Token Expiration State =====
+  const [tokenExpiresAt, setTokenExpiresAt] = useState<string | null>(null);
+  const [isCheckingExpiration, setIsCheckingExpiration] = useState(false);
+  const [tokenExpirationChecked, setTokenExpirationChecked] = useState(false);
+
   // Load settings on mount — only from company settings (no legacy global fallback)
   useEffect(() => {
     const savedCompanyId = getSelectedCompany();
@@ -114,6 +119,42 @@ export const MainApp = () => {
       setTokenInput('');
     }
   }, []);
+
+  // Check token expiration when company is selected
+  useEffect(() => {
+    if (!selectedCompanyId) {
+      setTokenExpiresAt(null);
+      setTokenExpirationChecked(false);
+      return;
+    }
+    getTokenExpiration(selectedCompanyId).then(result => {
+      setTokenExpiresAt(result.tokenExpiresAt);
+      setTokenExpirationChecked(true);
+      // If no expiration info yet but has token, auto-refresh from Facebook
+      if (!result.tokenExpiresAt && result.hasToken) {
+        refreshTokenExpiration(selectedCompanyId).then(refreshResult => {
+          if (refreshResult.tokenExpiresAt) {
+            setTokenExpiresAt(refreshResult.tokenExpiresAt);
+          }
+        }).catch(console.error);
+      }
+    }).catch(console.error);
+  }, [selectedCompanyId]);
+
+  const handleRefreshExpiration = useCallback(async () => {
+    if (!selectedCompanyId) return;
+    setIsCheckingExpiration(true);
+    try {
+      const result = await refreshTokenExpiration(selectedCompanyId);
+      if (result.tokenExpiresAt) {
+        setTokenExpiresAt(result.tokenExpiresAt);
+      }
+    } catch (e) {
+      console.error('Failed to refresh token expiration:', e);
+    } finally {
+      setIsCheckingExpiration(false);
+    }
+  }, [selectedCompanyId]);
 
   // Refresh settings when returning to input view
   useEffect(() => {
@@ -749,6 +790,43 @@ export const MainApp = () => {
 
 
           
+          {/* ===== Token Expiration Warning ===== */}
+          {selectedCompanyId && tokenExpirationChecked && (() => {
+            const expiryInfo = isTokenExpiringSoon(tokenExpiresAt, 7);
+            if (expiryInfo.expired) {
+              return (
+                <div className="token-expiration-banner token-expired">
+                  <div className="token-banner-content">
+                    <strong>{t('tokenExpired')}</strong>
+                    <p>{t('tokenExpiredMessage')}</p>
+                  </div>
+                  <button onClick={() => { window.location.hash = '#/admin'; }} className="token-update-btn">
+                    {t('tokenUpdateNow')}
+                  </button>
+                </div>
+              );
+            }
+            if (expiryInfo.expiring && expiryInfo.daysLeft !== null) {
+              return (
+                <div className="token-expiration-banner token-warning">
+                  <div className="token-banner-content">
+                    <strong>{t('tokenExpirationWarning')}</strong>
+                    <p>{t('tokenExpiresIn').replace('{days}', String(expiryInfo.daysLeft))}</p>
+                    {tokenExpiresAt && (
+                      <span className="token-expires-date">
+                        {t('tokenExpiresOn').replace('{date}', new Date(tokenExpiresAt).toLocaleDateString())}
+                      </span>
+                    )}
+                  </div>
+                  <button onClick={() => { window.location.hash = '#/admin'; }} className="token-update-btn">
+                    {t('tokenUpdateNow')}
+                  </button>
+                </div>
+              );
+            }
+            return null;
+          })()}
+
           {/* ===== Catalog Dropdown ===== */}
           <div className="form-group">
               <label htmlFor="catalogSelect">{t('catalogIdLabel')}</label>

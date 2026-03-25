@@ -24,6 +24,7 @@ export interface CompanyInfo {
   facebookAccessToken: string | null;
   catalogs: string; // JSON string of CatalogConfig[]
   accessKey: string | null;
+  tokenExpiresAt: string | null;
   createdAt: string;
   memberRole?: string;
   status?: string;
@@ -345,4 +346,45 @@ export const getUploadRecords = async (catalogId: string): Promise<any[]> => {
     console.error('Failed to get upload records:', e);
     return [];
   }
+};
+
+// ==================== Token Expiration Helpers ====================
+
+/**
+ * Get token expiration info for a company
+ */
+export const getTokenExpiration = async (companyId: number): Promise<{ tokenExpiresAt: string | null; hasToken: boolean }> => {
+  try {
+    return await trpcQuery('company.getTokenExpiration', { id: companyId });
+  } catch (e) {
+    console.error('Failed to get token expiration:', e);
+    return { tokenExpiresAt: null, hasToken: false };
+  }
+};
+
+/**
+ * Refresh token expiration info from Facebook API
+ */
+export const refreshTokenExpiration = async (companyId: number): Promise<{ tokenExpiresAt: string | null; neverExpires?: boolean; error?: string }> => {
+  try {
+    return await trpcMutate('company.refreshTokenExpiration', { id: companyId });
+  } catch (e: any) {
+    console.error('Failed to refresh token expiration:', e);
+    return { tokenExpiresAt: null, error: e.message || 'Failed to refresh' };
+  }
+};
+
+/**
+ * Check if token is expiring soon (within given days)
+ */
+export const isTokenExpiringSoon = (expiresAt: string | null, withinDays: number = 7): { expiring: boolean; daysLeft: number | null; expired: boolean } => {
+  if (!expiresAt) return { expiring: false, daysLeft: null, expired: false };
+  const now = new Date();
+  const expiryDate = new Date(expiresAt);
+  const diffMs = expiryDate.getTime() - now.getTime();
+  const daysLeft = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+  
+  if (daysLeft < 0) return { expiring: true, daysLeft, expired: true };
+  if (daysLeft <= withinDays) return { expiring: true, daysLeft, expired: false };
+  return { expiring: false, daysLeft, expired: false };
 };

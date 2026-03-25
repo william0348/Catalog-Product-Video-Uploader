@@ -35,6 +35,8 @@ export const companies = mysqlTable("companies", {
   catalogs: text("catalogs"),
   /** Access key/password for the upload tool */
   accessKey: varchar("accessKey", { length: 255 }),
+  /** Facebook Access Token expiration timestamp */
+  tokenExpiresAt: timestamp("tokenExpiresAt"),
   createdBy: int("createdBy").notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),

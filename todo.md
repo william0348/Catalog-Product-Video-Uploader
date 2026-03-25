@@ -471,3 +471,9 @@
 ## Phase 52: 重新命名為 Meta Catalog Product Video Uploader
 - [x] 搜尋並替換所有 CPAS Video Upload 相關名稱
 - [x] 移除所有 CPAS 專屬描述，改為通用的 Meta Catalog 定位（65/65 passed）
+
+## Phase 53: Access Token 到期日提醒
+- [x] 調查目前 token 儲存方式和到期日管理
+- [x] 實作 token 到期日追蹤（後端 + 資料庫 tokenExpiresAt 欄位）
+- [x] 在首頁顯示到期提醒（接近 1 週黃色警告，已過期紅色警告）
+- [x] 測試並驗證（75/75 passed）

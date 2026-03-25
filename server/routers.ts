@@ -123,9 +123,61 @@ export const appRouter = router({
         if (data.facebookAccessToken !== undefined) updateData.facebookAccessToken = data.facebookAccessToken;
         if (data.accessKey !== undefined) updateData.accessKey = data.accessKey;
         if (data.catalogs !== undefined) updateData.catalogs = data.catalogs;
+
+        // Auto-check token expiration when token is updated
+        if (data.facebookAccessToken) {
+          try {
+            const debugUrl = `https://graph.facebook.com/v21.0/debug_token?input_token=${data.facebookAccessToken}&access_token=${data.facebookAccessToken}`;
+            const debugResp = await fetch(debugUrl);
+            const debugData = await debugResp.json();
+            if (debugData?.data?.expires_at) {
+              updateData.tokenExpiresAt = new Date(debugData.data.expires_at * 1000);
+            }
+          } catch (e) {
+            console.warn('Failed to check token expiration:', e);
+          }
+        }
         
         await updateCompany(id, updateData as any);
         return { success: true };
+      }),
+
+    // Check token expiration for a company
+    getTokenExpiration: publicProcedure
+      .input(z.object({ id: z.number() }))
+      .query(async ({ input }) => {
+        const company = await getCompanyById(input.id);
+        if (!company) throw new Error("Company not found");
+        return {
+          tokenExpiresAt: company.tokenExpiresAt ? company.tokenExpiresAt.toISOString() : null,
+          hasToken: !!company.facebookAccessToken,
+        };
+      }),
+
+    // Manually refresh token expiration info
+    refreshTokenExpiration: publicProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ input }) => {
+        const company = await getCompanyById(input.id);
+        if (!company || !company.facebookAccessToken) {
+          return { tokenExpiresAt: null, error: 'No token found' };
+        }
+        try {
+          const debugUrl = `https://graph.facebook.com/v21.0/debug_token?input_token=${company.facebookAccessToken}&access_token=${company.facebookAccessToken}`;
+          const debugResp = await fetch(debugUrl);
+          const debugData = await debugResp.json();
+          if (debugData?.data?.expires_at) {
+            const expiresAt = new Date(debugData.data.expires_at * 1000);
+            await updateCompany(input.id, { tokenExpiresAt: expiresAt } as any);
+            return { tokenExpiresAt: expiresAt.toISOString() };
+          } else if (debugData?.data?.expires_at === 0) {
+            // Token never expires (e.g., system user token)
+            return { tokenExpiresAt: null, neverExpires: true };
+          }
+          return { tokenExpiresAt: null, error: debugData?.data?.error?.message || 'Could not determine expiration' };
+        } catch (e: any) {
+          return { tokenExpiresAt: null, error: e.message || 'Failed to check token' };
+        }
       }),
 
     // Get full access token (for use in API calls)
