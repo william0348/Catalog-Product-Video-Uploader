@@ -445,6 +445,21 @@
 - [x] 上傳並設定為網站 site icon（favicon、sidebar、footer）
 
 ## Phase 48: 製作 Lion Tech Solution 介紹影片
-- [ ] 撰寫影片腳本（痛點、解決方案、功能介紹）
-- [ ] 生成參考圖片和視覺素材
-- [ ] 生成影片片段並組裝最終影片
+- [x] 撰寫影片腳本（痛點、解決方案、功能介紹）
+- [x] 生成參考圖片和視覺素材（8 張參考圖）
+- [x] 生成影片片段並組裝最終影片（8 clips + 旁白 + BGM，50秒 1080p）
+
+## Phase 49: 介紹影片改為全英文旁白 + 音量加大
+- [x] 重新生成英文旁白語音（7 clips）
+- [x] 調大旁白和 BGM 音量（narration 3x + loudnorm）
+- [x] 重新組裝最終影片（50s 1080p 16.4MB）
+
+## Phase 50: 更新 GitHub README.md
+- [ ] 加入 Manus 整合說明（需移除內建登入系統）
+- [ ] 說明需自行整合 login 功能
+
+## Phase 50: 更新 GitHub README.md
+- [ ] 加入 Manus 整合說明（需移除內建 Manus Login 系統，自行整合登入功能）
+
+## Phase 50: 更新 GitHub README.md
+- [x] 加入 Manus 整合說明：需移除內建 Manus Login，用戶只需整合自己的 Google Login Client ID

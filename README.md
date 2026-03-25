@@ -6,6 +6,20 @@ CPV Uploader is a web-based tool designed for brands and retailers running **Met
 
 ---
 
+## Important: Manus Platform Integration
+
+This project was originally built and deployed on the **Manus AI platform**, which provides a built-in OAuth login system (Manus Login). If you are cloning this repository to run independently outside of Manus, you will need to **remove the built-in Manus Login system** and integrate your own authentication.
+
+For most use cases, integrating **Google OAuth 2.0** is the simplest approach. You only need to:
+
+1. Create a Google Cloud project and obtain an **OAuth 2.0 Client ID** from the [Google Cloud Console](https://console.cloud.google.com/apis/credentials).
+2. Set the `GOOGLE_CLIENT_ID` environment variable with your Client ID.
+3. Remove or bypass the Manus OAuth routes in `server/_core/oauth.ts`.
+
+The current deployment already uses Google Login for user authentication and Google Drive integration. The Manus Login layer is only used for the platform's internal session management and can be safely replaced.
+
+---
+
 ## Overview
 
 Meta CPAS allows brands and retail marketplaces to collaborate on targeted Facebook and Instagram ads by sharing product catalog segments. While Meta supports video creatives at the product level, manually uploading videos to each product in a catalog is time-consuming and error-prone, especially for catalogs containing thousands of SKUs.
@@ -102,7 +116,7 @@ The application uses five primary database tables:
 
 | Table | Description |
 |-------|-------------|
-| `users` | User accounts linked to Manus OAuth, with role-based access (admin/user) |
+| `users` | User accounts (originally linked to Manus OAuth, should be replaced with your own auth provider), with role-based access (admin/user) |
 | `companies` | Brand/retailer organizations with Facebook tokens and catalog configurations |
 | `company_members` | Email-based membership linking users to companies (owner/member roles) |
 | `upload_records` | Historical log of all video uploads with product metadata and video URLs |
@@ -154,6 +168,7 @@ The following environment variables are required:
 | `DATABASE_URL` | MySQL/TiDB connection string |
 | `JWT_SECRET` | Session cookie signing secret |
 | `VITE_APP_ID` | Application identifier |
+| `GOOGLE_CLIENT_ID` | Google OAuth 2.0 Client ID (required for authentication and Drive integration) |
 
 ### Database Setup
 
@@ -209,4 +224,4 @@ MIT
 
 ## Acknowledgments
 
-Built with the [Meta Marketing API](https://developers.facebook.com/docs/marketing-apis/) and [Google APIs](https://developers.google.com/). Designed for the RhinoShield x Meta CPAS partnership workflow.
+Built on the [Manus AI platform](https://manus.im) with the [Meta Marketing API](https://developers.facebook.com/docs/marketing-apis/) and [Google APIs](https://developers.google.com/). Originally designed for the RhinoShield x Meta CPAS partnership workflow.
