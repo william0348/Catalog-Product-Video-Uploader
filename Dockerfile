@@ -16,7 +16,8 @@ COPY package.json pnpm-lock.yaml ./
 COPY patches/ ./patches/
 RUN pnpm install --frozen-lockfile --prod
 COPY --from=builder /app/dist ./dist
+COPY run-migrations.js ./
 EXPOSE 3000
 ENV NODE_ENV=production
 ENV PORT=3000
-CMD ["node", "dist/index.js"]
+CMD ["sh", "-c", "node run-migrations.js && node dist/index.js"]
