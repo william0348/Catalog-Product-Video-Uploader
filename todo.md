@@ -483,3 +483,8 @@
 
 ## Phase 55: 上傳 Cloud Run 部署指南到 GitHub
 - [x] 將 deploy-manus-to-cloudrun.md 加入專案根目錄
+
+## Phase 56: 撰寫詳細 Manus 平台遷移指南
+- [x] 分析專案中所有 Manus 專屬依賴和功能
+- [x] 撰寫完整遷移指南 MD 文件（給其他 AI / 開發者參考）
+- [ ] 上傳到 GitHub 並儲存 checkpoint
