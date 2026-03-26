@@ -477,3 +477,6 @@
 - [x] 實作 token 到期日追蹤（後端 + 資料庫 tokenExpiresAt 欄位）
 - [x] 在首頁顯示到期提醒（接近 1 週黃色警告，已過期紅色警告）
 - [x] 測試並驗證（75/75 passed）
+
+## Phase 54: 將 Google Client ID 硬編碼到程式碼中
+- [x] 將 Client ID 寫入 constants.ts 作為預設值（env 變數優先）

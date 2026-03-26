@@ -11,4 +11,4 @@ export const LANGUAGE_KEY = 'cpv_language';
 // This constant is kept for backward compatibility only.
 export const FACEBOOK_ACCESS_TOKEN = "MANAGED_VIA_ADMIN_PANEL";
 
-export const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || "";
+export const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || "1034922920826-p03210cv43c0kgdp15fjgkq90hbjs6uq.apps.googleusercontent.com";
