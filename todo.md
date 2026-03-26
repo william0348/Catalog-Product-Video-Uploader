@@ -480,3 +480,6 @@
 
 ## Phase 54: 將 Google Client ID 硬編碼到程式碼中
 - [x] 將 Client ID 寫入 constants.ts 作為預設值（env 變數優先）
+
+## Phase 55: 上傳 Cloud Run 部署指南到 GitHub
+- [x] 將 deploy-manus-to-cloudrun.md 加入專案根目錄
