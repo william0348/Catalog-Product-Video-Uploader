@@ -493,3 +493,9 @@
 - [x] Video Log 同一商品（retailerId + catalogId）只顯示最新一筆記錄
 - [x] Video Log 表格新增上傳人員 email 和 name 欄位
 - [x] 移除「上傳人員」tab
+
+## Phase 58: 將資料庫結構加入遷移指南
+- [x] 讀取完整 schema 並整理所有表格資訊
+- [x] 將資料庫結構章節寫入 MIGRATION-FROM-MANUS.md
+- [x] 儲存 checkpoint
+- [x] 詳細標註每個環境變數是 Manus 專屬還是通用，提供替代方案

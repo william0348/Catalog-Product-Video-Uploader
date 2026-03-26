@@ -27,7 +27,8 @@
 17. [第十五步：建立自己的認證系統](#17-第十五步建立自己的認證系統)
 18. [環境變數對照表](#18-環境變數對照表)
 19. [檔案處理清單](#19-檔案處理清單)
-20. [部署到其他平台](#20-部署到其他平台)
+20. [資料庫結構說明](#20-資料庫結構說明)
+21. [部署到其他平台](#21-部署到其他平台)
 
 ---
 
@@ -702,25 +703,92 @@ export async function verifyGoogleToken(idToken: string) {
 
 ## 18. 環境變數對照表
 
-| Manus 環境變數 | 用途 | 遷移後替代 | 必要性 |
-|---------------|------|-----------|--------|
-| `DATABASE_URL` | MySQL 資料庫連線 | 保留，更換為你的 DB URL | **必要** |
-| `JWT_SECRET` | Session cookie 簽名 | 保留，自行生成隨機字串 | **必要** |
-| `VITE_GOOGLE_CLIENT_ID` | Google OAuth Client ID | 保留 | **必要** |
-| `VITE_APP_ID` | Manus OAuth App ID | 移除 | — |
-| `VITE_OAUTH_PORTAL_URL` | Manus 登入頁面 URL | 移除 | — |
-| `OAUTH_SERVER_URL` | Manus OAuth 伺服器 | 移除 | — |
-| `OWNER_OPEN_ID` | Manus 專案擁有者 ID | 移除 | — |
-| `OWNER_NAME` | Manus 專案擁有者名稱 | 移除 | — |
-| `BUILT_IN_FORGE_API_URL` | Manus Forge API 基礎 URL | 移除，替換為各服務自己的 URL | — |
-| `BUILT_IN_FORGE_API_KEY` | Manus Forge API 金鑰 | 移除，替換為各服務自己的金鑰 | — |
-| `VITE_FRONTEND_FORGE_API_KEY` | 前端 Forge API 金鑰 | 移除 | — |
-| `VITE_FRONTEND_FORGE_API_URL` | 前端 Forge API URL | 移除 | — |
-| `VITE_ANALYTICS_ENDPOINT` | Umami 分析端點 | 移除或替換 | 選擇性 |
-| `VITE_ANALYTICS_WEBSITE_ID` | Umami 網站 ID | 移除或替換 | 選擇性 |
-| `VITE_APP_TITLE` | 網站標題 | 保留或硬編碼 | 選擇性 |
-| `VITE_APP_LOGO` | 網站 Logo URL | 保留或硬編碼 | 選擇性 |
-| — | S3 儲存設定 | 新增 `S3_BUCKET`, `S3_REGION`, `S3_ACCESS_KEY`, `S3_SECRET_KEY` | **必要** |
+本專案使用的環境變數分為三類：**Manus 專屬**（遷移後必須移除）、**通用保留**（遷移後仍需使用，但值要替換）、**新增必要**（遷移後需要自行新增）。以下逐一說明。
+
+### 18.1 Manus 專屬環境變數（遷移後必須移除）
+
+這些變數完全由 Manus 平台自動注入，離開 Manus 後它們不再有任何作用，必須從程式碼中移除所有引用。
+
+| 變數名稱 | Manus 平台用途 | 引用位置 | 移除方式 |
+|---------|------------|---------|----------|
+| `VITE_APP_ID` | Manus OAuth 應用程式 ID，用於建構 Manus 登入 URL | `server/_core/env.ts`, `client/src/const.ts` | 刪除 `client/src/const.ts` 中的 `getLoginUrl()` 函數，移除 `env.ts` 中的 `appId` 字段 |
+| `VITE_OAUTH_PORTAL_URL` | Manus 登入入口頁面 URL（例如 `https://login.manus.im`），前端用來將使用者導向 Manus 登入頁 | `client/src/const.ts` | 刪除 `getLoginUrl()` 中的引用，改用自己的 Google OAuth 登入流程 |
+| `OAUTH_SERVER_URL` | Manus OAuth 後端伺服器 URL（例如 `https://api.manus.im`），用於交換 authorization code 取得 token | `server/_core/env.ts`, `server/_core/oauth.ts`, `server/_core/sdk.ts` | 移除整個 `server/_core/oauth.ts` 和 `server/_core/sdk.ts` 中的 Manus OAuth 邏輯 |
+| `OWNER_OPEN_ID` | Manus 專案擁有者的 OpenID，用於判斷是否為專案擁有者（admin 權限） | `server/_core/env.ts` | 移除，改用資料庫中的 `users.role` 欄位判斷管理員權限 |
+| `OWNER_NAME` | Manus 專案擁有者名稱，用於通知顯示 | 未直接在程式碼中使用 | 無需處理，只需從 `.env` 中移除 |
+| `BUILT_IN_FORGE_API_URL` | Manus Forge API 基礎 URL，這是 Manus 平台的統一 API 閘道，包含 LLM、S3 儲存、通知、圖片生成、語音轉文字等多個服務 | `server/_core/env.ts`, `server/storage.ts`, `server/_core/llm.ts`, `server/_core/notification.ts`, `server/_core/imageGeneration.ts`, `server/_core/voiceTranscription.ts`, `server/_core/dataApi.ts` | 移除所有引用，改用各服務自己的 SDK（詳見下方「新增必要」章節） |
+| `BUILT_IN_FORGE_API_KEY` | Manus Forge API 的 Bearer Token，用於後端呼叫 Forge API 時的身份驗證 | `server/_core/env.ts`, `server/storage.ts` 等所有使用 Forge API 的模組 | 移除，改用各服務自己的 API Key |
+| `VITE_FRONTEND_FORGE_API_KEY` | 前端版本的 Forge API Token，用於前端直接呼叫 Manus API（例如 Google Maps 代理） | `client/src/components/Map.tsx` | 移除，本專案未使用 Maps 功能 |
+| `VITE_FRONTEND_FORGE_API_URL` | 前端版本的 Forge API URL | `client/src/components/Map.tsx` | 移除，同上 |
+| `VITE_ANALYTICS_ENDPOINT` | Manus 內建的 Umami 分析服務端點 URL，用於追蹤網站流量 | `client/index.html` 中的 `<script>` 標籤 | 移除或替換為自己的 Google Analytics / Umami 實例 |
+| `VITE_ANALYTICS_WEBSITE_ID` | Umami 分析服務的網站 ID | `client/index.html` 中的 `<script>` 標籤 | 同上，一起移除或替換 |
+
+### 18.2 通用保留環境變數（遷移後仍需使用，但值要替換）
+
+這些變數的「概念」是通用的，但在 Manus 上的值是由平台自動提供的，遷移後你需要自行設定對應的值。
+
+| 變數名稱 | 用途說明 | 如何取得新值 | 必要性 |
+|---------|---------|------------|--------|
+| `DATABASE_URL` | MySQL / TiDB 資料庫連線字串。在 Manus 上指向平台內建的 TiDB Serverless 實例。格式為 `mysql://user:password@host:port/database?ssl={"rejectUnauthorized":true}` | 建立自己的 MySQL 8.0+ 或 TiDB Serverless 實例，取得連線字串。推薦：PlanetScale、TiDB Cloud、AWS RDS、Google Cloud SQL | **必要** |
+| `JWT_SECRET` | 用於簽署 session cookie 的密鑰。在 Manus 上由平台自動生成。如果這個值洩漏或被替換，所有現有的登入 session 都會失效 | 執行 `openssl rand -base64 32` 生成一個隨機字串，存入環境變數 | **必要** |
+| `VITE_GOOGLE_CLIENT_ID` | Google OAuth 2.0 Client ID，用於 Google 登入功能。本專案的核心認證是透過 Google OAuth，而不是 Manus OAuth | 到 [Google Cloud Console](https://console.cloud.google.com/apis/credentials) 建立 OAuth 2.0 Client ID，設定授權的 redirect URI。目前已有值：`1034922920826-p03210cv43c0kgdp15fjgkq90hbjs6uq.apps.googleusercontent.com`（寫在 `client/src/constants.ts` 中作為 fallback） | **必要** |
+| `VITE_APP_TITLE` | 網站標題，顯示在瀏覽器分頁和部分 UI 元件上 | 直接設定為你想要的標題，例如 `CPV Uploader`，或者直接在程式碼中硬編碼 | 選擇性 |
+| `VITE_APP_LOGO` | 網站 Logo 圖片 URL | 上傳你的 Logo 到 CDN 或 S3，取得 URL，或者直接在程式碼中硬編碼 | 選擇性 |
+| `PORT` | 伺服器監聽的埠口號，預設為 `3000` | 大多數雲端平台會自動注入（Cloud Run 用 `8080`，Railway 自動分配） | 自動 |
+| `NODE_ENV` | Node.js 執行環境，`development` 或 `production` | 部署時設定為 `production`，本地開發用 `development` | 自動 |
+
+### 18.3 遷移後需要新增的環境變數
+
+這些變數在 Manus 平台上不存在（因為平台內建了對應服務），但遷移後你需要自行提供。
+
+| 變數名稱 | 用途說明 | 如何取得 | 必要性 |
+|---------|---------|---------|--------|
+| `S3_BUCKET` | S3 儲存桶名稱，用於儲存上傳的影片和圖片 | 在 AWS S3 或相容服務（Cloudflare R2、MinIO）建立 Bucket | **必要** |
+| `S3_REGION` | S3 Bucket 所在區域，例如 `ap-northeast-1` | 建立 Bucket 時選擇的區域 | **必要** |
+| `S3_ACCESS_KEY_ID` | AWS IAM Access Key ID，用於 S3 API 認證 | 在 AWS IAM 建立具有 S3 存取權限的使用者，取得 Access Key | **必要** |
+| `S3_SECRET_ACCESS_KEY` | AWS IAM Secret Access Key | 同上，與 Access Key ID 一起取得 | **必要** |
+| `S3_ENDPOINT` | S3 相容服務的端點 URL（僅非 AWS S3 時需要） | 例如 Cloudflare R2: `https://<account_id>.r2.cloudflarestorage.com` | 條件性 |
+| `S3_PUBLIC_URL` | S3 Bucket 的公開存取 URL 前綴，用於產生檔案的公開連結 | 例如 `https://your-bucket.s3.amazonaws.com` 或自訂 CDN 網域 | **必要** |
+
+### 18.4 完整的 `.env.example` 範例
+
+遷移後，你的 `.env` 檔案應該長這樣（已移除所有 Manus 專屬變數）：
+
+```env
+# ==================== 資料庫 ====================
+# MySQL 8.0+ 或 TiDB Serverless 連線字串
+# 格式: mysql://user:password@host:port/database?ssl={"rejectUnauthorized":true}
+DATABASE_URL=mysql://root:your_password@localhost:3306/cpv_uploader
+
+# ==================== 認證 ====================
+# Session cookie 簽名密鑰（用 openssl rand -base64 32 生成）
+JWT_SECRET=your_random_secret_here
+
+# Google OAuth 2.0 Client ID
+# 從 https://console.cloud.google.com/apis/credentials 取得
+VITE_GOOGLE_CLIENT_ID=your_google_client_id.apps.googleusercontent.com
+
+# ==================== S3 儲存 ====================
+# 用於儲存上傳的影片和圖片
+S3_BUCKET=your-bucket-name
+S3_REGION=ap-northeast-1
+S3_ACCESS_KEY_ID=AKIAIOSFODNN7EXAMPLE
+S3_SECRET_ACCESS_KEY=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
+# 僅非 AWS S3 時需要（例如 Cloudflare R2、MinIO）
+# S3_ENDPOINT=https://your-account-id.r2.cloudflarestorage.com
+# 公開存取 URL 前綴
+S3_PUBLIC_URL=https://your-bucket.s3.amazonaws.com
+
+# ==================== 應用程式設定（選擇性） ====================
+VITE_APP_TITLE=CPV Uploader
+# VITE_APP_LOGO=https://your-cdn.com/logo.png
+
+# ==================== 分析追蹤（選擇性） ====================
+# 如果你想使用 Google Analytics 或自架 Umami
+# GA_TRACKING_ID=G-XXXXXXXXXX
+```
+
+> **重要提醒**：在 Manus 平台上，`BUILT_IN_FORGE_API_URL` 和 `BUILT_IN_FORGE_API_KEY` 是一個「萬用閘道」，它背後包含了 S3 儲存、LLM、通知、圖片生成、語音轉文字、Google Maps 代理等多個服務。遷移後，你只需要替換本專案實際使用的服務（主要是 S3 儲存），其他未使用的服務直接刪除即可。
 
 ---
 
@@ -789,9 +857,267 @@ export async function verifyGoogleToken(idToken: string) {
 
 ---
 
-## 20. 部署到其他平台
+## 20. 資料庫結構說明
 
-### 20.1 Google Cloud Run
+本專案使用 **Drizzle ORM** 搭配 **MySQL**（在 Manus 平台上實際使用的是 TiDB Serverless，完全相容 MySQL 8.0 協定）。資料庫 schema 定義在 `drizzle/schema.ts`，以下是所有 6 張表格的完整結構說明。遷移時只需將同一個 schema 推送到你的新資料庫即可（`pnpm db:push`）。
+
+### 20.1 表格總覽
+
+| 表格名稱 | Drizzle 變數名 | 用途說明 | 記錄數量級別 |
+|---------|------------|---------|------------|
+| `users` | `users` | 使用者帳號（Manus OAuth 登入紀錄） | 百級 |
+| `companies` | `companies` | 公司（包含 Facebook Access Token 和目錄設定） | 十級 |
+| `company_members` | `companyMembers` | 公司成員（郁請制，透過 email 配對） | 十級 |
+| `upload_records` | `uploadRecords` | 影片上傳紀錄（核心業務資料） | 萬級 |
+| `app_settings` | `appSettings` | 應用程式設定（Key-Value 儲存） | 個位數 |
+| `slideshow_templates` | `slideshowTemplates` | 幻燈片範本設定 | 十級 |
+
+### 20.2 `users` 表 — 使用者帳號
+
+這張表是 Manus OAuth 登入系統的核心。**遷移注意**：`openId` 欄位儲存的是 Manus 平台的使用者 ID，如果你移除 Manus OAuth 並改用 Google OAuth，可以將此欄位改為儲存 Google `sub` ID，或者新增一個 `googleId` 欄位。
+
+```sql
+CREATE TABLE `users` (
+  `id`            int          NOT NULL AUTO_INCREMENT,
+  `openId`        varchar(64)  NOT NULL,          -- Manus OAuth 識別碼（遷移後可改為 Google sub ID）
+  `name`          text         DEFAULT NULL,       -- 使用者名稱
+  `email`         varchar(320) DEFAULT NULL,       -- 使用者 email
+  `loginMethod`   varchar(64)  DEFAULT NULL,       -- 登入方式（例如 'google'）
+  `role`          enum('user','admin') NOT NULL DEFAULT 'user',  -- 角色權限
+  `createdAt`     timestamp    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updatedAt`     timestamp    NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  `lastSignedIn`  timestamp    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `users_openId_unique` (`openId`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+```
+
+| 欄位 | 型別 | 必填 | 預設值 | 說明 |
+|------|------|------|--------|------|
+| `id` | int AUTO_INCREMENT | ✔ | 自動遞增 | 主鍵 |
+| `openId` | varchar(64) | ✔ | — | Manus OAuth 識別碼，UNIQUE。遷移後可改存 Google `sub` ID |
+| `name` | text | ✘ | NULL | 使用者名稱 |
+| `email` | varchar(320) | ✘ | NULL | 使用者 email |
+| `loginMethod` | varchar(64) | ✘ | NULL | 登入方式識別碼 |
+| `role` | enum('user','admin') | ✔ | 'user' | 角色權限，用於區分管理員和一般使用者 |
+| `createdAt` | timestamp | ✔ | CURRENT_TIMESTAMP | 建立時間 |
+| `updatedAt` | timestamp | ✔ | CURRENT_TIMESTAMP ON UPDATE | 更新時間（自動更新） |
+| `lastSignedIn` | timestamp | ✔ | CURRENT_TIMESTAMP | 最後登入時間 |
+
+### 20.3 `companies` 表 — 公司設定
+
+每個公司擁有自己的 Facebook Access Token 和目錄清單。`catalogs` 欄位儲存 JSON 陣列字串，格式為 `[{"id":"123","name":"My Catalog"}]`。
+
+```sql
+CREATE TABLE `companies` (
+  `id`                   int          NOT NULL AUTO_INCREMENT,
+  `name`                 varchar(255) NOT NULL,           -- 公司名稱
+  `facebookAccessToken`  text         DEFAULT NULL,       -- Facebook Graph API Access Token
+  `catalogs`             text         DEFAULT NULL,       -- JSON 陣列: [{id, name}]
+  `accessKey`            varchar(255) DEFAULT NULL,       -- 上傳工具存取密碼
+  `tokenExpiresAt`       timestamp    NULL DEFAULT NULL,  -- Token 過期時間
+  `createdBy`            int          NOT NULL,           -- 建立者 user ID
+  `createdAt`            timestamp    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updatedAt`            timestamp    NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+```
+
+| 欄位 | 型別 | 必填 | 說明 |
+|------|------|------|------|
+| `id` | int AUTO_INCREMENT | ✔ | 主鍵 |
+| `name` | varchar(255) | ✔ | 公司名稱 |
+| `facebookAccessToken` | text | ✘ | Facebook Graph API 存取權杖，用於讀取目錄商品和上傳影片 |
+| `catalogs` | text | ✘ | JSON 字串，儲存公司繫定的 Meta 目錄清單 `[{"id":"...","name":"..."}]` |
+| `accessKey` | varchar(255) | ✘ | 公司內部存取密碼，用於上傳工具的認證 |
+| `tokenExpiresAt` | timestamp | ✘ | Facebook Token 過期時間，用於前端顯示過期提醒 |
+| `createdBy` | int | ✔ | 建立此公司的使用者 ID（對應 `users.id`） |
+| `createdAt` | timestamp | ✔ | 建立時間 |
+| `updatedAt` | timestamp | ✔ | 更新時間 |
+
+### 20.4 `company_members` 表 — 公司成員
+
+透過 email 邀請制管理公司成員。新成員加入時狀態為 `pending`，當該 email 的使用者實際登入後會自動配對並轉為 `active`。
+
+```sql
+CREATE TABLE `company_members` (
+  `id`          int          NOT NULL AUTO_INCREMENT,
+  `companyId`   int          NOT NULL,                    -- 所屬公司 ID
+  `email`       varchar(320) NOT NULL,                    -- 成員 email
+  `memberRole`  enum('owner','member') NOT NULL DEFAULT 'member',  -- 公司內角色
+  `status`      enum('active','pending') NOT NULL DEFAULT 'pending', -- 成員狀態
+  `userId`      int          DEFAULT NULL,                -- 已配對的 user ID
+  `createdAt`   timestamp    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updatedAt`   timestamp    NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+```
+
+| 欄位 | 型別 | 必填 | 說明 |
+|------|------|------|------|
+| `id` | int AUTO_INCREMENT | ✔ | 主鍵 |
+| `companyId` | int | ✔ | 外鍵，對應 `companies.id` |
+| `email` | varchar(320) | ✔ | 成員 email，用於邀請配對 |
+| `memberRole` | enum('owner','member') | ✔ | 公司內角色：owner 可管理設定，member 只能上傳 |
+| `status` | enum('active','pending') | ✔ | pending = 已邀請但未登入，active = 已配對使用者 |
+| `userId` | int | ✘ | 當成員登入後自動填入對應的 `users.id` |
+| `createdAt` | timestamp | ✔ | 建立時間 |
+| `updatedAt` | timestamp | ✔ | 更新時間 |
+
+### 20.5 `upload_records` 表 — 影片上傳紀錄（核心業務資料）
+
+這是本專案最重要的表格，記錄每次影片上傳的詳細資訊。每個商品可能有多筆上傳紀錄（重複上傳），但前端 Video Log 會以 `retailerId + catalogId` 去重，只顯示最新一筆。
+
+```sql
+CREATE TABLE `upload_records` (
+  `id`                int          NOT NULL AUTO_INCREMENT,
+  `companyId`         int          DEFAULT NULL,          -- 所屬公司 ID
+  `catalogId`         varchar(64)  NOT NULL,              -- Meta Catalog ID
+  `retailerId`        varchar(255) NOT NULL,              -- 商品零售商 ID
+  `productName`       varchar(512) NOT NULL,              -- 商品名稱
+  `productImageUrl`   text         DEFAULT NULL,          -- 商品圖片 URL
+  `video4x5Download`  text         DEFAULT NULL,          -- 4:5 影片下載 URL
+  `video4x5Embed`     text         DEFAULT NULL,          -- 4:5 影片嵌入 URL
+  `video9x16Download` text         DEFAULT NULL,          -- 9:16 影片下載 URL
+  `video9x16Embed`    text         DEFAULT NULL,          -- 9:16 影片嵌入 URL
+  `clientName`        varchar(255) NOT NULL,              -- 客戶名稱
+  `uploadTimestamp`   timestamp    NOT NULL DEFAULT CURRENT_TIMESTAMP, -- 上傳時間
+  `uploadedBy`        varchar(255) DEFAULT NULL,          -- 上傳人員 email（Google 登入）
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+```
+
+| 欄位 | 型別 | 必填 | 說明 |
+|------|------|------|------|
+| `id` | int AUTO_INCREMENT | ✔ | 主鍵 |
+| `companyId` | int | ✘ | 外鍵，對應 `companies.id`（可為 NULL 代表未繫定公司） |
+| `catalogId` | varchar(64) | ✔ | Meta 目錄 ID，例如 `778284289334909` |
+| `retailerId` | varchar(255) | ✔ | 商品零售商 ID，用於商品唯一識別 |
+| `productName` | varchar(512) | ✔ | 商品名稱 |
+| `productImageUrl` | text | ✘ | 商品圖片 URL（來自 Meta Catalog） |
+| `video4x5Download` | text | ✘ | 4:5 比例影片的下載 URL（存在 S3 或 Google Drive） |
+| `video4x5Embed` | text | ✘ | 4:5 比例影片的嵌入播放 URL |
+| `video9x16Download` | text | ✘ | 9:16 比例影片的下載 URL |
+| `video9x16Embed` | text | ✘ | 9:16 比例影片的嵌入播放 URL |
+| `clientName` | varchar(255) | ✔ | 客戶名稱（例如 "momo test catalog"） |
+| `uploadTimestamp` | timestamp | ✔ | 上傳時間，自動設定為當前時間 |
+| `uploadedBy` | varchar(255) | ✘ | 上傳人員的 Google email（例如 `william@gmail.com`） |
+
+> **業務邏輯說明**：`retailerId + catalogId` 組合可以唯一識別一個商品。同一商品可能被多次上傳（更新影片），後端查詢時會以 `MAX(id)` 去重，只返回每個商品的最新紀錄。
+
+### 20.6 `app_settings` 表 — 應用程式設定
+
+簡單的 Key-Value 儲存，用於儲存全域設定（例如預設客戶名稱、功能開關等）。
+
+```sql
+CREATE TABLE `app_settings` (
+  `id`           int          NOT NULL AUTO_INCREMENT,
+  `settingKey`   varchar(128) NOT NULL,              -- 設定鍵名
+  `settingValue` text         DEFAULT NULL,          -- 設定值
+  `updatedAt`    timestamp    NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `app_settings_settingKey_unique` (`settingKey`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+```
+
+| 欄位 | 型別 | 必填 | 說明 |
+|------|------|------|------|
+| `id` | int AUTO_INCREMENT | ✔ | 主鍵 |
+| `settingKey` | varchar(128) | ✔ | 設定鍵名，UNIQUE（例如 `default_client_name`） |
+| `settingValue` | text | ✘ | 設定值（字串格式） |
+| `updatedAt` | timestamp | ✔ | 更新時間 |
+
+### 20.7 `slideshow_templates` 表 — 幻燈片範本
+
+儲存幻燈片生成器的範本設定，包含影片比例、轉場效果、字型、顏色等參數。
+
+```sql
+CREATE TABLE `slideshow_templates` (
+  `id`                 int          NOT NULL AUTO_INCREMENT,
+  `name`               varchar(255) NOT NULL,              -- 範本名稱
+  `aspectRatio`        varchar(10)  NOT NULL DEFAULT '4:5', -- 影片比例: '4:5' 或 '9:16'
+  `durationPerImage`   int          NOT NULL DEFAULT 3,     -- 每張圖片顯示秒數
+  `transition`         varchar(50)  NOT NULL DEFAULT 'fade',-- 轉場效果類型
+  `transitionDuration` int          NOT NULL DEFAULT 50,    -- 轉場時長（除以 100 得秒數）
+  `showProductName`    int          NOT NULL DEFAULT 0,     -- 是否顯示商品名稱 (0/1)
+  `textPosition`       varchar(20)  NOT NULL DEFAULT 'bottom', -- 文字位置: top/center/bottom
+  `fontSize`           int          NOT NULL DEFAULT 40,    -- 字型大小 (px)
+  `fontFamily`         varchar(100) NOT NULL DEFAULT 'noto-sans-cjk', -- 字型
+  `fontColor`          varchar(20)  NOT NULL DEFAULT '#FFFFFF',       -- 字型顏色
+  `backgroundColor`    varchar(20)  NOT NULL DEFAULT '#FFFFFF',       -- 背景色
+  `imageScale`         int          NOT NULL DEFAULT 100,   -- 圖片縮放比例 (%)
+  `imageOffsetX`       int          NOT NULL DEFAULT 0,     -- 圖片水平偏移 (%)
+  `imageOffsetY`       int          NOT NULL DEFAULT 0,     -- 圖片垂直偏移 (%)
+  `overlayText`        text         DEFAULT NULL,           -- 覆蓋文字
+  `createdBy`          int          NOT NULL,               -- 建立者 user ID
+  `createdAt`          timestamp    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updatedAt`          timestamp    NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+```
+
+| 欄位 | 型別 | 必填 | 預設值 | 說明 |
+|------|------|------|--------|------|
+| `id` | int AUTO_INCREMENT | ✔ | 自動遞增 | 主鍵 |
+| `name` | varchar(255) | ✔ | — | 範本名稱 |
+| `aspectRatio` | varchar(10) | ✔ | '4:5' | 影片比例 |
+| `durationPerImage` | int | ✔ | 3 | 每張圖片顯示秒數 |
+| `transition` | varchar(50) | ✔ | 'fade' | 轉場效果（fade/slide/zoom 等） |
+| `transitionDuration` | int | ✔ | 50 | 轉場時長，實際秒數 = 值 / 100（即 0.5 秒） |
+| `showProductName` | int | ✔ | 0 | 是否在影片中顯示商品名稱（0=否, 1=是） |
+| `textPosition` | varchar(20) | ✔ | 'bottom' | 文字位置 |
+| `fontSize` | int | ✔ | 40 | 字型大小 (px) |
+| `fontFamily` | varchar(100) | ✔ | 'noto-sans-cjk' | 字型名稱 |
+| `fontColor` | varchar(20) | ✔ | '#FFFFFF' | 字型顏色 (hex) |
+| `backgroundColor` | varchar(20) | ✔ | '#FFFFFF' | 背景顏色 (hex) |
+| `imageScale` | int | ✔ | 100 | 圖片縮放比例 (%) |
+| `imageOffsetX` | int | ✔ | 0 | 圖片水平偏移 (%) |
+| `imageOffsetY` | int | ✔ | 0 | 圖片垂直偏移 (%) |
+| `overlayText` | text | ✘ | NULL | 覆蓋在影片上的文字 |
+| `createdBy` | int | ✔ | — | 建立者 user ID（對應 `users.id`） |
+| `createdAt` | timestamp | ✔ | CURRENT_TIMESTAMP | 建立時間 |
+| `updatedAt` | timestamp | ✔ | CURRENT_TIMESTAMP ON UPDATE | 更新時間 |
+
+### 20.8 表格關聯關係圖
+
+本專案的資料庫沒有使用 Drizzle 的 `relations` 功能（`drizzle/relations.ts` 為空），也沒有定義 SQL 層級的外鍵約束。以下是邏輯上的關聯關係（透過程式碼中的查詢推斷）：
+
+```
+users.id ←── companies.createdBy        (誰建立了這個公司)
+users.id ←── company_members.userId     (成員配對到哪個使用者)
+users.id ←── slideshow_templates.createdBy (誰建立了這個範本)
+companies.id ←── company_members.companyId  (成員屬於哪個公司)
+companies.id ←── upload_records.companyId   (上傳紀錄屬於哪個公司)
+```
+
+> **遷移提醒**：如果你想在新資料庫中加入外鍵約束以確保資料完整性，可以在 `drizzle/schema.ts` 中使用 `.references(() => users.id)` 等語法加入，然後執行 `pnpm db:push` 推送到資料庫。
+
+### 20.9 資料庫遷移步驟
+
+將資料庫從 Manus 平台遷移到新環境的完整步驟：
+
+1. **建立新的 MySQL 實例**：推薦使用 TiDB Cloud Serverless（免費額度）、PlanetScale、AWS RDS 或 Google Cloud SQL。確保版本為 MySQL 8.0+。
+
+2. **設定連線字串**：將新的 `DATABASE_URL` 寫入 `.env` 檔案。如果使用 TiDB Cloud，連線字串格式為：
+   ```
+   mysql://user:password@gateway.tidbcloud.com:4000/database?ssl={"rejectUnauthorized":true}
+   ```
+
+3. **推送 schema**：執行以下指令建立所有表格：
+   ```bash
+   pnpm db:push
+   ```
+   這會執行 `drizzle-kit generate && drizzle-kit migrate`，自動建立所有 6 張表格。
+
+4. **匯出舊資料（如果需要）**：如果你需要保留 Manus 上的現有資料，可以透過 Manus 的 Database UI 匯出 CSV，或者使用 `mysqldump` 工具。
+
+5. **驗證連線**：啟動應用程式後，檢查管理面板的 Video Log 是否能正常顯示資料。
+
+---
+
+## 21. 部署到其他平台
+
+### 21.1 Google Cloud Run
 
 請參考 `deploy-manus-to-cloudrun.md` 文件，該文件提供了完整的 Cloud Run 部署步驟。
 

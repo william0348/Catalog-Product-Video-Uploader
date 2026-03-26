@@ -1,0 +1,131 @@
+{
+  "query": "SHOW CREATE TABLE users; SHOW CREATE TABLE companies; SHOW CREATE TABLE company_members; SHOW CREATE TABLE upload_records; SHOW CREATE TABLE app_settings; SHOW CREATE TABLE slideshow_templates;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway03.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 2i7zmHsYDkLMCtd.517e86959c58 --database nN7fRv522pr6qmVvUdeAQB --execute SHOW CREATE TABLE users; SHOW CREATE TABLE companies; SHOW CREATE TABLE company_members; SHOW CREATE TABLE upload_records; SHOW CREATE TABLE app_settings; SHOW CREATE TABLE slideshow_templates;",
+  "rows": [
+    {
+      "Table": "users",
+      "Create Table": "CREATE TABLE `users` ("
+    },
+    {
+      "Table": "Table",
+      "Create Table": "Create Table"
+    },
+    {
+      "Table": "companies",
+      "Create Table": "CREATE TABLE `companies` ("
+    },
+    {
+      "Table": "Table",
+      "Create Table": "Create Table"
+    },
+    {
+      "Table": "company_members",
+      "Create Table": "CREATE TABLE `company_members` ("
+    },
+    {
+      "Table": "Table",
+      "Create Table": "Create Table"
+    },
+    {
+      "Table": "upload_records",
+      "Create Table": "CREATE TABLE `upload_records` ("
+    },
+    {
+      "Table": "Table",
+      "Create Table": "Create Table"
+    },
+    {
+      "Table": "app_settings",
+      "Create Table": "CREATE TABLE `app_settings` ("
+    },
+    {
+      "Table": "Table",
+      "Create Table": "Create Table"
+    },
+    {
+      "Table": "slideshow_templates",
+      "Create Table": "CREATE TABLE `slideshow_templates` ("
+    }
+  ],
+  "messages": [
+    "  `id` int NOT NULL AUTO_INCREMENT,",
+    "  `openId` varchar(64) COLLATE utf8mb4_unicode_ci NOT NULL,",
+    "  `name` text COLLATE utf8mb4_unicode_ci DEFAULT NULL,",
+    "  `email` varchar(320) COLLATE utf8mb4_unicode_ci DEFAULT NULL,",
+    "  `loginMethod` varchar(64) COLLATE utf8mb4_unicode_ci DEFAULT NULL,",
+    "  `role` enum('user','admin') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'user',",
+    "  `createdAt` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,",
+    "  `updatedAt` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,",
+    "  `lastSignedIn` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,",
+    "  PRIMARY KEY (`id`) /*T![clustered_index] CLUSTERED */,",
+    "  UNIQUE KEY `users_openId_unique` (`openId`)",
+    ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci AUTO_INCREMENT=330001",
+    "  `id` int NOT NULL AUTO_INCREMENT,",
+    "  `name` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,",
+    "  `facebookAccessToken` text COLLATE utf8mb4_unicode_ci DEFAULT NULL,",
+    "  `catalogs` text COLLATE utf8mb4_unicode_ci DEFAULT NULL,",
+    "  `accessKey` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,",
+    "  `createdBy` int NOT NULL,",
+    "  `createdAt` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,",
+    "  `updatedAt` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,",
+    "  `tokenExpiresAt` timestamp NULL DEFAULT NULL,",
+    "  PRIMARY KEY (`id`) /*T![clustered_index] CLUSTERED */",
+    ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci AUTO_INCREMENT=30001",
+    "  `id` int NOT NULL AUTO_INCREMENT,",
+    "  `companyId` int NOT NULL,",
+    "  `email` varchar(320) COLLATE utf8mb4_unicode_ci NOT NULL,",
+    "  `memberRole` enum('owner','member') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'member',",
+    "  `status` enum('active','pending') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'pending',",
+    "  `userId` int DEFAULT NULL,",
+    "  `createdAt` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,",
+    "  `updatedAt` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,",
+    "  PRIMARY KEY (`id`) /*T![clustered_index] CLUSTERED */",
+    ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci AUTO_INCREMENT=30001",
+    "  `id` int NOT NULL AUTO_INCREMENT,",
+    "  `catalogId` varchar(64) COLLATE utf8mb4_unicode_ci NOT NULL,",
+    "  `retailerId` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,",
+    "  `productName` varchar(512) COLLATE utf8mb4_unicode_ci NOT NULL,",
+    "  `productImageUrl` text COLLATE utf8mb4_unicode_ci DEFAULT NULL,",
+    "  `video4x5Download` text COLLATE utf8mb4_unicode_ci DEFAULT NULL,",
+    "  `video4x5Embed` text COLLATE utf8mb4_unicode_ci DEFAULT NULL,",
+    "  `video9x16Download` text COLLATE utf8mb4_unicode_ci DEFAULT NULL,",
+    "  `video9x16Embed` text COLLATE utf8mb4_unicode_ci DEFAULT NULL,",
+    "  `clientName` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,",
+    "  `uploadTimestamp` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,",
+    "  `uploadedBy` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,",
+    "  `companyId` int DEFAULT NULL,",
+    "  PRIMARY KEY (`id`) /*T![clustered_index] CLUSTERED */",
+    ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci AUTO_INCREMENT=120001",
+    "  `id` int NOT NULL AUTO_INCREMENT,",
+    "  `settingKey` varchar(128) COLLATE utf8mb4_unicode_ci NOT NULL,",
+    "  `settingValue` text COLLATE utf8mb4_unicode_ci DEFAULT NULL,",
+    "  `updatedAt` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,",
+    "  PRIMARY KEY (`id`) /*T![clustered_index] CLUSTERED */,",
+    "  UNIQUE KEY `app_settings_settingKey_unique` (`settingKey`)",
+    ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci AUTO_INCREMENT=30001",
+    "  `id` int NOT NULL AUTO_INCREMENT,",
+    "  `name` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,",
+    "  `aspectRatio` varchar(10) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT '4:5',",
+    "  `durationPerImage` int NOT NULL DEFAULT '3',",
+    "  `transition` varchar(50) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'fade',",
+    "  `transitionDuration` int NOT NULL DEFAULT '50',",
+    "  `showProductName` int NOT NULL DEFAULT '0',",
+    "  `textPosition` varchar(20) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'bottom',",
+    "  `fontSize` int NOT NULL DEFAULT '40',",
+    "  `fontFamily` varchar(100) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'noto-sans-cjk',",
+    "  `fontColor` varchar(20) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT '#FFFFFF',",
+    "  `backgroundColor` varchar(20) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT '#FFFFFF',",
+    "  `imageScale` int NOT NULL DEFAULT '100',",
+    "  `imageOffsetX` int NOT NULL DEFAULT '0',",
+    "  `imageOffsetY` int NOT NULL DEFAULT '0',",
+    "  `overlayText` text COLLATE utf8mb4_unicode_ci DEFAULT NULL,",
+    "  `createdBy` int NOT NULL,",
+    "  `createdAt` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,",
+    "  `updatedAt` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,",
+    "  PRIMARY KEY (`id`) /*T![clustered_index] CLUSTERED */",
+    ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci AUTO_INCREMENT=30001"
+  ],
+  "stdout": "Table\tCreate Table\nusers\tCREATE TABLE `users` (\n  `id` int NOT NULL AUTO_INCREMENT,\n  `openId` varchar(64) COLLATE utf8mb4_unicode_ci NOT NULL,\n  `name` text COLLATE utf8mb4_unicode_ci DEFAULT NULL,\n  `email` varchar(320) COLLATE utf8mb4_unicode_ci DEFAULT NULL,\n  `loginMethod` varchar(64) COLLATE utf8mb4_unicode_ci DEFAULT NULL,\n  `role` enum('user','admin') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'user',\n  `createdAt` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,\n  `updatedAt` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,\n  `lastSignedIn` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,\n  PRIMARY KEY (`id`) /*T![clustered_index] CLUSTERED */,\n  UNIQUE KEY `users_openId_unique` (`openId`)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci AUTO_INCREMENT=330001\nTable\tCreate Table\ncompanies\tCREATE TABLE `companies` (\n  `id` int NOT NULL AUTO_INCREMENT,\n  `name` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,\n  `facebookAccessToken` text COLLATE utf8mb4_unicode_ci DEFAULT NULL,\n  `catalogs` text COLLATE utf8mb4_unicode_ci DEFAULT NULL,\n  `accessKey` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,\n  `createdBy` int NOT NULL,\n  `createdAt` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,\n  `updatedAt` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,\n  `tokenExpiresAt` timestamp NULL DEFAULT NULL,\n  PRIMARY KEY (`id`) /*T![clustered_index] CLUSTERED */\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci AUTO_INCREMENT=30001\nTable\tCreate Table\ncompany_members\tCREATE TABLE `company_members` (\n  `id` int NOT NULL AUTO_INCREMENT,\n  `companyId` int NOT NULL,\n  `email` varchar(320) COLLATE utf8mb4_unicode_ci NOT NULL,\n  `memberRole` enum('owner','member') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'member',\n  `status` enum('active','pending') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'pending',\n  `userId` int DEFAULT NULL,\n  `createdAt` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,\n  `updatedAt` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,\n  PRIMARY KEY (`id`) /*T![clustered_index] CLUSTERED */\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci AUTO_INCREMENT=30001\nTable\tCreate Table\nupload_records\tCREATE TABLE `upload_records` (\n  `id` int NOT NULL AUTO_INCREMENT,\n  `catalogId` varchar(64) COLLATE utf8mb4_unicode_ci NOT NULL,\n  `retailerId` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,\n  `productName` varchar(512) COLLATE utf8mb4_unicode_ci NOT NULL,\n  `productImageUrl` text COLLATE utf8mb4_unicode_ci DEFAULT NULL,\n  `video4x5Download` text COLLATE utf8mb4_unicode_ci DEFAULT NULL,\n  `video4x5Embed` text COLLATE utf8mb4_unicode_ci DEFAULT NULL,\n  `video9x16Download` text COLLATE utf8mb4_unicode_ci DEFAULT NULL,\n  `video9x16Embed` text COLLATE utf8mb4_unicode_ci DEFAULT NULL,\n  `clientName` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,\n  `uploadTimestamp` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,\n  `uploadedBy` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,\n  `companyId` int DEFAULT NULL,\n  PRIMARY KEY (`id`) /*T![clustered_index] CLUSTERED */\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci AUTO_INCREMENT=120001\nTable\tCreate Table\napp_settings\tCREATE TABLE `app_settings` (\n  `id` int NOT NULL AUTO_INCREMENT,\n  `settingKey` varchar(128) COLLATE utf8mb4_unicode_ci NOT NULL,\n  `settingValue` text COLLATE utf8mb4_unicode_ci DEFAULT NULL,\n  `updatedAt` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,\n  PRIMARY KEY (`id`) /*T![clustered_index] CLUSTERED */,\n  UNIQUE KEY `app_settings_settingKey_unique` (`settingKey`)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci AUTO_INCREMENT=30001\nTable\tCreate Table\nslideshow_templates\tCREATE TABLE `slideshow_templates` (\n  `id` int NOT NULL AUTO_INCREMENT,\n  `name` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,\n  `aspectRatio` varchar(10) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT '4:5',\n  `durationPerImage` int NOT NULL DEFAULT '3',\n  `transition` varchar(50) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'fade',\n  `transitionDuration` int NOT NULL DEFAULT '50',\n  `showProductName` int NOT NULL DEFAULT '0',\n  `textPosition` varchar(20) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'bottom',\n  `fontSize` int NOT NULL DEFAULT '40',\n  `fontFamily` varchar(100) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'noto-sans-cjk',\n  `fontColor` varchar(20) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT '#FFFFFF',\n  `backgroundColor` varchar(20) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT '#FFFFFF',\n  `imageScale` int NOT NULL DEFAULT '100',\n  `imageOffsetX` int NOT NULL DEFAULT '0',\n  `imageOffsetY` int NOT NULL DEFAULT '0',\n  `overlayText` text COLLATE utf8mb4_unicode_ci DEFAULT NULL,\n  `createdBy` int NOT NULL,\n  `createdAt` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,\n  `updatedAt` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,\n  PRIMARY KEY (`id`) /*T![clustered_index] CLUSTERED */\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci AUTO_INCREMENT=30001\n",
+  "stderr": "",
+  "execution_time_ms": 2733
+}

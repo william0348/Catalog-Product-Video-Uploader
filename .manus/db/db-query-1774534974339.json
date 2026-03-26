@@ -1,0 +1,31 @@
+{
+  "query": "SHOW TABLES;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway03.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 2i7zmHsYDkLMCtd.517e86959c58 --database nN7fRv522pr6qmVvUdeAQB --execute SHOW TABLES;",
+  "rows": [
+    {
+      "Tables_in_nN7fRv522pr6qmVvUdeAQB": "__drizzle_migrations"
+    },
+    {
+      "Tables_in_nN7fRv522pr6qmVvUdeAQB": "app_settings"
+    },
+    {
+      "Tables_in_nN7fRv522pr6qmVvUdeAQB": "companies"
+    },
+    {
+      "Tables_in_nN7fRv522pr6qmVvUdeAQB": "company_members"
+    },
+    {
+      "Tables_in_nN7fRv522pr6qmVvUdeAQB": "slideshow_templates"
+    },
+    {
+      "Tables_in_nN7fRv522pr6qmVvUdeAQB": "upload_records"
+    },
+    {
+      "Tables_in_nN7fRv522pr6qmVvUdeAQB": "users"
+    }
+  ],
+  "messages": [],
+  "stdout": "Tables_in_nN7fRv522pr6qmVvUdeAQB\n__drizzle_migrations\napp_settings\ncompanies\ncompany_members\nslideshow_templates\nupload_records\nusers\n",
+  "stderr": "",
+  "execution_time_ms": 2278
+}
