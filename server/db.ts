@@ -248,7 +248,22 @@ export async function getUploadRecordsByCompany(companyId: number): Promise<Uplo
 export async function getAllUploadRecords(): Promise<UploadRecord[]> {
   const db = await getDb();
   if (!db) return [];
-  return db.select().from(uploadRecords).orderBy(uploadRecords.uploadTimestamp);
+  // Return deduplicated records: only the latest record per (retailerId, catalogId)
+  // Using a subquery to find the max id for each unique product
+  const latestIds = db
+    .select({
+      maxId: sql<number>`MAX(${uploadRecords.id})`.as('maxId'),
+    })
+    .from(uploadRecords)
+    .groupBy(uploadRecords.retailerId, uploadRecords.catalogId);
+
+  const rows = await db
+    .select()
+    .from(uploadRecords)
+    .where(sql`${uploadRecords.id} IN (${latestIds})`)
+    .orderBy(desc(uploadRecords.uploadTimestamp));
+
+  return rows;
 }
 
 export async function getUploadRecordById(id: number): Promise<UploadRecord | undefined> {

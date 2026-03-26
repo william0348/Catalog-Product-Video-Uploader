@@ -1363,6 +1363,7 @@ const VideoLog = ({ t, companies }: { t: (key: string) => string; companies: Com
                                         <th className="col-client">{t('clientNameLabel')}</th>
                                         <th className="col-video">4:5</th>
                                         <th className="col-video">9:16</th>
+                                        <th className="col-uploader">{t('uploaderInfo') || 'Uploader'}</th>
                                         <th className="col-date">{t('uploadDate') || 'Date'}</th>
                                         <th className="col-actions">{t('actions')}</th>
                                     </tr>
@@ -1410,6 +1411,13 @@ const VideoLog = ({ t, companies }: { t: (key: string) => string; companies: Com
                                                     <a href={record.video9x16Download || record.video9x16Embed} target="_blank" rel="noopener noreferrer" className="log-video-link" title="Open 9:16 video">
                                                         ▶
                                                     </a>
+                                                ) : (
+                                                    <span className="log-no-video">—</span>
+                                                )}
+                                            </td>
+                                            <td className="col-uploader">
+                                                {record.uploadedBy ? (
+                                                    <span className="log-uploader-text" title={record.uploadedBy}>{record.uploadedBy}</span>
                                                 ) : (
                                                     <span className="log-no-video">—</span>
                                                 )}
@@ -1639,7 +1647,7 @@ const UploaderPersonnel = ({ t, companies }: { t: (key: string, replacements?: {
 
 // ==================== Main AdminPanel Component ====================
 export const AdminPanel = ({ onBack }: AdminPanelProps) => {
-    const [activeTab, setActiveTab] = useState<'log' | 'company' | 'uploaders'>('log');
+    const [activeTab, setActiveTab] = useState<'log' | 'company'>('log');
     const { t } = useContext(LanguageContext);
     const [companies, setCompanies] = useState<CompanyData[]>([]);
 
@@ -1671,12 +1679,6 @@ export const AdminPanel = ({ onBack }: AdminPanelProps) => {
                         📋 Video Log
                     </button>
                     <button
-                        className={`admin-tab ${activeTab === 'uploaders' ? 'active' : ''}`}
-                        onClick={() => setActiveTab('uploaders')}
-                    >
-                        👥 {t('uploaderPersonnel')}
-                    </button>
-                    <button
                         className={`admin-tab ${activeTab === 'company' ? 'active' : ''}`}
                         onClick={() => setActiveTab('company')}
                     >
@@ -1687,11 +1689,6 @@ export const AdminPanel = ({ onBack }: AdminPanelProps) => {
                 {/* Log Tab */}
                 {activeTab === 'log' && (
                     <VideoLog t={t} companies={companies} />
-                )}
-
-                {/* Uploader Personnel Tab */}
-                {activeTab === 'uploaders' && (
-                    <UploaderPersonnel t={t} companies={companies} />
                 )}
 
                 {/* Company Management Tab */}

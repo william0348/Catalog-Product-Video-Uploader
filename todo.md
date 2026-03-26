@@ -487,4 +487,9 @@
 ## Phase 56: 撰寫詳細 Manus 平台遷移指南
 - [x] 分析專案中所有 Manus 專屬依賴和功能
 - [x] 撰寫完整遷移指南 MD 文件（給其他 AI / 開發者參考）
-- [ ] 上傳到 GitHub 並儲存 checkpoint
+- [x] 上傳到 GitHub 並儲存 checkpoint
+
+## Phase 57: Video Log 去重 + 上傳人員欄位 + 移除上傳人員 Tab
+- [x] Video Log 同一商品（retailerId + catalogId）只顯示最新一筆記錄
+- [x] Video Log 表格新增上傳人員 email 和 name 欄位
+- [x] 移除「上傳人員」tab

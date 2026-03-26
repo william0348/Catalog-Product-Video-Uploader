@@ -335,6 +335,7 @@ export const translations = {
         // Uploader Personnel
         uploaderPersonnel: "Upload Personnel",
         uploaderEmail: "Uploader",
+        uploaderInfo: "Uploader",
         totalUploads: "Total Uploads",
         lastUploadDate: "Last Upload",
         relatedCatalogs: "Related Catalogs",
@@ -688,6 +689,7 @@ export const translations = {
         // Uploader Personnel
         uploaderPersonnel: "上傳人員",
         uploaderEmail: "上傳者",
+        uploaderInfo: "上傳人員",
         totalUploads: "上傳次數",
         lastUploadDate: "最後上傳",
         relatedCatalogs: "相關目錄",
