@@ -2,11 +2,11 @@ import "dotenv/config";
 import express from "express";
 import { createServer } from "http";
 import net from "net";
+import fs from "fs";
+import path from "path";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
-import { registerOAuthRoutes } from "./oauth";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
-import { serveStatic, setupVite } from "./vite";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -42,8 +42,7 @@ async function startServer() {
     res.setHeader("Cross-Origin-Embedder-Policy", "credentialless");
     next();
   });
-  // OAuth callback under /api/oauth/callback
-  registerOAuthRoutes(app);
+  // OAuth removed for Cloud Run deployment
 
   // CSV export endpoint for Meta Catalog Supplementary Feed
   // Format: id, video[0].url, video[1].url (per Meta specification)
@@ -118,12 +117,15 @@ async function startServer() {
       createContext,
     })
   );
-  // development mode uses Vite, production mode uses static files
-  if (process.env.NODE_ENV === "development") {
-    await setupVite(app, server);
-  } else {
-    serveStatic(app);
+  // Serve static files in production
+  const distPath = path.resolve(import.meta.dirname, "public");
+  if (!fs.existsSync(distPath)) {
+    console.error(`Could not find the build directory: ${distPath}, make sure to build the client first`);
   }
+  app.use(express.static(distPath));
+  app.use("*", (_req, res) => {
+    res.sendFile(path.resolve(distPath, "index.html"));
+  });
 
   const preferredPort = parseInt(process.env.PORT || "3000");
   const port = await findAvailablePort(preferredPort);
