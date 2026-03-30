@@ -509,4 +509,9 @@
 - [x] 研究 Firebase Auth + Google Login 整合方式
 - [x] 撰寫完整的 Firebase Google Login 整合章節（前後端程式碼範例）
 - [x] 加入遷移指南並更新目錄
-- [ ] 同步到 GitHub
+- [x] 同步到 GitHub
+
+## Phase 61: 撰寫完整技術文件 (Technical Document)
+- [x] 分析專案所有技術元件和程式碼結構
+- [x] 撰寫完整技術文件 Markdown（不含 Video Generator / Slideshow）
+- [x] 同步到 GitHub 並儲存 checkpoint
