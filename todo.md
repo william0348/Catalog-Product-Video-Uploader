@@ -503,4 +503,10 @@
 ## Phase 59: 將 migrate-from-manus skill 加入專案並更新 README
 - [x] 將 migrate-from-manus.md skill 檔案複製到專案中
 - [x] 更新 README.md 加入遷移相關文件的說明連結
+- [x] 同步到 GitHub
+
+## Phase 60: 加入 Firebase Authentication 整合 Google Login 說明
+- [x] 研究 Firebase Auth + Google Login 整合方式
+- [x] 撰寫完整的 Firebase Google Login 整合章節（前後端程式碼範例）
+- [x] 加入遷移指南並更新目錄
 - [ ] 同步到 GitHub
