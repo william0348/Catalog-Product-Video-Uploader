@@ -2,11 +2,11 @@ import "dotenv/config";
 import express from "express";
 import { createServer } from "http";
 import net from "net";
-import fs from "fs";
-import path from "path";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
+import { registerOAuthRoutes } from "./oauth";
+import { setupVite, serveStatic } from "./vite";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -41,7 +41,9 @@ async function startServer() {
     res.setHeader("Cross-Origin-Embedder-Policy", "credentialless");
     next();
   });
-  // OAuth removed for Cloud Run deployment
+
+  // Register Manus OAuth routes
+  registerOAuthRoutes(app);
 
   // CSV export endpoint for Meta Catalog Supplementary Feed
   // Format: id, video[0].url, video[1].url (per Meta specification)
@@ -108,6 +110,7 @@ async function startServer() {
       res.status(500).json({ error: "Failed to export JSON" });
     }
   });
+
   // tRPC API
   app.use(
     "/api/trpc",
@@ -116,15 +119,14 @@ async function startServer() {
       createContext,
     })
   );
-  // Serve static files in production
-  const distPath = path.resolve(import.meta.dirname, "public");
-  if (!fs.existsSync(distPath)) {
-    console.error(`Could not find the build directory: ${distPath}, make sure to build the client first`);
+
+  // In development, use Vite dev server with HMR
+  // In production, serve pre-built static files
+  if (process.env.NODE_ENV === "development") {
+    await setupVite(app, server);
+  } else {
+    serveStatic(app);
   }
-  app.use(express.static(distPath));
-  app.use("*", (_req, res) => {
-    res.sendFile(path.resolve(distPath, "index.html"));
-  });
 
   const preferredPort = parseInt(process.env.PORT || "3000");
   const port = await findAvailablePort(preferredPort);

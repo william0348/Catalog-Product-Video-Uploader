@@ -515,3 +515,8 @@
 - [x] 分析專案所有技術元件和程式碼結構
 - [x] 撰寫完整技術文件 Markdown（不含 Video Generator / Slideshow）
 - [x] 同步到 GitHub 並儲存 checkpoint
+
+## Phase 62: 修復 dev server 錯誤 + 轉換 Word 檔案
+- [x] 修復 server/_core/index.ts 的 public/index.html 錯誤
+- [x] 將 TECHNICAL-DOCUMENT.md 轉換為 Word 檔案
+- [x] 將 MIGRATION-FROM-MANUS.md 轉換為 Word 檔案
