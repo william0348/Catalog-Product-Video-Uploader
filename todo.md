@@ -499,3 +499,8 @@
 - [x] 將資料庫結構章節寫入 MIGRATION-FROM-MANUS.md
 - [x] 儲存 checkpoint
 - [x] 詳細標註每個環境變數是 Manus 專屬還是通用，提供替代方案
+
+## Phase 59: 將 migrate-from-manus skill 加入專案並更新 README
+- [x] 將 migrate-from-manus.md skill 檔案複製到專案中
+- [x] 更新 README.md 加入遷移相關文件的說明連結
+- [ ] 同步到 GitHub

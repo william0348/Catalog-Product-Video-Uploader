@@ -8,13 +8,15 @@ CPV Uploader is a web-based tool designed for brands and retailers who manage **
 
 ## Important: Manus Platform Integration
 
-This project was originally built and deployed on the **Manus AI platform**, which provides a built-in OAuth login system (Manus Login). If you are cloning this repository to run independently outside of Manus, you will need to **remove the built-in Manus Login system** and integrate your own authentication.
+This project was originally built and deployed on the **Manus AI platform**, which provides a built-in OAuth login system, S3 storage proxy, and various internal services. If you are cloning this repository to run independently outside of Manus, you will need to remove or replace several Manus-specific components.
 
-For most use cases, integrating **Google OAuth 2.0** is the simplest approach. You only need to:
+We provide **two migration guides** to help you through this process:
 
-1. Create a Google Cloud project and obtain an **OAuth 2.0 Client ID** from the [Google Cloud Console](https://console.cloud.google.com/apis/credentials).
-2. Set the `GOOGLE_CLIENT_ID` environment variable with your Client ID.
-3. Remove or bypass the Manus OAuth routes in `server/_core/oauth.ts`.
+| Document | Description |
+|----------|-------------|
+| [`MIGRATION-FROM-MANUS.md`](./MIGRATION-FROM-MANUS.md) | **Comprehensive migration guide** (21 chapters, 1200+ lines). Covers all 17 Manus-specific modules, complete database structure (6 tables with DDL), environment variable classification (Manus-only vs general-purpose), `.env.example` template, file handling checklist, and deployment options for Cloud Run, Docker Compose, Railway, and Vercel. |
+| [`migrate-from-manus.md`](./migrate-from-manus.md) | **Quick-start skill for AI agents**. A concise, actionable checklist designed for other AI agents or developers who need to quickly identify and fix Manus-specific code. Covers the 10 most critical modifications with exact code snippets for each fix. |
+| [`deploy-manus-to-cloudrun.md`](./deploy-manus-to-cloudrun.md) | **Google Cloud Run deployment guide**. Step-by-step instructions for deploying this app to Cloud Run with Cloud SQL. |
 
 The current deployment already uses Google Login for user authentication and Google Drive integration. The Manus Login layer is only used for the platform's internal session management and can be safely replaced.
 
@@ -163,12 +165,15 @@ pnpm install
 
 The following environment variables are required:
 
-| Variable | Description |
-|----------|-------------|
-| `DATABASE_URL` | MySQL/TiDB connection string |
-| `JWT_SECRET` | Session cookie signing secret |
-| `VITE_APP_ID` | Application identifier |
-| `GOOGLE_CLIENT_ID` | Google OAuth 2.0 Client ID (required for authentication and Drive integration) |
+| Variable | Description | Required |
+|----------|-------------|----------|
+| `DATABASE_URL` | MySQL/TiDB connection string | **Yes** |
+| `JWT_SECRET` | Session cookie signing secret (generate with `openssl rand -base64 32`) | **Yes** |
+| `VITE_GOOGLE_CLIENT_ID` | Google OAuth 2.0 Client ID (for authentication and Drive integration) | **Yes** |
+| `VITE_APP_TITLE` | Website title | Optional |
+| `VITE_APP_LOGO` | Website logo URL | Optional |
+
+> **Note**: `VITE_APP_ID`, `OAUTH_SERVER_URL`, `OWNER_OPEN_ID`, and other Manus-specific variables are **not needed** when running outside of Manus. See [`MIGRATION-FROM-MANUS.md` Section 18](./MIGRATION-FROM-MANUS.md#18-環境變數對照表) for the complete environment variable reference.
 
 ### Database Setup
 
