@@ -74,6 +74,14 @@ export const translations = {
         loginToUpload: "Login with Google to upload",
         fromComputer: "From Computer",
         uploadFromComputer: "Upload From Computer",
+        // Google Drive Permission Errors
+        drivePermissionError: "Upload failed: Google Drive access was not granted. Please re-login and make sure to check the Google Drive permission checkbox.",
+        drivePermissionHint: "When logging in, you must check (✓) the 'See, edit, create, and delete only the specific Google Drive files you use with this app' permission to allow video uploads.",
+        reauthorizeGoogleDrive: "Re-login & Grant Google Drive Permission",
+        invalidFileType: "Invalid file type. Please upload a video file.",
+        fileTooLarge: "File size cannot exceed 100MB.",
+        uploadNetworkError: "A network error occurred during the upload. Please check your connection and try again.",
+        unknownUploadError: "An unknown error occurred during the upload process.",
         // Toasts
         recordSavedSuccess: "Record saved to Database successfully!",
         // Intro Guide
@@ -428,6 +436,14 @@ export const translations = {
         loginToUpload: "使用 Google 登入以上傳",
         fromComputer: "從電腦上傳",
         uploadFromComputer: "從電腦上傳",
+        // Google Drive 權限錯誤
+        drivePermissionError: "上傳失敗：未授權 Google Drive 存取權限。請重新登入，並確認勾選 Google Drive 權限。",
+        drivePermissionHint: "登入時，請務必勾選 (✓)「查看、編輯、建立及刪除這個應用程式使用的 Google 雲端硬碟檔案」權限，才能上傳影片。",
+        reauthorizeGoogleDrive: "重新登入並授權 Google Drive 權限",
+        invalidFileType: "檔案類型無效，請上傳影片檔案。",
+        fileTooLarge: "檔案大小不能超過 100MB。",
+        uploadNetworkError: "上傳時發生網路錯誤，請檢查網路連線後重試。",
+        unknownUploadError: "上傳過程中發生未知錯誤。",
         // Toasts
         recordSavedSuccess: "紀錄已成功儲存至資料庫！",
         // Intro Guide

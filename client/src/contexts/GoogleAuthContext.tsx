@@ -12,6 +12,7 @@ interface GoogleAuthContextType {
   googleTokenClient: any;
   handleGoogleLogin: () => void;
   handleLogout: () => void;
+  handleReauthorize: () => void;
   setGoogleAccessToken: React.Dispatch<React.SetStateAction<string | null>>;
   setUserEmail: React.Dispatch<React.SetStateAction<string | null>>;
 }
@@ -24,6 +25,7 @@ const GoogleAuthContext = createContext<GoogleAuthContextType>({
   googleTokenClient: null,
   handleGoogleLogin: () => {},
   handleLogout: () => {},
+  handleReauthorize: () => {},
   setGoogleAccessToken: () => {},
   setUserEmail: () => {},
 });
@@ -153,6 +155,38 @@ export const GoogleAuthProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     }
   }, [googleTokenClient]);
 
+  /**
+   * Re-authorize: revoke current token first, then request a new one.
+   * This forces Google to show the consent screen again so the user
+   * can check all required permission checkboxes (especially Drive).
+   */
+  const handleReauthorize = useCallback(() => {
+    // Step 1: Revoke the current token to force consent screen
+    const token =
+      googleAccessToken || localStorage.getItem(GOOGLE_AUTH_TOKEN_KEY);
+    if (token && window.google?.accounts?.oauth2) {
+      window.google.accounts.oauth2.revoke(token, () => {
+        console.log("[Google] Token revoked for re-authorization");
+      });
+    }
+    // Step 2: Clear all stored state
+    localStorage.removeItem(GOOGLE_AUTH_TOKEN_KEY);
+    sessionStorage.removeItem("google_drive_folder_id");
+    if (window.gapi?.client) {
+      gapi.client.setToken(null);
+    }
+    setGoogleAccessToken(null);
+    setUserEmail(null);
+
+    // Step 3: Request new token (will show consent screen with all scopes)
+    if (googleTokenClient) {
+      // Small delay to ensure revoke completes
+      setTimeout(() => {
+        googleTokenClient.requestAccessToken();
+      }, 300);
+    }
+  }, [googleAccessToken, googleTokenClient]);
+
   const isGoogleReady = isGapiClientReady && !!googleTokenClient;
 
   return (
@@ -165,6 +199,7 @@ export const GoogleAuthProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         googleTokenClient,
         handleGoogleLogin,
         handleLogout,
+        handleReauthorize,
         setGoogleAccessToken,
         setUserEmail,
       }}

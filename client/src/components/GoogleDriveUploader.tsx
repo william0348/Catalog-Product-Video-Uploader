@@ -2,9 +2,29 @@
 import React, { useState, useRef, useEffect, useContext } from 'react';
 import { getDriveFolderId } from '@/lib/google';
 import { LanguageContext } from '@/contexts/LanguageContext';
+import { useGoogleAuth } from '@/contexts/GoogleAuthContext';
 import type { UploadedVideo, VideoType } from '@/types';
 
 declare const gapi: any;
+
+/**
+ * Detects if an error is related to Google Drive permission/scope issues.
+ * Returns true if the user likely didn't grant Drive access during login.
+ */
+const isDrivePermissionError = (error: any, statusCode?: number): boolean => {
+    if (statusCode === 403 || statusCode === 401) return true;
+    
+    const msg = (error?.message || error?.result?.error?.message || String(error)).toLowerCase();
+    return (
+        msg.includes('insufficient permission') ||
+        msg.includes('access not configured') ||
+        msg.includes('forbidden') ||
+        msg.includes('the user has not granted') ||
+        msg.includes('request had insufficient authentication scopes') ||
+        msg.includes('login required') ||
+        msg.includes('invalid credentials')
+    );
+};
 
 export const GoogleDriveUploader = ({
     clientName,
@@ -31,14 +51,30 @@ export const GoogleDriveUploader = ({
     const [warning, setWarning] = useState<string|null>(null);
     const [isDraggingOver, setIsDraggingOver] = useState(false);
     const [showUploader, setShowUploader] = useState(!isReupload);
+    const [isPermissionError, setIsPermissionError] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const { t } = useContext(LanguageContext);
+    const { handleReauthorize: contextReauthorize } = useGoogleAuth();
     
     const handleSuccess = (videoData: Omit<UploadedVideo, 'saveError' | 'productName' | 'isProcessing' | 'uploadTimestamp'>) => {
         onUploadSuccess(videoData);
-        if (isReupload) { // Only auto-hide for individual row re-uploads
+        if (isReupload) {
           setShowUploader(false);
         }
+    };
+
+    const handlePermissionError = () => {
+        setIsPermissionError(true);
+        setError(t('drivePermissionError'));
+        setUploading(false);
+    };
+
+    const handleReauthorize = () => {
+        // Clear current token and states
+        setError(null);
+        setIsPermissionError(false);
+        // Revoke current token and re-request with all scopes (forces consent screen)
+        contextReauthorize();
     };
 
     const uploadFile = async (file: File) => {
@@ -47,14 +83,15 @@ export const GoogleDriveUploader = ({
         // Reset states for new upload
         setWarning(null);
         setError(null);
+        setIsPermissionError(false);
         
         if (!file.type.startsWith('video/')) {
-            setError("Invalid file type. Please upload a video file.");
+            setError(t('invalidFileType') || "Invalid file type. Please upload a video file.");
             return;
         }
 
-        if (file.size > 100 * 1024 * 1024) { // 100MB limit
-            setError("File size cannot exceed 100MB.");
+        if (file.size > 100 * 1024 * 1024) {
+            setError(t('fileTooLarge') || "File size cannot exceed 100MB.");
             return;
         }
         
@@ -63,19 +100,31 @@ export const GoogleDriveUploader = ({
 
         try {
             gapi.client.setToken({ access_token: accessToken });
-            const folderId = await getDriveFolderId();
+            
+            // Step 1: Try to get/create the Drive folder - this is where permission errors usually surface
+            let folderId: string;
+            try {
+                folderId = await getDriveFolderId();
+            } catch (folderError: any) {
+                if (isDrivePermissionError(folderError)) {
+                    handlePermissionError();
+                    return;
+                }
+                throw folderError;
+            }
             
             const lastDotIndex = file.name.lastIndexOf('.');
             const fileExtension = lastDotIndex !== -1 ? file.name.slice(lastDotIndex) : '.mp4';
 
             const sanitizedRetailerId = retailerId.replace(/[^a-zA-Z0-9-_\.]/g, '_');
             const sanitizedCatalogId = catalogId.replace(/[^a-zA-Z0-9-_\.]/g, '_');
-            const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, ''); // YYYYMMDD
+            const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
             
             const fileName = `${sanitizedCatalogId}_${sanitizedRetailerId}_${dateStr}${fileExtension}`;
 
             const metadata = { name: fileName, mimeType: file.type, parents: [folderId] };
 
+            // Step 2: Initiate resumable upload session
             const res = await fetch(`https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable`, {
                 method: 'POST',
                 headers: new Headers({
@@ -86,6 +135,10 @@ export const GoogleDriveUploader = ({
             });
 
             if (!res.ok) {
+                if (res.status === 403 || res.status === 401) {
+                    handlePermissionError();
+                    return;
+                }
                 const errorData = await res.json().catch(() => ({}));
                 throw new Error(errorData?.error?.message || `Failed to initiate upload session: ${res.statusText}`);
             }
@@ -95,6 +148,7 @@ export const GoogleDriveUploader = ({
                 throw new Error('Could not get resumable upload URL.');
             }
 
+            // Step 3: Upload the file
             const xhr = new XMLHttpRequest();
             
             xhr.upload.onprogress = (e) => {
@@ -114,10 +168,16 @@ export const GoogleDriveUploader = ({
                         const embedLink = `https://drive.google.com/file/d/${uploadedFile.id}/preview`;
                         handleSuccess({ downloadLink, embedLink });
                     } catch(permissionError: any) {
+                        if (isDrivePermissionError(permissionError)) {
+                            handlePermissionError();
+                            return;
+                        }
                         const message = permissionError.result?.error?.message || permissionError.message || "An error occurred while setting file permissions.";
                         setError(message);
                         setUploading(false);
                     }
+                } else if (xhr.status === 403 || xhr.status === 401) {
+                    handlePermissionError();
                 } else {
                     setUploading(false);
                     try {
@@ -130,7 +190,7 @@ export const GoogleDriveUploader = ({
             };
             
             xhr.onerror = () => {
-                 setError("An error occurred during the upload. Please try again.");
+                 setError(t('uploadNetworkError') || "An error occurred during the upload. Please try again.");
                  setUploading(false);
             };
 
@@ -138,7 +198,11 @@ export const GoogleDriveUploader = ({
             xhr.setRequestHeader('Content-Type', file.type);
             xhr.send(file);
         } catch (e: any) {
-            const message = e.message || "An unknown error occurred during the upload process.";
+            if (isDrivePermissionError(e)) {
+                handlePermissionError();
+                return;
+            }
+            const message = e.message || t('unknownUploadError') || "An unknown error occurred during the upload process.";
             setError(message);
             setUploading(false);
         }
@@ -238,7 +302,23 @@ export const GoogleDriveUploader = ({
             )}
 
             {warning && <p className="warning-text-small">{warning}</p>}
-            {error && <p className="error-text-small">{error}</p>}
+            
+            {/* Permission error with re-authorize button */}
+            {isPermissionError && error && (
+                <div className="permission-error-container">
+                    <p className="error-text-small" style={{ marginBottom: '4px' }}>{error}</p>
+                    <p className="permission-hint-text">{t('drivePermissionHint')}</p>
+                    <button 
+                        onClick={handleReauthorize} 
+                        className="reauthorize-button"
+                    >
+                        🔄 {t('reauthorizeGoogleDrive')}
+                    </button>
+                </div>
+            )}
+            
+            {/* Regular error (non-permission) */}
+            {!isPermissionError && error && <p className="error-text-small">{error}</p>}
         </div>
     );
 };
