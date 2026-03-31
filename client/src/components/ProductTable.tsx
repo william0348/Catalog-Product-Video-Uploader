@@ -1,8 +1,72 @@
 
-import React, { useContext } from 'react';
+import React, { useContext, useState, useCallback } from 'react';
 import { GoogleDriveUploader } from '@/components/GoogleDriveUploader';
 import type { Product, HoveredImage, ProductVideos, UploadedVideo, VideoType } from '@/types';
 import { LanguageContext } from '@/contexts/LanguageContext';
+
+/**
+ * VideoPreview component - handles Google Drive video preview with fallback
+ * Google Drive embed iframes can fail to load, so we provide:
+ * 1. First try: iframe embed (Google Drive preview)
+ * 2. On error: show a clickable play button that opens the video in a new tab
+ */
+const VideoPreview = ({ video, width, height, title }: { 
+  video: UploadedVideo; 
+  width: number; 
+  height: number; 
+  title: string;
+}) => {
+  const [iframeError, setIframeError] = useState(false);
+  const downloadUrl = video.downloadLink || video.embedLink;
+  const embedUrl = video.embedLink;
+
+  const handleIframeError = useCallback(() => {
+    setIframeError(true);
+  }, []);
+
+  if (iframeError || !embedUrl) {
+    // Fallback: show a clickable play button that opens the video
+    return (
+      <a 
+        href={downloadUrl} 
+        target="_blank" 
+        rel="noopener noreferrer" 
+        className="video-preview-fallback"
+        title={`Open ${title}`}
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          width: `${width}px`,
+          height: `${height}px`,
+          backgroundColor: '#f0f0f0',
+          borderRadius: '6px',
+          textDecoration: 'none',
+          color: '#4285f4',
+          border: '1px solid #ddd',
+          cursor: 'pointer',
+        }}
+      >
+        <span style={{ fontSize: '28px' }}>▶</span>
+        <span style={{ fontSize: '10px', marginTop: '4px', color: '#666' }}>Click to play</span>
+      </a>
+    );
+  }
+
+  return (
+    <iframe 
+      src={embedUrl} 
+      width={width} 
+      height={height} 
+      allow="encrypted-media" 
+      allowFullScreen 
+      title={title}
+      onError={handleIframeError}
+      style={{ border: 'none', borderRadius: '6px' }}
+    />
+  );
+};
 
 export const ProductTable = ({
   products,
@@ -53,6 +117,7 @@ export const ProductTable = ({
         </div>
     );
   }
+
   if (products.length === 0) {
     return <p className="info-text">{t('noProducts')}</p>;
   }
@@ -118,12 +183,20 @@ export const ProductTable = ({
                           {masterVideo.isProcessing ? (
                               <div className="video-processing-container">
                                   <div className="loader-small"></div>
-                                  <p>Video Upload has completed</p>
-                                  <p className="info-text-small">Preview is processing...</p>
-                                  <p className="info-text-small">Available in ~30 mins.</p>
+                                  <p>Upload completed ✓</p>
+                                  <p className="info-text-small">Processing preview...</p>
+                                  <a 
+                                    href={masterVideo.downloadLink || masterVideo.embedLink} 
+                                    target="_blank" 
+                                    rel="noopener noreferrer"
+                                    className="info-text-small"
+                                    style={{ color: '#4285f4', textDecoration: 'underline', cursor: 'pointer' }}
+                                  >
+                                    Open video directly ↗
+                                  </a>
                               </div>
                           ) : (
-                              <iframe src={masterVideo.embedLink} width="128" height="160" allow="encrypted-media" allowFullScreen title="Master Video Preview"></iframe>
+                              <VideoPreview video={masterVideo} width={128} height={160} title="Master Video Preview" />
                           )}
                           {masterVideo.saveError && (
                               <div className="save-error-container">
@@ -152,12 +225,20 @@ export const ProductTable = ({
                           {nineBySixteenVideo.isProcessing ? (
                                 <div className="video-processing-container nine-by-sixteen">
                                     <div className="loader-small"></div>
-                                    <p>Google Drive is processing...</p>
-                                    <p className="info-text-small">You don't need to wait.</p>
-                                    <p className="info-text-small">Preview available in ~5 mins.</p>
+                                    <p>Upload completed ✓</p>
+                                    <p className="info-text-small">Processing preview...</p>
+                                    <a 
+                                      href={nineBySixteenVideo.downloadLink || nineBySixteenVideo.embedLink} 
+                                      target="_blank" 
+                                      rel="noopener noreferrer"
+                                      className="info-text-small"
+                                      style={{ color: '#4285f4', textDecoration: 'underline', cursor: 'pointer' }}
+                                    >
+                                      Open video directly ↗
+                                    </a>
                                 </div>
                           ) : (
-                            <iframe src={nineBySixteenVideo.embedLink} width="72" height="128" allow="encrypted-media" allowFullScreen title="9x16 Video Preview"></iframe>
+                              <VideoPreview video={nineBySixteenVideo} width={72} height={128} title="Other Size Video Preview" />
                           )}
                           {nineBySixteenVideo.saveError && (
                               <div className="save-error-container">

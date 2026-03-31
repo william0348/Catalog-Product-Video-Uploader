@@ -64,8 +64,8 @@ export const translations = {
         name: "Name",
         availability: "Availability",
         retailerId: "Retailer ID",
-        masterVideo: "Master Video(4:5) or 9X16",
-        otherVideo: "Other Ratio Video",
+        masterVideo: "Main Video(9:16 & 4:5)",
+        otherVideo: "Other Sizes",
         // Uploader
         reupload: "Re-upload Video",
         loginToReupload: "Login to Re-upload",
@@ -418,8 +418,8 @@ export const translations = {
         name: "名稱",
         availability: "庫存狀態",
         retailerId: "零售商 ID",
-        masterVideo: "主影片 4x5 或 9x16",
-        otherVideo: "其他比例影片",
+        masterVideo: "主影片(9:16 & 4:5)",
+        otherVideo: "其他尺寸",
         // Uploader
         reupload: "重新上傳影片",
         loginToReupload: "登入以重新上傳",

@@ -520,3 +520,8 @@
 - [x] 修復 server/_core/index.ts 的 public/index.html 錯誤
 - [x] 將 TECHNICAL-DOCUMENT.md 轉換為 Word 檔案
 - [x] 將 MIGRATION-FROM-MANUS.md 轉換為 Word 檔案
+
+## Phase 63: 修復影片預覽 + 管理面板欄位名稱修改
+- [x] 修復上傳完成後影片預覽問題
+- [x] 管理面板 4:5 欄位改為「主影片(9:16 & 4:5)」
+- [x] 管理面板 9:16 欄位改為「其他尺寸」

@@ -1361,8 +1361,8 @@ const VideoLog = ({ t, companies }: { t: (key: string) => string; companies: Com
                                         <th className="col-catalog">{t('catalogId')}</th>
                                         <th className="col-company">{t('company') || 'Company'}</th>
                                         <th className="col-client">{t('clientNameLabel')}</th>
-                                        <th className="col-video">4:5</th>
-                                        <th className="col-video">9:16</th>
+                                        <th className="col-video">{t('masterVideo') || '主影片(9:16 & 4:5)'}</th>
+                                        <th className="col-video">{t('otherVideo') || '其他尺寸'}</th>
                                         <th className="col-uploader">{t('uploaderInfo') || 'Uploader'}</th>
                                         <th className="col-date">{t('uploadDate') || 'Date'}</th>
                                         <th className="col-actions">{t('actions')}</th>
