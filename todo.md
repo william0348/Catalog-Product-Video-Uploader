@@ -530,3 +530,10 @@
 - [x] 分析 Google Drive 上傳錯誤處理流程
 - [x] 改進錯誤訊息，明確告知用戶需要重新登入並勾選完整 Google Drive 權限
 - [x] 加入「重新授權」按鈕方便用戶快速重新登入
+
+## Phase 65: 撰寫從零開始建構指南 (Build From Scratch Guide)
+- [x] 重新分析專案所有核心元件、業務邏輯和技術架構
+- [x] 撰寫完整的從零建構指南 Markdown 文件（人類工程師 + AI vibe coding 友好）
+- [x] 轉換為 Word 格式 (.docx)
+- [x] 更新 README.md 加入 Build From Scratch Guide 連結
+- [x] 同步到 GitHub 並儲存 checkpoint

@@ -10,13 +10,14 @@ CPV Uploader is a web-based tool designed for brands and retailers who manage **
 
 This project was originally built and deployed on the **Manus AI platform**, which provides a built-in OAuth login system, S3 storage proxy, and various internal services. If you are cloning this repository to run independently outside of Manus, you will need to remove or replace several Manus-specific components.
 
-We provide **two migration guides** to help you through this process:
+We provide **comprehensive documentation** to help you through this process:
 
 | Document | Description |
 |----------|-------------|
 | [`TECHNICAL-DOCUMENT.md`](./TECHNICAL-DOCUMENT.md) | **Complete technical document** (22 chapters). Covers system architecture, database design (5 tables with ER diagram), all 27+ tRPC API endpoints, frontend architecture, Facebook Graph API integration, Google Drive integration, multi-company architecture, security considerations, and build/development guide. |
 | [`MIGRATION-FROM-MANUS.md`](./MIGRATION-FROM-MANUS.md) | **Comprehensive migration guide** (22 chapters, 1600+ lines). Covers all 17 Manus-specific modules, complete database structure (6 tables with DDL), environment variable classification (Manus-only vs general-purpose), Firebase Auth integration guide, `.env.example` template, file handling checklist, and deployment options for Cloud Run, Docker Compose, Railway, and Vercel. |
 | [`migrate-from-manus.md`](./migrate-from-manus.md) | **Quick-start skill for AI agents**. A concise, actionable checklist designed for other AI agents or developers who need to quickly identify and fix Manus-specific code. Covers the 10 most critical modifications with exact code snippets for each fix. |
+| [`BUILD-FROM-SCRATCH.md`](./BUILD-FROM-SCRATCH.md) | **Build from scratch guide** (20 chapters). A comprehensive step-by-step guide to rebuild the entire system from zero, designed for both human engineers and AI vibe-coding tools (Cursor, Windsurf, Bolt, v0). Covers business context, database schema, Google OAuth, Facebook Graph API, Google Drive integration, multi-company architecture, admin panel, i18n, and deployment. |
 | [`deploy-manus-to-cloudrun.md`](./deploy-manus-to-cloudrun.md) | **Google Cloud Run deployment guide**. Step-by-step instructions for deploying this app to Cloud Run with Cloud SQL. |
 
 The current deployment already uses Google Login for user authentication and Google Drive integration. The Manus Login layer is only used for the platform's internal session management and can be safely replaced.
