@@ -767,9 +767,15 @@ const VideoLog = ({ t, companies }: { t: (key: string) => string; companies: Com
     const [importData, setImportData] = useState<Array<{
         catalogId: string;
         retailerId: string;
-        videoUrl: string;
-        videoType: '4x5' | '9x16';
         productName: string;
+        productImageUrl: string;
+        video4x5Download: string;
+        video4x5Embed: string;
+        video9x16Download: string;
+        video9x16Embed: string;
+        clientName: string;
+        uploadTimestamp: string;
+        uploadedBy: string;
     }>>([]);
     const [importError, setImportError] = useState<string | null>(null);
     const [isImporting, setIsImporting] = useState(false);
@@ -936,10 +942,10 @@ const VideoLog = ({ t, companies }: { t: (key: string) => string; companies: Com
             'Retailer ID': r.retailerId,
             'Product Name': r.productName,
             'Product Image URL': r.productImageUrl || '',
-            '4x5 Download': r.video4x5Download || '',
-            '4x5 Video Embed URL': r.video4x5Embed || '',
-            '9x16 Download': r.video9x16Download || '',
-            '9x16 Video Embed URL': r.video9x16Embed || '',
+            'Main Download': r.video4x5Download || '',
+            'Main Video Embed URL': r.video4x5Embed || '',
+            'Other Ratio Download': r.video9x16Download || '',
+            'Other Ratio Video Embed URL': r.video9x16Embed || '',
             'Client Name': r.clientName,
             'Upload Timestamp': r.uploadTimestamp ? new Date(r.uploadTimestamp).toLocaleString() : '',
             'Uploaded By': r.uploadedBy || '',
@@ -971,7 +977,7 @@ const VideoLog = ({ t, companies }: { t: (key: string) => string; companies: Com
                     return;
                 }
 
-                // Try to find columns by various names
+                // Auto-match columns by various names (EN + ZH)
                 const headers = Object.keys(jsonData[0]);
                 const findCol = (candidates: string[]) => {
                     for (const c of candidates) {
@@ -986,34 +992,78 @@ const VideoLog = ({ t, companies }: { t: (key: string) => string; companies: Com
                     return null;
                 };
 
+                // Required columns
                 const catalogCol = findCol(['catalog id', 'catalogid', 'catalog_id', '\u76ee\u9304 id', '\u76ee\u9304id', '\u76ee\u9304']);
                 const retailerCol = findCol(['retailer id', 'retailerid', 'retailer_id', '\u96f6\u552e\u5546 id', '\u96f6\u552e\u5546id', '\u96f6\u552e\u5546']);
-                const videoCol = findCol(['video url', 'videourl', 'video_url', '\u5f71\u7247\u7db2\u5740', '\u5f71\u7247\u9023\u7d50', '\u5f71\u7247', 'url']);
-                const videoTypeCol = findCol(['video type', 'videotype', 'video_type', '\u5f71\u7247\u985e\u578b', '\u6bd4\u4f8b', 'type', 'ratio']);
-                const productNameCol = findCol(['product name', 'productname', 'product_name', '\u5546\u54c1\u540d\u7a31', '\u540d\u7a31', 'name']);
 
-                if (!catalogCol || !retailerCol || !videoCol) {
+                // Optional columns - full field matching
+                const productNameCol = findCol(['product name', 'productname', 'product_name', '\u5546\u54c1\u540d\u7a31', '\u540d\u7a31', 'name']);
+                const productImageCol = findCol(['product image url', 'productimageurl', 'product_image_url', '\u5546\u54c1\u5716\u7247', '\u5716\u7247', 'image url', 'image']);
+                const video4x5DownloadCol = findCol(['main download', '4x5 download', '4x5download', 'video4x5download', 'main video download', '4:5 download', '4:5', '4x5']);
+                const video4x5EmbedCol = findCol(['main video embed url', 'main embed', '4x5 video embed url', '4x5 embed', '4x5embed', 'video4x5embed', 'main video embed']);
+                const video9x16DownloadCol = findCol(['other ratio download', 'other download', '9x16 download', '9x16download', 'video9x16download', 'other video download', '9:16 download', '9:16', '9x16']);
+                const video9x16EmbedCol = findCol(['other ratio video embed url', 'other ratio embed', 'other embed', '9x16 video embed url', '9x16 embed', '9x16embed', 'video9x16embed', 'other video embed']);
+                const clientNameCol = findCol(['client name', 'clientname', 'client_name', '\u5ba2\u6236\u540d\u7a31', '\u5ba2\u6236', 'company']);
+                const uploadTimestampCol = findCol(['upload timestamp', 'uploadtimestamp', 'upload_timestamp', '\u4e0a\u50b3\u65e5\u671f', '\u65e5\u671f', 'date', 'timestamp']);
+                const uploadedByCol = findCol(['uploaded by', 'uploadedby', 'uploaded_by', '\u4e0a\u50b3\u4eba\u54e1', '\u4e0a\u50b3\u8005', 'uploader']);
+                // Legacy single video URL column (backward compatible)
+                const legacyVideoCol = findCol(['video url', 'videourl', 'video_url', '\u5f71\u7247\u7db2\u5740', '\u5f71\u7247\u9023\u7d50', '\u5f71\u7247', 'url']);
+                const legacyVideoTypeCol = findCol(['video type', 'videotype', 'video_type', '\u5f71\u7247\u985e\u578b', '\u6bd4\u4f8b', 'type', 'ratio']);
+
+                // Must have at least catalogId + retailerId
+                if (!catalogCol || !retailerCol) {
                     setImportError(
                         `${t('excelImportMissingColumns')}\n` +
                         `Found columns: ${headers.join(', ')}\n` +
                         `Catalog ID column: ${catalogCol || 'NOT FOUND'}\n` +
-                        `Retailer ID column: ${retailerCol || 'NOT FOUND'}\n` +
-                        `Video URL column: ${videoCol || 'NOT FOUND'}`
+                        `Retailer ID column: ${retailerCol || 'NOT FOUND'}`
                     );
                     return;
                 }
 
+                // Must have at least one video column
+                const hasVideoColumns = video4x5DownloadCol || video4x5EmbedCol || video9x16DownloadCol || video9x16EmbedCol || legacyVideoCol;
+                if (!hasVideoColumns) {
+                    setImportError(
+                        `${t('excelImportMissingColumns')}\n` +
+                        `Found columns: ${headers.join(', ')}\n` +
+                        `No video URL columns found. Expected: 4x5 Download, 9x16 Download, or Video URL`
+                    );
+                    return;
+                }
+
+                const getStr = (row: Record<string, any>, col: string | null) => col ? String(row[col] || '').trim() : '';
+
                 const parsed = jsonData
                     .map(row => {
-                        const catalogId = String(row[catalogCol] || '').trim();
-                        const retailerId = String(row[retailerCol] || '').trim();
-                        const videoUrl = String(row[videoCol] || '').trim();
-                        const rawType = videoTypeCol ? String(row[videoTypeCol] || '').trim().toLowerCase() : '';
-                        const videoType: '4x5' | '9x16' = (rawType.includes('9x16') || rawType.includes('9:16') || rawType === '9x16') ? '9x16' : '4x5';
-                        const productName = productNameCol ? String(row[productNameCol] || '').trim() : retailerId;
-                        return { catalogId, retailerId, videoUrl, videoType, productName };
+                        const catalogId = getStr(row, catalogCol);
+                        const retailerId = getStr(row, retailerCol);
+                        const productName = getStr(row, productNameCol) || retailerId;
+                        const productImageUrl = getStr(row, productImageCol);
+                        let video4x5Download = getStr(row, video4x5DownloadCol);
+                        let video4x5Embed = getStr(row, video4x5EmbedCol);
+                        let video9x16Download = getStr(row, video9x16DownloadCol);
+                        let video9x16Embed = getStr(row, video9x16EmbedCol);
+                        const clientName = getStr(row, clientNameCol);
+                        const uploadTimestamp = getStr(row, uploadTimestampCol);
+                        const uploadedBy = getStr(row, uploadedByCol);
+
+                        // Legacy: if only single video URL column, map by video type
+                        if (!video4x5Download && !video4x5Embed && !video9x16Download && !video9x16Embed && legacyVideoCol) {
+                            const videoUrl = getStr(row, legacyVideoCol);
+                            const rawType = legacyVideoTypeCol ? getStr(row, legacyVideoTypeCol).toLowerCase() : '';
+                            if (rawType.includes('9x16') || rawType.includes('9:16')) {
+                                video9x16Download = videoUrl;
+                                video9x16Embed = videoUrl;
+                            } else {
+                                video4x5Download = videoUrl;
+                                video4x5Embed = videoUrl;
+                            }
+                        }
+
+                        return { catalogId, retailerId, productName, productImageUrl, video4x5Download, video4x5Embed, video9x16Download, video9x16Embed, clientName, uploadTimestamp, uploadedBy };
                     })
-                    .filter(r => r.catalogId && r.retailerId && r.videoUrl);
+                    .filter(r => r.catalogId && r.retailerId && (r.video4x5Download || r.video4x5Embed || r.video9x16Download || r.video9x16Embed));
 
                 if (parsed.length === 0) {
                     setImportError(t('excelImportNoData'));
@@ -1038,17 +1088,18 @@ const VideoLog = ({ t, companies }: { t: (key: string) => string; companies: Com
         setImportSuccess(null);
 
         try {
-            // Build records for batch insert
+            // Build records for batch insert with all matched fields
             const batchRecords = importData.map(row => ({
                 catalogId: row.catalogId,
                 retailerId: row.retailerId,
                 productName: row.productName || row.retailerId,
-                clientName: 'Excel Import',
-                uploadedBy: 'excel_import',
-                ...(row.videoType === '9x16'
-                    ? { video9x16Download: row.videoUrl, video9x16Embed: row.videoUrl }
-                    : { video4x5Download: row.videoUrl, video4x5Embed: row.videoUrl }
-                ),
+                productImageUrl: row.productImageUrl || undefined,
+                video4x5Download: row.video4x5Download || undefined,
+                video4x5Embed: row.video4x5Embed || undefined,
+                video9x16Download: row.video9x16Download || undefined,
+                video9x16Embed: row.video9x16Embed || undefined,
+                clientName: row.clientName || 'Excel Import',
+                uploadedBy: row.uploadedBy || 'excel_import',
             }));
 
             // Send in batches of 100
@@ -1277,8 +1328,10 @@ const VideoLog = ({ t, companies }: { t: (key: string) => string; companies: Com
                                         <th>{t('catalogId') || 'Catalog ID'}</th>
                                         <th>{t('retailerId') || 'Retailer ID'}</th>
                                         <th>{t('name') || 'Name'}</th>
-                                        <th>{t('excelImportVideoUrl') || 'Video URL'}</th>
-                                        <th>{t('excelImportVideoType') || 'Type'}</th>
+                                        <th>{t('clientNameLabel') || 'Client'}</th>
+                                        <th>Main</th>
+                                        <th>Other Ratio</th>
+                                        <th>{t('uploaderInfo') || 'Uploader'}</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -1287,11 +1340,11 @@ const VideoLog = ({ t, companies }: { t: (key: string) => string; companies: Com
                                             <td>{i + 1}</td>
                                             <td><code style={{ fontSize: '11px' }}>{row.catalogId}</code></td>
                                             <td><code style={{ fontSize: '11px' }}>{row.retailerId}</code></td>
-                                            <td style={{ maxWidth: '150px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{row.productName}</td>
-                                            <td style={{ maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                                <a href={row.videoUrl} target="_blank" rel="noopener noreferrer" style={{ fontSize: '11px' }}>{row.videoUrl}</a>
-                                            </td>
-                                            <td>{row.videoType}</td>
+                                            <td style={{ maxWidth: '120px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{row.productName}</td>
+                                            <td style={{ maxWidth: '100px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{row.clientName || 'Excel Import'}</td>
+                                            <td>{(row.video4x5Download || row.video4x5Embed) ? '\u2705' : '\u2014'}</td>
+                                            <td>{(row.video9x16Download || row.video9x16Embed) ? '\u2705' : '\u2014'}</td>
+                                            <td style={{ maxWidth: '100px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{row.uploadedBy || 'excel_import'}</td>
                                         </tr>
                                     ))}
                                 </tbody>
@@ -1361,8 +1414,8 @@ const VideoLog = ({ t, companies }: { t: (key: string) => string; companies: Com
                                         <th className="col-catalog">{t('catalogId')}</th>
                                         <th className="col-company">{t('company') || 'Company'}</th>
                                         <th className="col-client">{t('clientNameLabel')}</th>
-                                        <th className="col-video">{t('masterVideo') || '主影片(9:16 & 4:5)'}</th>
-                                        <th className="col-video">{t('otherVideo') || '其他尺寸'}</th>
+                                        <th className="col-video">{t('masterVideo') || 'Main'}</th>
+                                        <th className="col-video">{t('otherVideo') || 'Other Ratio'}</th>
                                         <th className="col-uploader">{t('uploaderInfo') || 'Uploader'}</th>
                                         <th className="col-date">{t('uploadDate') || 'Date'}</th>
                                         <th className="col-actions">{t('actions')}</th>

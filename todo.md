@@ -537,3 +537,27 @@
 - [x] 轉換為 Word 格式 (.docx)
 - [x] 更新 README.md 加入 Build From Scratch Guide 連結
 - [x] 同步到 GitHub 並儲存 checkpoint
+
+## Phase 66: 升級 Excel 匯入功能 - 完整欄位自動匹配
+- [ ] 分析目前匯入程式碼和資料庫 schema
+- [ ] 更新後端 API 支援批次匯入所有欄位（Product Image URL, 4x5 Download/Embed, 9x16 Download/Embed, Client Name, Upload Timestamp, Uploaded By, Company）
+- [ ] 更新前端 Excel 匯入自動匹配所有欄位（支援中英文欄位名稱）
+- [ ] 更新匯入預覽 Modal 顯示所有欄位
+- [ ] 測試並驗證
+
+## Phase 66: 升級 Excel 匯入功能 + 欄位名稱修改
+- [ ] 分析目前匯入程式碼和資料庫 schema
+- [ ] 更新後端 API 支援批次匯入所有欄位（Product Image URL, 4x5 Download/Embed, 9x16 Download/Embed, Client Name, Upload Timestamp, Uploaded By, Company）
+- [ ] 更新前端 Excel 匯入自動匹配所有欄位（支援中英文欄位名稱）
+- [ ] 更新匯入預覽 Modal 顯示所有欄位
+- [ ] 管理面板 Video Log 欄位名稱 4:5 改為 Main，9:16 改為 Other Ratio
+- [ ] 測試並驗證
+
+## Phase 66: 升級 Excel 匯入功能 + 欄位名稱修改 + 隱藏幻燈片選單
+- [x] Excel 匯入支援完整欄位自動匹配（Product Image URL, 4x5 Download/Embed, 9x16 Download/Embed, Client Name, Upload Timestamp, Uploaded By, Company）
+- [x] 匯入預覽 Modal 顯示所有匹配到的欄位
+- [x] 管理面板 Video Log 欄位名稱改為 Main / Other Ratio
+- [x] 匯出 Excel 欄位名稱同步修改
+- [x] 移除側邊選單中的「幻燈片影片生成器」入口（保留程式碼和路由）
+- [x] 更新 i18n 翻譯
+- [x] 測試並驗證（8 test files, 80 tests passed）
