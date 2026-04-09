@@ -561,3 +561,8 @@
 - [x] 移除側邊選單中的「幻燈片影片生成器」入口（保留程式碼和路由）
 - [x] 更新 i18n 翻譯
 - [x] 測試並驗證（8 test files, 80 tests passed）
+## Phase 67: 移除底部 Logo 和 Meta 相關字樣
+- [x] 移除頁面底部的 Logo 圖片（LionTech、Meta）
+- [x] 移除所有 Meta 相關字樣（標題、描述、連結等）
+- [x] 更新 i18n 翻譯中的 Meta 相關文字
+- [x] 測試並驗證（8 test files, 80 tests passed）

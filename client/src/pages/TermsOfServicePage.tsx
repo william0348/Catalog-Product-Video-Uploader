@@ -12,7 +12,7 @@ export const TermsOfServicePage = () => {
                 <h1>{t('termsOfService')}</h1>
             </header>
             <p><strong>Last Updated:</strong> August 1, 2024</p>
-            <p>Please read these Terms of Service ("Terms", "Terms of Service") carefully before using the "Meta Catalog Product Video Uploader (CPV Uploader)" application (the "Service") operated by us.</p>
+            <p>Please read these Terms of Service ("Terms", "Terms of Service") carefully before using the "Catalog Product Video Uploader (CPV Uploader)" application (the "Service") operated by us.</p>
             <p>Your access to and use of the Service is conditioned on your acceptance of and compliance with these Terms. These Terms apply to all visitors, users, and others who access or use the Service.</p>
             
             <h2>1. Accounts & Use of Service</h2>

@@ -1226,22 +1226,6 @@ tbody tr.selected:hover td {
   gap: 5px 10px;
 }
 
-.footer-logos {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 24px;
-  flex-wrap: wrap;
-}
-
-.footer-logo {
-  height: 80px;
-  object-fit: contain;
-}
-
-.footer-logo.meta-logo {
-  height: 35px;
-}
 
 .button-like-link {
   display: inline-block;
