@@ -26,6 +26,7 @@ import {
   getCompanyMembers,
   removeCompanyMember,
   activateMemberByEmail,
+  isCompanyMember,
   createSlideshowTemplate,
   getSlideshowTemplates,
   getSlideshowTemplateById,
@@ -77,12 +78,21 @@ export const appRouter = router({
         return company;
       }),
 
-    // Get company by ID
+    // Get company by ID (requires email verification)
     get: publicProcedure
-      .input(z.object({ id: z.number() }))
+      .input(z.object({ id: z.number(), email: z.string().email().optional() }))
       .query(async ({ input }) => {
         const company = await getCompanyById(input.id);
         if (!company) throw new Error("Company not found");
+        
+        // If email is provided, verify membership
+        if (input.email) {
+          const isMember = await isCompanyMember(input.id, input.email);
+          if (!isMember) {
+            throw new Error("您的 Email 不是此公司的成員，無法存取公司設定。");
+          }
+        }
+        
         // Mask the access token for security
         return {
           ...company,
@@ -107,17 +117,26 @@ export const appRouter = router({
         }));
       }),
 
-    // Update company settings (token, access key, etc.)
+    // Update company settings (token, access key, etc.) - requires email verification
     update: publicProcedure
       .input(z.object({
         id: z.number(),
+        email: z.string().email().optional(),
         name: z.string().optional(),
         facebookAccessToken: z.string().optional(),
         accessKey: z.string().optional(),
         catalogs: z.string().optional(),
       }))
       .mutation(async ({ input }) => {
-        const { id, ...data } = input;
+        const { id, email, ...data } = input;
+        
+        // Verify membership if email is provided
+        if (email) {
+          const isMember = await isCompanyMember(id, email);
+          if (!isMember) {
+            throw new Error("您的 Email 不是此公司的成員，無法修改公司設定。");
+          }
+        }
         const updateData: Record<string, unknown> = {};
         if (data.name !== undefined) updateData.name = data.name;
         if (data.facebookAccessToken !== undefined) updateData.facebookAccessToken = data.facebookAccessToken;
@@ -203,32 +222,56 @@ export const appRouter = router({
         }
       }),
 
-    // Get full access token (for use in API calls)
+    // Get full access token (for use in API calls) - requires email verification
     getAccessToken: publicProcedure
-      .input(z.object({ id: z.number() }))
+      .input(z.object({ id: z.number(), email: z.string().email().optional() }))
       .query(async ({ input }) => {
         const company = await getCompanyById(input.id);
         if (!company) throw new Error("Company not found");
+        
+        // Verify membership if email is provided
+        if (input.email) {
+          const isMember = await isCompanyMember(input.id, input.email);
+          if (!isMember) {
+            throw new Error("您的 Email 不是此公司的成員，無法取得 Access Token。");
+          }
+        }
+        
         return { accessToken: company.facebookAccessToken };
       }),
   }),
 
   // ==================== Company Members ====================
   members: router({
-    // List members of a company
+    // List members of a company (requires requester email verification)
     list: publicProcedure
-      .input(z.object({ companyId: z.number() }))
+      .input(z.object({ companyId: z.number(), requesterEmail: z.string().email().optional() }))
       .query(async ({ input }) => {
+        // Verify requester is a member
+        if (input.requesterEmail) {
+          const isMember = await isCompanyMember(input.companyId, input.requesterEmail);
+          if (!isMember) {
+            throw new Error("您的 Email 不是此公司的成員，無法查看成員列表。");
+          }
+        }
         return getCompanyMembers(input.companyId);
       }),
 
-    // Invite a member by email
+    // Invite a member by email (requires requester email verification)
     invite: publicProcedure
       .input(z.object({
         companyId: z.number(),
         email: z.string().email(),
+        requesterEmail: z.string().email().optional(),
       }))
       .mutation(async ({ input }) => {
+        // Verify requester is a member
+        if (input.requesterEmail) {
+          const isMember = await isCompanyMember(input.companyId, input.requesterEmail);
+          if (!isMember) {
+            throw new Error("您的 Email 不是此公司的成員，無法邀請新成員。");
+          }
+        }
         const member = await addCompanyMember({
           companyId: input.companyId,
           email: input.email.toLowerCase(),
@@ -239,13 +282,21 @@ export const appRouter = router({
         return member;
       }),
 
-    // Remove a member from company
+    // Remove a member from company (requires requester email verification)
     remove: publicProcedure
       .input(z.object({
         companyId: z.number(),
         email: z.string().email(),
+        requesterEmail: z.string().email().optional(),
       }))
       .mutation(async ({ input }) => {
+        // Verify requester is a member
+        if (input.requesterEmail) {
+          const isMember = await isCompanyMember(input.companyId, input.requesterEmail);
+          if (!isMember) {
+            throw new Error("您的 Email 不是此公司的成員，無法移除成員。");
+          }
+        }
         await removeCompanyMember(input.companyId, input.email);
         return { success: true };
       }),

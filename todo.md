@@ -574,3 +574,14 @@
 - [x] 前端 Token Banner 顯示具體失效原因（tokenIsInvalid + tokenErrorReason）
 - [x] 前端 API 錯誤訊息全面中文化（目錄不正確、Token 失效、未設定等）
 - [x] 測試並驗證（9 test files, 96 tests passed）
+
+## Phase 69: 公司設定存取權限 - Email 必須與 Google 登入相符
+- [x] 分析目前公司成員管理和存取邏輯
+- [x] 後端加入 isCompanyMember 驗證函數（db.ts）
+- [x] 後端 company.get/update/getAccessToken 加入 email 參數驗證成員資格
+- [x] 後端 members.list/invite/remove 加入 requesterEmail 參數驗證
+- [x] 前端 settingsStore 更新所有函數支援 email 參數
+- [x] 前端 MainApp 傳入 userEmail 到所有 loadCompanySettings/saveCompanySettings 呼叫
+- [x] 前端 AdminPanel 傳入 userEmail 到所有 company/members API 呼叫
+- [x] 存取被拒時顯示中文錯誤訊息並清除公司選擇
+- [x] 測試並驗證（10 test files, 111 tests passed）

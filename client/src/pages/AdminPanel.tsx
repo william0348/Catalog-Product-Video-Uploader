@@ -133,13 +133,13 @@ const CompanyManager = ({ t }: { t: (key: string) => string }) => {
         }
         const loadDetail = async () => {
             try {
-                const detail = await trpcQuery('company.get', { id: selectedCompanyId });
+                const detail = await trpcQuery('company.get', { id: selectedCompanyId, email: userEmail.toLowerCase() });
                 setCompanyDetail(detail);
                 setEditToken(detail.facebookAccessTokenFull || '');
                 setEditAccessKey(detail.accessKey || '');
                 setTokenStatus({ type: null, message: '' });
 
-                const members = await trpcQuery('members.list', { companyId: selectedCompanyId });
+                const members = await trpcQuery('members.list', { companyId: selectedCompanyId, requesterEmail: userEmail.toLowerCase() });
                 setCompanyMembers(Array.isArray(members) ? members : []);
             } catch (e: any) {
                 console.error('Failed to load company detail:', e);
@@ -178,6 +178,7 @@ const CompanyManager = ({ t }: { t: (key: string) => string }) => {
         try {
             await trpcMutate('company.update', {
                 id: selectedCompanyId,
+                email: userEmail.toLowerCase(),
                 facebookAccessToken: editToken,
                 accessKey: editAccessKey,
             });
@@ -234,6 +235,7 @@ const CompanyManager = ({ t }: { t: (key: string) => string }) => {
 
             await trpcMutate('company.update', {
                 id: selectedCompanyId!,
+                email: userEmail.toLowerCase(),
                 catalogs: JSON.stringify(updatedCatalogs),
             });
 
@@ -253,6 +255,7 @@ const CompanyManager = ({ t }: { t: (key: string) => string }) => {
         try {
             await trpcMutate('company.update', {
                 id: selectedCompanyId!,
+                email: userEmail.toLowerCase(),
                 catalogs: JSON.stringify(updatedCatalogs),
             });
             setCompanyDetail(prev => prev ? { ...prev, catalogs: JSON.stringify(updatedCatalogs) } : prev);
@@ -270,6 +273,7 @@ const CompanyManager = ({ t }: { t: (key: string) => string }) => {
             const updatedCatalogs = companyCatalogs.map(c => c.id === catalogId ? { ...c, name: nameResult.name } : c);
             await trpcMutate('company.update', {
                 id: selectedCompanyId!,
+                email: userEmail.toLowerCase(),
                 catalogs: JSON.stringify(updatedCatalogs),
             });
             setCompanyDetail(prev => prev ? { ...prev, catalogs: JSON.stringify(updatedCatalogs) } : prev);
@@ -301,11 +305,12 @@ const CompanyManager = ({ t }: { t: (key: string) => string }) => {
             await trpcMutate('members.invite', {
                 companyId: selectedCompanyId,
                 email: inviteEmail.trim(),
+                requesterEmail: userEmail.toLowerCase(),
             });
             setInviteMsg({ type: 'success', message: t('inviteSuccess') });
             setInviteEmail('');
             // Refresh members
-            const members = await trpcQuery('members.list', { companyId: selectedCompanyId });
+            const members = await trpcQuery('members.list', { companyId: selectedCompanyId, requesterEmail: userEmail.toLowerCase() });
             setCompanyMembers(Array.isArray(members) ? members : []);
             setTimeout(() => setInviteMsg(null), 3000);
         } catch (e: any) {
@@ -319,7 +324,7 @@ const CompanyManager = ({ t }: { t: (key: string) => string }) => {
     const handleRemoveMember = async (email: string) => {
         if (!selectedCompanyId) return;
         try {
-            await trpcMutate('members.remove', { companyId: selectedCompanyId, email });
+            await trpcMutate('members.remove', { companyId: selectedCompanyId, email, requesterEmail: userEmail.toLowerCase() });
             setCompanyMembers(prev => prev.filter(m => m.email !== email));
         } catch (e: any) {
             console.error('Failed to remove member:', e);

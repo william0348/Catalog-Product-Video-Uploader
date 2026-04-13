@@ -108,12 +108,19 @@ export const MainApp = () => {
     const savedCompanyId = getSelectedCompany();
     if (savedCompanyId) {
       // Load company settings
-      loadCompanySettings(savedCompanyId).then(companySettings => {
+      loadCompanySettings(savedCompanyId, userEmail || undefined).then(companySettings => {
         setConfiguredCatalogs(companySettings.catalogs);
         setFbAccessToken(companySettings.facebookAccessToken);
         setTokenInput(companySettings.facebookAccessToken);
         setCompanyAccessKeyValue(companySettings.accessKey);
-      }).catch(console.error);
+      }).catch(e => {
+        console.error(e);
+        if (e.message?.includes('不是此公司的成員')) {
+          setError(e.message);
+          setSelectedCompanyId(null);
+          saveSelectedCompany(null);
+        }
+      });
     } else {
       // No company selected — clear all settings
       setConfiguredCatalogs([]);
@@ -178,12 +185,19 @@ export const MainApp = () => {
   useEffect(() => {
     if (view === 'input') {
       if (selectedCompanyId) {
-        loadCompanySettings(selectedCompanyId).then(companySettings => {
+        loadCompanySettings(selectedCompanyId, userEmail || undefined).then(companySettings => {
           setConfiguredCatalogs(companySettings.catalogs);
           setFbAccessToken(companySettings.facebookAccessToken);
           setTokenInput(companySettings.facebookAccessToken);
           setCompanyAccessKeyValue(companySettings.accessKey);
-        }).catch(console.error);
+        }).catch(e => {
+          console.error(e);
+          if (e.message?.includes('不是此公司的成員')) {
+            setError(e.message);
+            setSelectedCompanyId(null);
+            saveSelectedCompany(null);
+          }
+        });
       } else {
         // No company selected — clear all settings
         setConfiguredCatalogs([]);
@@ -217,21 +231,26 @@ export const MainApp = () => {
     setSelectedCompanyId(companyId);
     saveSelectedCompany(companyId);
     try {
-      const companySettings = await loadCompanySettings(companyId);
+      const companySettings = await loadCompanySettings(companyId, userEmail || undefined);
       setConfiguredCatalogs(companySettings.catalogs);
       setFbAccessToken(companySettings.facebookAccessToken);
       setTokenInput(companySettings.facebookAccessToken);
       setCompanyAccessKeyValue(companySettings.accessKey);
-    } catch (e) {
+    } catch (e: any) {
       console.error('Failed to load company settings:', e);
+      if (e.message?.includes('不是此公司的成員')) {
+        setError(e.message);
+        setSelectedCompanyId(null);
+        saveSelectedCompany(null);
+      }
     }
-  }, []);
+  }, [userEmail]);
 
   // ===== Inline settings handlers =====
   const handleSaveToken = useCallback(async () => {
     if (selectedCompanyId) {
       // Save to company
-      await saveCompanySettings(selectedCompanyId, { facebookAccessToken: tokenInput });
+      await saveCompanySettings(selectedCompanyId, { facebookAccessToken: tokenInput }, userEmail || undefined);
     } else {
       // No company selected — cannot save token
       console.warn('No company selected, token not saved');
@@ -280,7 +299,7 @@ export const MainApp = () => {
       const newCatalog: CatalogConfig = { id: trimmedId, name, addedAt: new Date().toISOString() };
       const newCatalogs = [...configuredCatalogs, newCatalog];
       if (selectedCompanyId) {
-        await saveCompanySettings(selectedCompanyId, { catalogs: newCatalogs });
+        await saveCompanySettings(selectedCompanyId, { catalogs: newCatalogs }, userEmail || undefined);
       } else {
         // No company selected — cannot save catalogs
         console.warn('No company selected, catalog not saved');
@@ -297,7 +316,7 @@ export const MainApp = () => {
   const handleRemoveCatalog = useCallback(async (catalogIdToRemove: string) => {
     const newCatalogs = configuredCatalogs.filter(c => c.id !== catalogIdToRemove);
     if (selectedCompanyId) {
-      await saveCompanySettings(selectedCompanyId, { catalogs: newCatalogs });
+      await saveCompanySettings(selectedCompanyId, { catalogs: newCatalogs }, userEmail || undefined);
     } else {
       // No company selected — cannot save catalogs
       console.warn('No company selected, catalog not saved');

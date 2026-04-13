@@ -197,6 +197,18 @@ export async function removeCompanyMember(companyId: number, email: string): Pro
   );
 }
 
+export async function isCompanyMember(companyId: number, email: string): Promise<boolean> {
+  const db = await getDb();
+  if (!db) return false;
+  const rows = await db.select().from(companyMembers)
+    .where(and(
+      eq(companyMembers.companyId, companyId),
+      eq(companyMembers.email, email.toLowerCase()),
+      eq(companyMembers.status, "active")
+    )).limit(1);
+  return rows.length > 0;
+}
+
 export async function activateMemberByEmail(email: string, userId: number): Promise<void> {
   const db = await getDb();
   if (!db) return;
