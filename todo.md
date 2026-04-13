@@ -585,3 +585,24 @@
 - [x] 前端 AdminPanel 傳入 userEmail 到所有 company/members API 呼叫
 - [x] 存取被拒時顯示中文錯誤訊息並清除公司選擇
 - [x] 測試並驗證（10 test files, 111 tests passed）
+
+## Phase 70: 管理面板移除手動輸入 Email，改用 Google 登入帳號
+- [ ] AdminPanel CompanyManager 移除手動輸入 Email 的步驟
+- [ ] 改為直接使用 Google 登入的 Email（從 GoogleAuthContext 取得）
+- [ ] 未登入時顯示提示要求先 Google 登入
+- [ ] 測試並驗證
+
+## Phase 70: 安全修復 - 移除手動 Email 輸入，強制 Google 登入驗證
+- [ ] AdminPanel CompanyManager 移除手動輸入 Email 步驟
+- [ ] 改為直接使用 GoogleAuthContext 的 userEmail（已驗證身份）
+- [ ] 未登入時顯示提示要求先 Google 登入，不允許存取公司設定
+- [ ] 防堵知道對方 Email 就能存取 Access Token 的安全漏洞
+- [ ] 測試並驗證
+
+## Phase 70: 安全修復 - 公司管理自動使用 Google 登入 Email，移除手動輸入
+- [x] AdminPanel CompanyManager 移除手動輸入 Email 步驟和 UI
+- [x] 改為從 GoogleAuthContext 取得已驗證的 userEmail 自動載入公司
+- [x] 未登入時顯示提示要求先 Google 登入
+- [x] 整個管理面板（Video Log + 公司管理）都需要 Google 登入
+- [x] 登入後顯示 Email + Google 已驗證標籤
+- [x] 測試並驗證（10 test files, 111 tests passed）

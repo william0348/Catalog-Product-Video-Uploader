@@ -3,6 +3,7 @@ import React, { useState, useEffect, useCallback, useMemo, useContext } from 're
 import * as XLSX from 'xlsx';
 import { AppFooter } from '@/components/AppFooter';
 import { LanguageContext } from '@/contexts/LanguageContext';
+import { useGoogleAuth } from '@/contexts/GoogleAuthContext';
 import { fetchCatalogName, validateAccessToken, type AppSettings, type CatalogConfig } from '@/settingsStore';
 
 interface AdminPanelProps {
@@ -57,9 +58,9 @@ interface MemberData {
 }
 
 const CompanyManager = ({ t }: { t: (key: string) => string }) => {
-    // Email state for loading companies
-    const [userEmail, setUserEmail] = useState(() => localStorage.getItem('cpv_user_email') || '');
-    const [emailSubmitted, setEmailSubmitted] = useState(false);
+    // Use Google login email directly (no manual input)
+    const { userEmail: googleEmail, handleGoogleLogin, isGoogleReady } = useGoogleAuth();
+    const userEmail = googleEmail || '';
 
     // Companies list
     const [companies, setCompanies] = useState<CompanyData[]>([]);
@@ -107,8 +108,6 @@ const CompanyManager = ({ t }: { t: (key: string) => string }) => {
         try {
             const result = await trpcQuery('company.getByEmail', { email: userEmail.toLowerCase() });
             setCompanies(Array.isArray(result) ? result : []);
-            localStorage.setItem('cpv_user_email', userEmail);
-            setEmailSubmitted(true);
         } catch (e: any) {
             console.error('Failed to load companies:', e);
             setCompanies([]);
@@ -117,12 +116,14 @@ const CompanyManager = ({ t }: { t: (key: string) => string }) => {
         }
     }, [userEmail]);
 
-    // Auto-load if email was saved
+    // Auto-load companies when Google email is available
     useEffect(() => {
-        if (userEmail && !emailSubmitted) {
+        if (userEmail) {
             loadCompanies();
+        } else {
+            setCompanies([]);
         }
-    }, []);
+    }, [userEmail]);
 
     // Load company detail when selected
     useEffect(() => {
@@ -333,33 +334,24 @@ const CompanyManager = ({ t }: { t: (key: string) => string }) => {
 
     // ===== RENDER =====
 
-    // Step 1: Enter email
-    if (!emailSubmitted) {
+    // Step 1: Require Google login (no manual email input)
+    if (!userEmail) {
         return (
             <div className="settings-manager">
                 <h2>{t('companyManagement')}</h2>
-                <p className="info-text">{t('enterEmailToStart')}</p>
-                <div className="settings-section">
-                    <div className="form-group">
-                        <label htmlFor="userEmail">{t('yourEmail')}</label>
-                        <div className="add-catalog-input-group">
-                            <input
-                                id="userEmail"
-                                type="email"
-                                value={userEmail}
-                                onChange={(e) => setUserEmail(e.target.value)}
-                                placeholder={t('yourEmailPlaceholder')}
-                                onKeyDown={(e) => { if (e.key === 'Enter') loadCompanies(); }}
-                            />
-                            <button
-                                onClick={loadCompanies}
-                                disabled={!userEmail || isLoadingCompanies}
-                                className="add-catalog-button"
-                            >
-                                {isLoadingCompanies ? <div className="loader-small"></div> : t('loadCompanies')}
-                            </button>
-                        </div>
-                    </div>
+                <p className="info-text" style={{ marginBottom: '16px' }}>
+                    {t('googleLoginRequiredForCompany') || '請先使用 Google 登入以管理公司設定。登入後將自動載入您的公司資料。'}
+                </p>
+                <div className="settings-section" style={{ textAlign: 'center', padding: '24px' }}>
+                    <button
+                        onClick={handleGoogleLogin}
+                        disabled={!isGoogleReady}
+                        className="add-catalog-button"
+                        style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '10px 24px', fontSize: '15px' }}
+                    >
+                        <span style={{ fontSize: '18px' }}>G</span>
+                        {t('loginWithGoogle') || '使用 Google 登入'}
+                    </button>
                 </div>
             </div>
         );
@@ -372,16 +364,12 @@ const CompanyManager = ({ t }: { t: (key: string) => string }) => {
                 <h2>{t('companyManagement')}</h2>
                 <p className="info-text">{t('companyManagementDesc')}</p>
 
-                {/* User email display */}
+                {/* User email display (from Google login, read-only) */}
                 <div className="settings-section" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px' }}>
                     <span style={{ fontSize: '14px', color: '#666' }}>📧 {userEmail}</span>
-                    <button
-                        onClick={() => { setEmailSubmitted(false); setCompanies([]); }}
-                        className="validate-token-button"
-                        style={{ padding: '4px 12px', fontSize: '13px' }}
-                    >
-                        {t('switchAccount')}
-                    </button>
+                    <span style={{ fontSize: '12px', color: '#999', background: '#e8f5e9', padding: '2px 8px', borderRadius: '4px' }}>
+                        {t('googleVerified') || 'Google 已驗證'}
+                    </span>
                 </div>
 
                 {statusMsg && <p className="success-text" style={{ margin: '8px 0' }}>{statusMsg}</p>}
@@ -1707,17 +1695,49 @@ const UploaderPersonnel = ({ t, companies }: { t: (key: string, replacements?: {
 export const AdminPanel = ({ onBack }: AdminPanelProps) => {
     const [activeTab, setActiveTab] = useState<'log' | 'company'>('log');
     const { t } = useContext(LanguageContext);
+    const { userEmail, handleGoogleLogin, isGoogleReady } = useGoogleAuth();
     const [companies, setCompanies] = useState<CompanyData[]>([]);
 
-    // Load all companies for the current user
+    // Load all companies for the current user (using Google login email)
     useEffect(() => {
-        const email = localStorage.getItem('cpv_user_email');
-        if (email) {
-            trpcQuery('company.getByEmail', { email: email.toLowerCase() })
+        if (userEmail) {
+            trpcQuery('company.getByEmail', { email: userEmail.toLowerCase() })
                 .then(result => setCompanies(Array.isArray(result) ? result : []))
                 .catch(() => setCompanies([]));
+        } else {
+            setCompanies([]);
         }
-    }, []);
+    }, [userEmail]);
+
+    // If not logged in, show Google login requirement
+    if (!userEmail) {
+        return (
+            <main className="container data-view">
+                <div className="card admin-panel">
+                    <header className="admin-header">
+                        <div className="admin-header-left">
+                            <h1>{t('adminPanel')}</h1>
+                        </div>
+                    </header>
+                    <div style={{ textAlign: 'center', padding: '48px 24px' }}>
+                        <p style={{ fontSize: '16px', color: '#666', marginBottom: '24px' }}>
+                            {t('googleLoginRequiredForAdmin') || '請先使用 Google 登入以存取管理面板。'}
+                        </p>
+                        <button
+                            onClick={handleGoogleLogin}
+                            disabled={!isGoogleReady}
+                            className="add-catalog-button"
+                            style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '12px 28px', fontSize: '16px' }}
+                        >
+                            <span style={{ fontSize: '20px' }}>G</span>
+                            {t('loginWithGoogle') || '使用 Google 登入'}
+                        </button>
+                    </div>
+                </div>
+                <AppFooter />
+            </main>
+        );
+    }
 
     return (
         <main className="container data-view">
@@ -1725,6 +1745,12 @@ export const AdminPanel = ({ onBack }: AdminPanelProps) => {
                 <header className="admin-header">
                     <div className="admin-header-left">
                         <h1>{t('adminPanel')}</h1>
+                    </div>
+                    <div style={{ fontSize: '13px', color: '#666', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <span>📧 {userEmail}</span>
+                        <span style={{ fontSize: '11px', color: '#4caf50', background: '#e8f5e9', padding: '2px 6px', borderRadius: '4px' }}>
+                            {t('googleVerified') || 'Google 已驗證'}
+                        </span>
                     </div>
                 </header>
 
