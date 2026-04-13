@@ -160,12 +160,35 @@ export const appRouter = router({
       .mutation(async ({ input }) => {
         const company = await getCompanyById(input.id);
         if (!company || !company.facebookAccessToken) {
-          return { tokenExpiresAt: null, error: 'No token found' };
+          return { tokenExpiresAt: null, error: '未設定 Access Token，請先在管理面板設定 Token。' };
         }
         try {
           const debugUrl = `https://graph.facebook.com/v21.0/debug_token?input_token=${company.facebookAccessToken}&access_token=${company.facebookAccessToken}`;
           const debugResp = await fetch(debugUrl);
           const debugData = await debugResp.json();
+          
+          // Check if token is invalid
+          if (debugData?.data?.is_valid === false) {
+            const fbError = debugData?.data?.error;
+            const code = fbError?.code;
+            const subcode = fbError?.subcode;
+            let reason = '';
+            if (code === 190) {
+              if (subcode === 463) {
+                reason = 'Token 已過期，請重新產生一組新的 Access Token。';
+              } else if (subcode === 467) {
+                reason = 'Token 已失效，可能是因為使用者已變更密碼或撤銷授權。';
+              } else if (subcode === 460) {
+                reason = 'Token 已失效，因為使用者已登出所有裝置。';
+              } else {
+                reason = fbError?.message ? `Token 已失效：${fbError.message}` : 'Token 已失效，請重新產生。';
+              }
+            } else {
+              reason = fbError?.message ? `Token 無效：${fbError.message}` : 'Token 無效，請重新產生。';
+            }
+            return { tokenExpiresAt: null, error: reason, isInvalid: true };
+          }
+          
           if (debugData?.data?.expires_at) {
             const expiresAt = new Date(debugData.data.expires_at * 1000);
             await updateCompany(input.id, { tokenExpiresAt: expiresAt } as any);
@@ -174,9 +197,9 @@ export const appRouter = router({
             // Token never expires (e.g., system user token)
             return { tokenExpiresAt: null, neverExpires: true };
           }
-          return { tokenExpiresAt: null, error: debugData?.data?.error?.message || 'Could not determine expiration' };
+          return { tokenExpiresAt: null, error: debugData?.data?.error?.message || '無法判斷 Token 到期日' };
         } catch (e: any) {
-          return { tokenExpiresAt: null, error: e.message || 'Failed to check token' };
+          return { tokenExpiresAt: null, error: `檢查失敗：${e.message || '網路連線錯誤'}` };
         }
       }),
 
@@ -450,11 +473,38 @@ export const appRouter = router({
           const response = await fetch(url);
           const data = await response.json();
           if (!response.ok) {
-            return { valid: false, message: data?.error?.message || 'Invalid access token' };
+            const fbError = data?.error;
+            const code = fbError?.code;
+            const subcode = fbError?.error_subcode;
+            const fbMsg = fbError?.message || '';
+            let reason = '';
+            // Map Facebook error codes to Chinese reasons
+            if (code === 190) {
+              if (subcode === 463) {
+                reason = 'Token 已過期，請重新產生一組新的 Access Token。';
+              } else if (subcode === 467) {
+                reason = 'Token 已失效，可能是因為使用者已變更密碼或撤銷授權。';
+              } else if (subcode === 460) {
+                reason = 'Token 已失效，因為使用者已登出所有裝置。';
+              } else {
+                reason = `Token 無效或已過期（錯誤碼: ${code}${subcode ? '/' + subcode : ''}）。請重新產生 Token。`;
+              }
+            } else if (code === 4) {
+              reason = 'API 呼叫次數過多，請稍後再試。';
+            } else if (code === 17) {
+              reason = '已達到 API 速率限制，請稍後再試。';
+            } else if (code === 10) {
+              reason = '權限不足，請確認 Token 擁有必要的存取權限。';
+            } else if (code === 200) {
+              reason = '權限不足，請確認應用程式已獲得必要的授權。';
+            } else {
+              reason = fbMsg ? `驗證失敗：${fbMsg}` : 'Token 無效，請檢查後重試。';
+            }
+            return { valid: false, message: reason, errorCode: code, errorSubcode: subcode, originalMessage: fbMsg };
           }
-          return { valid: true, message: `Token valid. User: ${data.name || data.id}` };
+          return { valid: true, message: `Token 有效。使用者：${data.name || data.id}` };
         } catch (e: any) {
-          return { valid: false, message: e.message || 'Failed to validate token' };
+          return { valid: false, message: `驗證失敗：${e.message || '網路連線錯誤，請檢查網路後重試'}` };
         }
       }),
 

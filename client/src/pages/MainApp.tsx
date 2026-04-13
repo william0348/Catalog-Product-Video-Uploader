@@ -100,6 +100,8 @@ export const MainApp = () => {
   const [tokenExpiresAt, setTokenExpiresAt] = useState<string | null>(null);
   const [isCheckingExpiration, setIsCheckingExpiration] = useState(false);
   const [tokenExpirationChecked, setTokenExpirationChecked] = useState(false);
+  const [tokenErrorReason, setTokenErrorReason] = useState<string | null>(null);
+  const [tokenIsInvalid, setTokenIsInvalid] = useState(false);
 
   // Load settings on mount — only from company settings (no legacy global fallback)
   useEffect(() => {
@@ -127,14 +129,22 @@ export const MainApp = () => {
       setTokenExpirationChecked(false);
       return;
     }
+    setTokenErrorReason(null);
+    setTokenIsInvalid(false);
     getTokenExpiration(selectedCompanyId).then(result => {
       setTokenExpiresAt(result.tokenExpiresAt);
       setTokenExpirationChecked(true);
       // If no expiration info yet but has token, auto-refresh from Facebook
       if (!result.tokenExpiresAt && result.hasToken) {
-        refreshTokenExpiration(selectedCompanyId).then(refreshResult => {
+        refreshTokenExpiration(selectedCompanyId).then((refreshResult: any) => {
           if (refreshResult.tokenExpiresAt) {
             setTokenExpiresAt(refreshResult.tokenExpiresAt);
+          }
+          if (refreshResult.error) {
+            setTokenErrorReason(refreshResult.error);
+          }
+          if (refreshResult.isInvalid) {
+            setTokenIsInvalid(true);
           }
         }).catch(console.error);
       }
@@ -144,10 +154,18 @@ export const MainApp = () => {
   const handleRefreshExpiration = useCallback(async () => {
     if (!selectedCompanyId) return;
     setIsCheckingExpiration(true);
+    setTokenErrorReason(null);
+    setTokenIsInvalid(false);
     try {
-      const result = await refreshTokenExpiration(selectedCompanyId);
+      const result: any = await refreshTokenExpiration(selectedCompanyId);
       if (result.tokenExpiresAt) {
         setTokenExpiresAt(result.tokenExpiresAt);
+      }
+      if (result.error) {
+        setTokenErrorReason(result.error);
+      }
+      if (result.isInvalid) {
+        setTokenIsInvalid(true);
       }
     } catch (e) {
       console.error('Failed to refresh token expiration:', e);
@@ -471,12 +489,12 @@ export const MainApp = () => {
     const currentToken = fbAccessToken;
     
     if (!currentToken) { 
-        setError("Facebook Access Token is not configured. Please ask an administrator to set it up in the Admin Panel."); 
+        setError("尚未設定 Access Token，請聯繫管理員在管理面板中設定。"); 
         return; 
     }
-    if (GOOGLE_CLIENT_ID.includes("YOUR_GOOGLE_CLIENT_ID")) { setError("Please replace the placeholder Google Client ID in index.tsx."); return; }
+    if (GOOGLE_CLIENT_ID.includes("YOUR_GOOGLE_CLIENT_ID")) { setError("請先設定 Google Client ID。"); return; }
     if (!catalogId || !clientName) { 
-        setError("Please fill all required fields: Catalog and Client Name."); 
+        setError("請填寫所有必填欄位：目錄和客戶名稱。"); 
         return; 
     }
     
@@ -514,13 +532,23 @@ export const MainApp = () => {
         if (errorMessage.toLowerCase().includes('unsupported get request') || errorMessage.toLowerCase().includes('does not exist') || errorMessage.toLowerCase().includes('tried accessing nonexisting field')) {
             setError(
               <>
-                The Catalog ID (<strong>{catalogId}</strong>) is either incorrect or you do not have permission to access it.
+                目錄 ID（<strong>{catalogId}</strong>）不正確或您沒有存取權限。
                 <br />
-                <a href="https://business.facebook.com/settings/product-catalogs/" target="_blank" rel="noopener noreferrer">Please verify the Catalog ID in your Business Manager.</a>
+                <a href="https://business.facebook.com/settings/product-catalogs/" target="_blank" rel="noopener noreferrer">請在 Business Manager 中驗證目錄 ID。</a>
+              </>
+            );
+        } else if (errorMessage.toLowerCase().includes('session has expired') || errorMessage.toLowerCase().includes('invalid oauth') || errorMessage.toLowerCase().includes('error validating access token')) {
+            setError(
+              <>
+                Access Token 已失效或過期。
+                <br />
+                原因：{errorMessage}
+                <br />
+                <a href="#/admin">請前往管理面板更新 Token。</a>
               </>
             );
         } else {
-             setError(`Failed to fetch catalog data. Error: ${errorMessage}`);
+             setError(`讀取目錄資料失敗。錯誤：${errorMessage}`);
         }
     } finally {
       setIsLoading(false);
@@ -791,7 +819,29 @@ export const MainApp = () => {
 
           
           {/* ===== Token Expiration Warning ===== */}
-          {selectedCompanyId && tokenExpirationChecked && (() => {
+          {selectedCompanyId && tokenIsInvalid && tokenErrorReason && (
+            <div className="token-expiration-banner token-expired">
+              <div className="token-banner-content">
+                <strong>{t('tokenExpired')}</strong>
+                <p style={{ marginTop: '4px' }}>{tokenErrorReason}</p>
+              </div>
+              <button onClick={() => { window.location.hash = '#/admin'; }} className="token-update-btn">
+                {t('tokenUpdateNow')}
+              </button>
+            </div>
+          )}
+          {selectedCompanyId && !tokenIsInvalid && tokenErrorReason && !tokenExpiresAt && (
+            <div className="token-expiration-banner token-warning">
+              <div className="token-banner-content">
+                <strong>⚠️ Token 狀態異常</strong>
+                <p style={{ marginTop: '4px' }}>{tokenErrorReason}</p>
+              </div>
+              <button onClick={() => { window.location.hash = '#/admin'; }} className="token-update-btn">
+                {t('tokenUpdateNow')}
+              </button>
+            </div>
+          )}
+          {selectedCompanyId && !tokenIsInvalid && tokenExpirationChecked && (() => {
             const expiryInfo = isTokenExpiringSoon(tokenExpiresAt, 7);
             if (expiryInfo.expired) {
               return (
@@ -799,6 +849,7 @@ export const MainApp = () => {
                   <div className="token-banner-content">
                     <strong>{t('tokenExpired')}</strong>
                     <p>{t('tokenExpiredMessage')}</p>
+                    {tokenErrorReason && <p style={{ marginTop: '4px', fontSize: '13px' }}>原因：{tokenErrorReason}</p>}
                   </div>
                   <button onClick={() => { window.location.hash = '#/admin'; }} className="token-update-btn">
                     {t('tokenUpdateNow')}

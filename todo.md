@@ -566,3 +566,11 @@
 - [x] 移除所有 Meta 相關字樣（標題、描述、連結等）
 - [x] 更新 i18n 翻譯中的 Meta 相關文字
 - [x] 測試並驗證（8 test files, 80 tests passed）
+
+## Phase 68: 顯示 Token 失效原因（以中文為主）
+- [x] 分析目前 Token 失效的處理邏輯
+- [x] 後端 validateToken 加入 Facebook 錯誤碼對應中文原因（190/463 過期、190/467 密碼變更、190/460 登出、權限不足等）
+- [x] 後端 refreshTokenExpiration 加入 is_valid 檢測和中文錯誤原因
+- [x] 前端 Token Banner 顯示具體失效原因（tokenIsInvalid + tokenErrorReason）
+- [x] 前端 API 錯誤訊息全面中文化（目錄不正確、Token 失效、未設定等）
+- [x] 測試並驗證（9 test files, 96 tests passed）
