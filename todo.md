@@ -606,3 +606,8 @@
 - [x] 整個管理面板（Video Log + 公司管理）都需要 Google 登入
 - [x] 登入後顯示 Email + Google 已驗證標籤
 - [x] 測試並驗證（10 test files, 111 tests passed）
+
+## Phase 71: 修復成員邀請狀態問題（pending → active）
+- [x] 手動修復犀牛盾公司 william03480348@gmail.com 成員狀態為 active
+- [x] 修改邀請成員邏輯：新邀請的成員直接設為 active（不再用 pending）
+- [x] 測試並驗證（10 test files, 111 tests passed）

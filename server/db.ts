@@ -177,6 +177,7 @@ export async function addCompanyMember(data: InsertCompanyMember): Promise<Compa
   const result = await db.insert(companyMembers).values({
     ...data,
     email: data.email.toLowerCase(),
+    status: data.status || "active",
   });
   const insertId = result[0].insertId;
   const rows = await db.select().from(companyMembers).where(eq(companyMembers.id, insertId)).limit(1);
