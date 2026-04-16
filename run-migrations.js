@@ -117,6 +117,7 @@ async function runMigrations() {
     user: decodeURIComponent(parsed.username),
     password: decodeURIComponent(parsed.password),
     database: parsed.pathname.slice(1),
+    ssl: {},
   };
 
   if (socketMatch) {
