@@ -120,6 +120,14 @@ export async function updateCompany(id: number, data: Partial<InsertCompany>): P
   await db.update(companies).set(data).where(eq(companies.id, id));
 }
 
+export async function deleteCompany(id: number): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  // Delete all members first, then the company
+  await db.delete(companyMembers).where(eq(companyMembers.companyId, id));
+  await db.delete(companies).where(eq(companies.id, id));
+}
+
 export async function getCompaniesByUserId(userId: number): Promise<(Company & { memberRole: string })[]> {
   const db = await getDb();
   if (!db) return [];

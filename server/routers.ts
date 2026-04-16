@@ -21,6 +21,7 @@ import {
   createCompany,
   getCompanyById,
   updateCompany,
+  deleteCompany,
   getCompaniesByEmail,
   addCompanyMember,
   getCompanyMembers,
@@ -238,6 +239,23 @@ export const appRouter = router({
         }
         
         return { accessToken: company.facebookAccessToken };
+      }),
+
+    // Delete a company (only owner can delete)
+    delete: publicProcedure
+      .input(z.object({
+        id: z.number(),
+        email: z.string().email(),
+      }))
+      .mutation(async ({ input }) => {
+        // Verify the requester is an owner of this company
+        const members = await getCompanyMembers(input.id);
+        const requester = members.find(m => m.email === input.email.toLowerCase());
+        if (!requester || requester.memberRole !== "owner") {
+          throw new Error("只有公司擁有者才能刪除公司。");
+        }
+        await deleteCompany(input.id);
+        return { success: true };
       }),
   }),
 

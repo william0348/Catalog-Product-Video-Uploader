@@ -334,6 +334,30 @@ const CompanyManager = ({ t }: { t: (key: string) => string }) => {
         }
     };
 
+    // Delete company (owner only)
+    const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+    const [isDeleting, setIsDeleting] = useState(false);
+
+    const handleDeleteCompany = async () => {
+        if (!selectedCompanyId || !userEmail) return;
+        setIsDeleting(true);
+        try {
+            await trpcMutate('company.delete', { id: selectedCompanyId, email: userEmail.toLowerCase() });
+            setSelectedCompanyId(null);
+            setCompanyDetail(null);
+            setShowDeleteConfirm(false);
+            await loadCompanies();
+        } catch (e: any) {
+            setStatusMsg(`Error: ${e.message}`);
+            setShowDeleteConfirm(false);
+        } finally {
+            setIsDeleting(false);
+        }
+    };
+
+    // Check if current user is owner of selected company
+    const isOwner = companyMembers.some(m => m.email === userEmail.toLowerCase() && m.memberRole === 'owner');
+
     // ===== RENDER =====
 
     // Step 1: Require Google login (no manual email input)
@@ -705,6 +729,61 @@ const CompanyManager = ({ t }: { t: (key: string) => string }) => {
                     )}
                 </div>
             </div>
+
+            {/* Delete Company Section (owner only) */}
+            {isOwner && (
+                <div className="settings-section" style={{ borderTop: '2px solid #fee2e2', marginTop: '24px' }}>
+                    <h3 style={{ color: '#dc2626' }}>{t('deleteCompany') || '刪除公司'}</h3>
+                    <p className="info-text" style={{ color: '#991b1b' }}>
+                        {t('deleteCompanyWarning') || '刪除後將移除所有成員與公司設定，此操作無法復原。'}
+                    </p>
+                    {!showDeleteConfirm ? (
+                        <button
+                            onClick={() => setShowDeleteConfirm(true)}
+                            style={{
+                                padding: '8px 20px',
+                                background: '#fee2e2',
+                                color: '#dc2626',
+                                border: '1px solid #fca5a5',
+                                borderRadius: '8px',
+                                cursor: 'pointer',
+                                fontWeight: 600,
+                            }}
+                        >
+                            {t('deleteCompanyBtn') || '刪除此公司'}
+                        </button>
+                    ) : (
+                        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                            <span style={{ color: '#991b1b', fontWeight: 600 }}>
+                                {t('deleteCompanyConfirm') || `確定要刪除「${companyDetail?.name}」？`}
+                            </span>
+                            <button
+                                onClick={handleDeleteCompany}
+                                disabled={isDeleting}
+                                style={{
+                                    padding: '8px 20px',
+                                    background: '#dc2626',
+                                    color: '#fff',
+                                    border: 'none',
+                                    borderRadius: '8px',
+                                    cursor: 'pointer',
+                                    fontWeight: 600,
+                                }}
+                            >
+                                {isDeleting ? '...' : (t('confirmDelete') || '確認刪除')}
+                            </button>
+                            <button
+                                onClick={() => setShowDeleteConfirm(false)}
+                                disabled={isDeleting}
+                                className="validate-token-button"
+                                style={{ padding: '8px 16px' }}
+                            >
+                                {t('cancel') || '取消'}
+                            </button>
+                        </div>
+                    )}
+                </div>
+            )}
         </div>
     );
 };
