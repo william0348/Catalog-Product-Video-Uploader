@@ -730,58 +730,42 @@ const CompanyManager = ({ t }: { t: (key: string) => string }) => {
                 </div>
             </div>
 
-            {/* Delete Company Section (owner only) */}
+            {/* Delete Company (owner only) */}
             {isOwner && (
-                <div className="settings-section" style={{ borderTop: '2px solid #fee2e2', marginTop: '24px' }}>
-                    <h3 style={{ color: '#dc2626' }}>{t('deleteCompany') || '刪除公司'}</h3>
-                    <p className="info-text" style={{ color: '#991b1b' }}>
-                        {t('deleteCompanyWarning') || '刪除後將移除所有成員與公司設定，此操作無法復原。'}
-                    </p>
-                    {!showDeleteConfirm ? (
-                        <button
-                            onClick={() => setShowDeleteConfirm(true)}
-                            style={{
-                                padding: '8px 20px',
-                                background: '#fee2e2',
-                                color: '#dc2626',
-                                border: '1px solid #fca5a5',
-                                borderRadius: '8px',
-                                cursor: 'pointer',
-                                fontWeight: 600,
-                            }}
-                        >
-                            {t('deleteCompanyBtn') || '刪除此公司'}
-                        </button>
-                    ) : (
-                        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                            <span style={{ color: '#991b1b', fontWeight: 600 }}>
-                                {t('deleteCompanyConfirm') || `確定要刪除「${companyDetail?.name}」？`}
-                            </span>
+                <div className="settings-section">
+                    <button
+                        onClick={() => setShowDeleteConfirm(true)}
+                        className="remove-catalog-button"
+                        style={{ width: '100%', padding: '10px', fontSize: '15px' }}
+                    >
+                        {t('deleteCompanyBtn') || '刪除此公司'}
+                    </button>
+                </div>
+            )}
+
+            {/* Delete Confirmation Modal */}
+            {showDeleteConfirm && (
+                <div className="image-modal-backdrop" onClick={() => { if (!isDeleting) setShowDeleteConfirm(false); }}>
+                    <div className="delete-confirm-modal" onClick={e => e.stopPropagation()}>
+                        <h3>{t('deleteCompanyConfirm') || `刪除「${companyDetail?.name}」？`}</h3>
+                        <p>{t('deleteCompanyWarning') || '刪除後將移除所有成員與公司設定，此操作無法復原。'}</p>
+                        <div className="delete-confirm-actions">
                             <button
-                                onClick={handleDeleteCompany}
-                                disabled={isDeleting}
-                                style={{
-                                    padding: '8px 20px',
-                                    background: '#dc2626',
-                                    color: '#fff',
-                                    border: 'none',
-                                    borderRadius: '8px',
-                                    cursor: 'pointer',
-                                    fontWeight: 600,
-                                }}
-                            >
-                                {isDeleting ? '...' : (t('confirmDelete') || '確認刪除')}
-                            </button>
-                            <button
+                                className="cancel-delete-btn"
                                 onClick={() => setShowDeleteConfirm(false)}
                                 disabled={isDeleting}
-                                className="validate-token-button"
-                                style={{ padding: '8px 16px' }}
                             >
                                 {t('cancel') || '取消'}
                             </button>
+                            <button
+                                className="confirm-delete-btn"
+                                onClick={handleDeleteCompany}
+                                disabled={isDeleting}
+                            >
+                                {isDeleting ? '...' : (t('confirmDelete') || '刪除')}
+                            </button>
                         </div>
-                    )}
+                    </div>
                 </div>
             )}
         </div>
