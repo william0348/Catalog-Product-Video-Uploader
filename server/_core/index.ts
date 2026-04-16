@@ -123,7 +123,9 @@ async function startServer() {
   // In development, use Vite dev server with HMR
   // In production, serve pre-built static files
   if (process.env.NODE_ENV === "development") {
-    const { setupVite } = await import("./vite");
+    // Use computed path to prevent esbuild from bundling vite.ts (dev-only)
+    const vitePath = "./vi" + "te";
+    const { setupVite } = await import(vitePath);
     await setupVite(app, server);
   } else {
     // Inline serveStatic to avoid importing vite.ts (which depends on vite devDep)
