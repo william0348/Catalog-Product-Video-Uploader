@@ -294,7 +294,7 @@ export const appRouter = router({
           companyId: input.companyId,
           email: input.email.toLowerCase(),
           memberRole: "member",
-          status: "pending",
+          status: "active",
           userId: null,
         });
         return member;
