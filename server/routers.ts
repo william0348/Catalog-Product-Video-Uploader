@@ -308,9 +308,7 @@ export const appRouter = router({
         userId: z.number().optional(),
       }))
       .mutation(async ({ input }) => {
-        if (input.userId) {
-          await activateMemberByEmail(input.email, input.userId);
-        }
+        await activateMemberByEmail(input.email, input.userId ?? null);
         return { success: true };
       }),
   }),

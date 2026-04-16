@@ -210,12 +210,16 @@ export async function isCompanyMember(companyId: number, email: string): Promise
   return rows.length > 0;
 }
 
-export async function activateMemberByEmail(email: string, userId: number): Promise<void> {
+export async function activateMemberByEmail(email: string, userId: number | null): Promise<void> {
   const db = await getDb();
   if (!db) return;
   // When a user logs in, activate all pending memberships matching their email
+  const updateData: Record<string, unknown> = { status: "active" };
+  if (userId !== null) {
+    updateData.userId = userId;
+  }
   await db.update(companyMembers)
-    .set({ status: "active", userId })
+    .set(updateData)
     .where(and(
       eq(companyMembers.email, email.toLowerCase()),
       eq(companyMembers.status, "pending")

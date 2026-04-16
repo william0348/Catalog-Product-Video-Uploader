@@ -101,11 +101,13 @@ const CompanyManager = ({ t }: { t: (key: string) => string }) => {
     // Status messages
     const [statusMsg, setStatusMsg] = useState<string | null>(null);
 
-    // Load companies by email
+    // Load companies by email (activate pending memberships first)
     const loadCompanies = useCallback(async () => {
         if (!userEmail) return;
         setIsLoadingCompanies(true);
         try {
+            // Activate pending memberships before loading companies
+            await trpcMutate('members.activate', { email: userEmail.toLowerCase() }).catch(console.error);
             const result = await trpcQuery('company.getByEmail', { email: userEmail.toLowerCase() });
             setCompanies(Array.isArray(result) ? result : []);
         } catch (e: any) {

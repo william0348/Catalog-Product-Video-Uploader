@@ -211,19 +211,23 @@ export const MainApp = () => {
   useEffect(() => {
     if (!userEmail) return;
     setIsLoadingCompanies(true);
-    // Activate any pending memberships
-    activateMemberships(userEmail).catch(console.error);
-    // Load companies
-    getCompaniesByEmail(userEmail).then(companies => {
-      setUserCompanies(companies);
-      // Auto-select if only one company, or restore saved selection
-      const savedId = getSelectedCompany();
-      if (savedId && companies.some(c => c.id === savedId)) {
-        handleSelectCompany(savedId);
-      } else if (companies.length === 1) {
-        handleSelectCompany(companies[0].id);
-      }
-    }).catch(console.error).finally(() => setIsLoadingCompanies(false));
+    // Sync email to localStorage for AdminPanel
+    localStorage.setItem('cpv_user_email', userEmail.toLowerCase());
+    // Activate pending memberships FIRST, then load companies
+    activateMemberships(userEmail)
+      .catch(console.error)
+      .then(() => getCompaniesByEmail(userEmail))
+      .then(companies => {
+        if (!companies) return;
+        setUserCompanies(companies);
+        // Auto-select if only one company, or restore saved selection
+        const savedId = getSelectedCompany();
+        if (savedId && companies.some(c => c.id === savedId)) {
+          handleSelectCompany(savedId);
+        } else if (companies.length === 1) {
+          handleSelectCompany(companies[0].id);
+        }
+      }).catch(console.error).finally(() => setIsLoadingCompanies(false));
   }, [userEmail]);
 
   // Handle company selection
