@@ -817,6 +817,11 @@ const VideoLog = ({ t, companies }: { t: (key: string) => string; companies: Com
     const [isDeleting, setIsDeleting] = useState(false);
     const [deleteError, setDeleteError] = useState<string | null>(null);
 
+    // Batch selection
+    const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+    const [showBatchDeleteConfirm, setShowBatchDeleteConfirm] = useState(false);
+    const [batchDeleteProgress, setBatchDeleteProgress] = useState<{ done: number; total: number } | null>(null);
+
     // Available catalogs from settings
     const [catalogs, setCatalogs] = useState<CatalogConfig[]>([]);
 
@@ -919,6 +924,66 @@ const VideoLog = ({ t, companies }: { t: (key: string) => string; companies: Com
             setDeleteError(e.message || 'Failed to delete video');
         } finally {
             setIsDeleting(false);
+        }
+    };
+
+    // Batch selection helpers
+    const toggleSelect = (id: number) => {
+        setSelectedIds(prev => {
+            const next = new Set(prev);
+            if (next.has(id)) next.delete(id); else next.add(id);
+            return next;
+        });
+    };
+
+    const toggleSelectAll = (pageRecords: UploadRecord[]) => {
+        const pageIds = pageRecords.map(r => r.id);
+        const allSelected = pageIds.every(id => selectedIds.has(id));
+        setSelectedIds(prev => {
+            const next = new Set(prev);
+            if (allSelected) {
+                pageIds.forEach(id => next.delete(id));
+            } else {
+                pageIds.forEach(id => next.add(id));
+            }
+            return next;
+        });
+    };
+
+    const handleBatchDelete = async () => {
+        const ids = Array.from(selectedIds);
+        setBatchDeleteProgress({ done: 0, total: ids.length });
+        let warnings: string[] = [];
+        for (let i = 0; i < ids.length; i++) {
+            try {
+                const record = records.find(r => r.id === ids[i]);
+                const companyId = record?.companyId || undefined;
+                const response = await fetch('/api/trpc/uploads.deleteVideoFromCatalog', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'include',
+                    body: JSON.stringify({ json: { id: ids[i], companyId } }),
+                });
+                const data = await response.json();
+                if (data?.error) {
+                    const errorMsg = data.error?.json?.message || data.error?.message || 'Unknown error';
+                    warnings.push(`${record?.retailerId || ids[i]}: ${errorMsg}`);
+                }
+                const result = data?.result?.data?.json;
+                if (result?.warning) {
+                    warnings.push(`${record?.retailerId || ids[i]}: ${result.warning}`);
+                }
+            } catch (e: any) {
+                warnings.push(`ID ${ids[i]}: ${e.message}`);
+            }
+            setBatchDeleteProgress({ done: i + 1, total: ids.length });
+        }
+        setRecords(prev => prev.filter(r => !selectedIds.has(r.id)));
+        setSelectedIds(new Set());
+        setShowBatchDeleteConfirm(false);
+        setBatchDeleteProgress(null);
+        if (warnings.length > 0) {
+            setDeleteError(`Batch delete completed with warnings:\n${warnings.join('\n')}`);
         }
     };
 
@@ -1238,6 +1303,50 @@ const VideoLog = ({ t, companies }: { t: (key: string) => string; companies: Com
                 </div>
             )}
 
+            {/* Batch Delete Confirmation Modal */}
+            {showBatchDeleteConfirm && (
+                <div className="image-modal-backdrop" onClick={() => { if (!batchDeleteProgress) setShowBatchDeleteConfirm(false); }}>
+                    <div className="delete-confirm-modal" onClick={e => e.stopPropagation()}>
+                        <h3>Batch Delete</h3>
+                        <p>Delete {selectedIds.size} selected records? This will remove videos from Facebook Catalog and delete records from the database.</p>
+                        {batchDeleteProgress && (
+                            <div style={{ margin: '12px 0' }}>
+                                <div style={{ background: '#e5e7eb', borderRadius: 4, height: 8, overflow: 'hidden' }}>
+                                    <div style={{ background: '#ef4444', height: '100%', width: `${(batchDeleteProgress.done / batchDeleteProgress.total) * 100}%`, transition: 'width 0.3s' }} />
+                                </div>
+                                <p style={{ fontSize: 13, marginTop: 6, color: '#6b7280' }}>{batchDeleteProgress.done} / {batchDeleteProgress.total}</p>
+                            </div>
+                        )}
+                        {deleteError && (
+                            <p className="error-text" style={{ marginTop: '8px', whiteSpace: 'pre-wrap', fontSize: 12 }}>{deleteError}</p>
+                        )}
+                        <div className="delete-confirm-actions">
+                            <button
+                                className="cancel-delete-btn"
+                                onClick={() => { setShowBatchDeleteConfirm(false); setDeleteError(null); }}
+                                disabled={!!batchDeleteProgress}
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                className="confirm-delete-btn"
+                                onClick={handleBatchDelete}
+                                disabled={!!batchDeleteProgress}
+                            >
+                                {batchDeleteProgress ? (
+                                    <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                        <div className="loader-small"></div>
+                                        Deleting...
+                                    </span>
+                                ) : (
+                                    `Delete ${selectedIds.size} Records`
+                                )}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {/* Stats Bar */}
             <div className="log-stats-bar">
                 <div className="log-stat">
@@ -1334,6 +1443,15 @@ const VideoLog = ({ t, companies }: { t: (key: string) => string; companies: Com
                         >
                             ↑ {t('excelImportBtn') || 'Import Excel'}
                         </button>
+                        {selectedIds.size > 0 && (
+                            <button
+                                className="log-action-btn"
+                                onClick={() => { setDeleteError(null); setShowBatchDeleteConfirm(true); }}
+                                style={{ backgroundColor: '#ef4444', color: '#fff' }}
+                            >
+                                🗑 Delete ({selectedIds.size})
+                            </button>
+                        )}
                         <input
                             ref={importFileRef}
                             type="file"
@@ -1466,6 +1584,13 @@ const VideoLog = ({ t, companies }: { t: (key: string) => string; companies: Com
                             <table className="log-table">
                                 <thead>
                                     <tr>
+                                        <th className="col-checkbox" style={{ width: 40, textAlign: 'center' }}>
+                                            <input
+                                                type="checkbox"
+                                                checked={paginatedRecords.length > 0 && paginatedRecords.every(r => selectedIds.has(r.id))}
+                                                onChange={() => toggleSelectAll(paginatedRecords)}
+                                            />
+                                        </th>
                                         <th className="col-image">{t('image')}</th>
                                         <th className="col-product">{t('name')}</th>
                                         <th className="col-retailer">{t('retailerId')}</th>
@@ -1481,7 +1606,14 @@ const VideoLog = ({ t, companies }: { t: (key: string) => string; companies: Com
                                 </thead>
                                 <tbody>
                                     {paginatedRecords.map((record) => (
-                                        <tr key={record.id}>
+                                        <tr key={record.id} style={selectedIds.has(record.id) ? { backgroundColor: 'rgba(59,130,246,0.08)' } : undefined}>
+                                            <td className="col-checkbox" style={{ textAlign: 'center' }}>
+                                                <input
+                                                    type="checkbox"
+                                                    checked={selectedIds.has(record.id)}
+                                                    onChange={() => toggleSelect(record.id)}
+                                                />
+                                            </td>
                                             <td className="col-image">
                                                 {record.productImageUrl ? (
                                                     <img
