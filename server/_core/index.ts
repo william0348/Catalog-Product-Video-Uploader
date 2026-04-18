@@ -63,11 +63,26 @@ async function startServer() {
         return str;
       };
 
+      // Merge records by retailerId: for each video field, use the latest non-empty value
+      const merged = new Map<string, { video4x5: string; video9x16: string }>();
+      for (const record of records) {
+        const existing = merged.get(record.retailerId);
+        if (!existing) {
+          merged.set(record.retailerId, {
+            video4x5: record.video4x5Download || '',
+            video9x16: record.video9x16Download || '',
+          });
+        } else {
+          if (record.video4x5Download) existing.video4x5 = record.video4x5Download;
+          if (record.video9x16Download) existing.video9x16 = record.video9x16Download;
+        }
+      }
+
       const header = 'id,video[0].url,video[1].url';
-      const rows = records.map(record => {
-        const id = escapeCsvField(record.retailerId);
-        const v4x5 = escapeCsvField(record.video4x5Download || '');
-        const v9x16 = escapeCsvField(record.video9x16Download || '');
+      const rows = Array.from(merged.entries()).map(([retailerId, videos]) => {
+        const id = escapeCsvField(retailerId);
+        const v4x5 = escapeCsvField(videos.video4x5);
+        const v9x16 = escapeCsvField(videos.video9x16);
         return `${id},${v4x5},${v9x16}`;
       }).join('\n');
 
