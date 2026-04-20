@@ -10,61 +10,61 @@ import { LanguageContext } from '@/contexts/LanguageContext';
  * 1. First try: iframe embed (Google Drive preview)
  * 2. On error: show a clickable play button that opens the video in a new tab
  */
-const VideoPreview = ({ video, width, height, title }: { 
-  video: UploadedVideo; 
-  width: number; 
-  height: number; 
+const VideoPreview = ({ video, width, height, title }: {
+  video: UploadedVideo;
+  width: number;
+  height: number;
   title: string;
 }) => {
-  const [iframeError, setIframeError] = useState(false);
   const downloadUrl = video.downloadLink || video.embedLink;
   const embedUrl = video.embedLink;
 
-  const handleIframeError = useCallback(() => {
-    setIframeError(true);
-  }, []);
-
-  if (iframeError || !embedUrl) {
-    // Fallback: show a clickable play button that opens the video
-    return (
-      <a 
-        href={downloadUrl} 
-        target="_blank" 
-        rel="noopener noreferrer" 
-        className="video-preview-fallback"
-        title={`Open ${title}`}
-        style={{
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          justifyContent: 'center',
-          width: `${width}px`,
-          height: `${height}px`,
-          backgroundColor: '#f0f0f0',
-          borderRadius: '6px',
-          textDecoration: 'none',
-          color: '#4285f4',
-          border: '1px solid #ddd',
-          cursor: 'pointer',
-        }}
-      >
-        <span style={{ fontSize: '28px' }}>▶</span>
-        <span style={{ fontSize: '10px', marginTop: '4px', color: '#666' }}>Click to play</span>
-      </a>
-    );
-  }
+  const driveViewUrl = embedUrl
+    ? embedUrl.replace('/preview', '/view')
+    : downloadUrl;
 
   return (
-    <iframe 
-      src={embedUrl} 
-      width={width} 
-      height={height} 
-      allow="encrypted-media" 
-      allowFullScreen 
-      title={title}
-      onError={handleIframeError}
-      style={{ border: 'none', borderRadius: '6px' }}
-    />
+    <a
+      href={driveViewUrl}
+      target="_blank"
+      rel="noopener noreferrer"
+      title={`Open ${title} in Google Drive`}
+      style={{
+        display: 'block',
+        position: 'relative',
+        width: `${width}px`,
+        height: `${height}px`,
+        borderRadius: '6px',
+        overflow: 'hidden',
+        cursor: 'pointer',
+        border: '1px solid #ddd',
+        backgroundColor: '#f0f0f0',
+      }}
+    >
+      <iframe
+        src={embedUrl || downloadUrl}
+        width={width}
+        height={height}
+        allow="encrypted-media"
+        allowFullScreen
+        title={title}
+        style={{ border: 'none', borderRadius: '6px', pointerEvents: 'none' }}
+      />
+      <div style={{
+        position: 'absolute',
+        bottom: 0,
+        left: 0,
+        right: 0,
+        padding: '4px',
+        background: 'rgba(0,0,0,0.5)',
+        color: '#fff',
+        fontSize: '10px',
+        textAlign: 'center',
+        textDecoration: 'none',
+      }}>
+        Click to open in Drive
+      </div>
+    </a>
   );
 };
 
