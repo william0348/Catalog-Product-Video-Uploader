@@ -5,6 +5,13 @@ import { publicProcedure, router } from "./_core/trpc";
 import { z } from "zod";
 import { generateSlideshow, fetchCatalogProducts, updateCatalogProductVideo, fetchProductSets, fetchProductSetProducts, fetchAllProductSetProducts, type SlideshowOptions } from "./slideshow";
 import { storagePut } from "./storage";
+import { validateProxyUrl } from "./_core/urlValidator";
+
+const ALLOWED_UPLOAD_MIME_TYPES: Record<string, string[]> = {
+  image: ["image/jpeg", "image/png", "image/webp", "image/gif"],
+  video: ["video/mp4", "video/webm", "video/quicktime"],
+  audio: ["audio/mpeg", "audio/wav", "audio/ogg", "audio/mp4"],
+};
 import {
   createUploadRecord,
   createUploadRecordsBatch,
@@ -79,28 +86,22 @@ export const appRouter = router({
         return company;
       }),
 
-    // Get company by ID (requires email verification)
     get: publicProcedure
-      .input(z.object({ id: z.number(), email: z.string().email().optional() }))
+      .input(z.object({ id: z.number(), email: z.string().email() }))
       .query(async ({ input }) => {
         const company = await getCompanyById(input.id);
         if (!company) throw new Error("Company not found");
-        
-        // If email is provided, verify membership
-        if (input.email) {
-          const isMember = await isCompanyMember(input.id, input.email);
-          if (!isMember) {
-            throw new Error("您的 Email 不是此公司的成員，無法存取公司設定。");
-          }
+
+        const isMember = await isCompanyMember(input.id, input.email.toLowerCase());
+        if (!isMember) {
+          throw new Error("您的 Email 不是此公司的成員，無法存取公司設定。");
         }
-        
-        // Mask the access token for security
+
         return {
           ...company,
           facebookAccessToken: company.facebookAccessToken
             ? `${company.facebookAccessToken.slice(0, 10)}...${company.facebookAccessToken.slice(-6)}`
             : null,
-          facebookAccessTokenFull: company.facebookAccessToken,
         };
       }),
 
@@ -118,11 +119,10 @@ export const appRouter = router({
         }));
       }),
 
-    // Update company settings (token, access key, etc.) - requires email verification
     update: publicProcedure
       .input(z.object({
         id: z.number(),
-        email: z.string().email().optional(),
+        email: z.string().email(),
         name: z.string().optional(),
         facebookAccessToken: z.string().optional(),
         accessKey: z.string().optional(),
@@ -130,13 +130,10 @@ export const appRouter = router({
       }))
       .mutation(async ({ input }) => {
         const { id, email, ...data } = input;
-        
-        // Verify membership if email is provided
-        if (email) {
-          const isMember = await isCompanyMember(id, email);
-          if (!isMember) {
-            throw new Error("您的 Email 不是此公司的成員，無法修改公司設定。");
-          }
+
+        const isMember = await isCompanyMember(id, email.toLowerCase());
+        if (!isMember) {
+          throw new Error("您的 Email 不是此公司的成員，無法修改公司設定。");
         }
         const updateData: Record<string, unknown> = {};
         if (data.name !== undefined) updateData.name = data.name;
@@ -223,21 +220,17 @@ export const appRouter = router({
         }
       }),
 
-    // Get full access token (for use in API calls) - requires email verification
     getAccessToken: publicProcedure
-      .input(z.object({ id: z.number(), email: z.string().email().optional() }))
+      .input(z.object({ id: z.number(), email: z.string().email() }))
       .query(async ({ input }) => {
         const company = await getCompanyById(input.id);
         if (!company) throw new Error("Company not found");
-        
-        // Verify membership if email is provided
-        if (input.email) {
-          const isMember = await isCompanyMember(input.id, input.email);
-          if (!isMember) {
-            throw new Error("您的 Email 不是此公司的成員，無法取得 Access Token。");
-          }
+
+        const isMember = await isCompanyMember(input.id, input.email.toLowerCase());
+        if (!isMember) {
+          throw new Error("您的 Email 不是此公司的成員，無法取得 Access Token。");
         }
-        
+
         return { accessToken: company.facebookAccessToken };
       }),
 
@@ -261,34 +254,26 @@ export const appRouter = router({
 
   // ==================== Company Members ====================
   members: router({
-    // List members of a company (requires requester email verification)
     list: publicProcedure
-      .input(z.object({ companyId: z.number(), requesterEmail: z.string().email().optional() }))
+      .input(z.object({ companyId: z.number(), requesterEmail: z.string().email() }))
       .query(async ({ input }) => {
-        // Verify requester is a member
-        if (input.requesterEmail) {
-          const isMember = await isCompanyMember(input.companyId, input.requesterEmail);
-          if (!isMember) {
-            throw new Error("您的 Email 不是此公司的成員，無法查看成員列表。");
-          }
+        const isMember = await isCompanyMember(input.companyId, input.requesterEmail.toLowerCase());
+        if (!isMember) {
+          throw new Error("您的 Email 不是此公司的成員，無法查看成員列表。");
         }
         return getCompanyMembers(input.companyId);
       }),
 
-    // Invite a member by email (requires requester email verification)
     invite: publicProcedure
       .input(z.object({
         companyId: z.number(),
         email: z.string().email(),
-        requesterEmail: z.string().email().optional(),
+        requesterEmail: z.string().email(),
       }))
       .mutation(async ({ input }) => {
-        // Verify requester is a member
-        if (input.requesterEmail) {
-          const isMember = await isCompanyMember(input.companyId, input.requesterEmail);
-          if (!isMember) {
-            throw new Error("您的 Email 不是此公司的成員，無法邀請新成員。");
-          }
+        const isMember = await isCompanyMember(input.companyId, input.requesterEmail.toLowerCase());
+        if (!isMember) {
+          throw new Error("您的 Email 不是此公司的成員，無法邀請新成員。");
         }
         const member = await addCompanyMember({
           companyId: input.companyId,
@@ -300,20 +285,16 @@ export const appRouter = router({
         return member;
       }),
 
-    // Remove a member from company (requires requester email verification)
     remove: publicProcedure
       .input(z.object({
         companyId: z.number(),
         email: z.string().email(),
-        requesterEmail: z.string().email().optional(),
+        requesterEmail: z.string().email(),
       }))
       .mutation(async ({ input }) => {
-        // Verify requester is a member
-        if (input.requesterEmail) {
-          const isMember = await isCompanyMember(input.companyId, input.requesterEmail);
-          if (!isMember) {
-            throw new Error("您的 Email 不是此公司的成員，無法移除成員。");
-          }
+        const isMember = await isCompanyMember(input.companyId, input.requesterEmail.toLowerCase());
+        if (!isMember) {
+          throw new Error("您的 Email 不是此公司的成員，無法移除成員。");
         }
         await removeCompanyMember(input.companyId, input.email);
         return { success: true };
@@ -688,15 +669,16 @@ export const appRouter = router({
         };
       }),
 
-    // Proxy-download an image from URL and upload to S3 (solves Facebook CDN URL expiration)
     proxyUploadImage: publicProcedure
       .input(z.object({
         imageUrl: z.string().url(),
       }))
       .mutation(async ({ input }) => {
+        const urlCheck = validateProxyUrl(input.imageUrl);
+        if (!urlCheck.valid) throw new Error(urlCheck.error);
+
         console.log(`[Slideshow API] Proxy uploading image: ${input.imageUrl.substring(0, 80)}...`);
-        
-        // Download the image with retries
+
         let buffer: Buffer | null = null;
         let lastError: Error | null = null;
         for (let attempt = 0; attempt < 3; attempt++) {
@@ -750,14 +732,19 @@ export const appRouter = router({
       }))
       .mutation(async ({ input }) => {
         console.log(`[Slideshow API] Batch proxy uploading ${input.imageUrls.length} images...`);
-        
+
         const results: { originalUrl: string; s3Url: string | null; error: string | null }[] = [];
-        
+
         for (const imageUrl of input.imageUrls) {
           try {
+            const urlCheck = validateProxyUrl(imageUrl);
+            if (!urlCheck.valid) {
+              results.push({ originalUrl: imageUrl, s3Url: null, error: urlCheck.error || 'Invalid URL' });
+              continue;
+            }
             let buffer: Buffer | null = null;
             let lastError: Error | null = null;
-            
+
             for (let attempt = 0; attempt < 3; attempt++) {
               try {
                 const response = await fetch(imageUrl, {
@@ -805,7 +792,6 @@ export const appRouter = router({
         return { results };
       }),
 
-    // Upload a custom image (base64) to S3 for use in slideshow
     uploadImage: publicProcedure
       .input(z.object({
         base64Data: z.string(),
@@ -813,20 +799,22 @@ export const appRouter = router({
         mimeType: z.string().default("image/png"),
       }))
       .mutation(async ({ input }) => {
+        if (!ALLOWED_UPLOAD_MIME_TYPES.image.includes(input.mimeType)) {
+          throw new Error(`不允許的檔案類型: ${input.mimeType}。僅允許: ${ALLOWED_UPLOAD_MIME_TYPES.image.join(', ')}`);
+        }
         const buffer = Buffer.from(input.base64Data, "base64");
         if (buffer.length > 10 * 1024 * 1024) {
           throw new Error("Image file too large. Maximum 10MB.");
         }
+        const allowedExts = ["jpg", "jpeg", "png", "webp", "gif"];
+        const ext = (input.fileName.split(".").pop() || "png").toLowerCase();
+        const safeExt = allowedExts.includes(ext) ? ext : "png";
         const suffix = Math.random().toString(36).substring(2, 8);
-        const ext = input.fileName.split(".").pop() || "png";
-        const fileKey = `slideshow-uploads/${Date.now()}-${suffix}.${ext}`;
+        const fileKey = `slideshow-uploads/${Date.now()}-${suffix}.${safeExt}`;
         const { url } = await storagePut(fileKey, buffer, input.mimeType);
         return { success: true, url };
       }),
 
-
-
-    // Upload a browser-generated slideshow video to S3
     uploadGeneratedVideo: publicProcedure
       .input(z.object({
         base64Data: z.string(),
@@ -834,17 +822,22 @@ export const appRouter = router({
         mimeType: z.string().default("video/mp4"),
       }))
       .mutation(async ({ input }) => {
+        if (!ALLOWED_UPLOAD_MIME_TYPES.video.includes(input.mimeType)) {
+          throw new Error(`不允許的檔案類型: ${input.mimeType}。僅允許: ${ALLOWED_UPLOAD_MIME_TYPES.video.join(', ')}`);
+        }
         const buffer = Buffer.from(input.base64Data, "base64");
         if (buffer.length > 100 * 1024 * 1024) {
           throw new Error("Video file too large. Maximum 100MB.");
         }
+        const allowedExts = ["mp4", "webm", "mov"];
+        const ext = (input.fileName.split(".").pop() || "mp4").toLowerCase();
+        const safeExt = allowedExts.includes(ext) ? ext : "mp4";
         const suffix = Math.random().toString(36).substring(2, 8);
-        const ext = input.fileName.split(".").pop() || "mp4";
-        const fileKey = `slideshow-videos/${Date.now()}-${suffix}.${ext}`;
+        const fileKey = `slideshow-videos/${Date.now()}-${suffix}.${safeExt}`;
         const { url } = await storagePut(fileKey, buffer, input.mimeType);
         return { success: true, url };
       }),
-    // Upload a custom audio file (base64) to S3 for background music
+
     uploadAudio: publicProcedure
       .input(z.object({
         base64Data: z.string(),
@@ -852,13 +845,18 @@ export const appRouter = router({
         mimeType: z.string().default("audio/mpeg"),
       }))
       .mutation(async ({ input }) => {
+        if (!ALLOWED_UPLOAD_MIME_TYPES.audio.includes(input.mimeType)) {
+          throw new Error(`不允許的檔案類型: ${input.mimeType}。僅允許: ${ALLOWED_UPLOAD_MIME_TYPES.audio.join(', ')}`);
+        }
         const buffer = Buffer.from(input.base64Data, "base64");
         if (buffer.length > 16 * 1024 * 1024) {
           throw new Error("Audio file too large. Maximum 16MB.");
         }
+        const allowedExts = ["mp3", "wav", "ogg", "m4a"];
+        const ext = (input.fileName.split(".").pop() || "mp3").toLowerCase();
+        const safeExt = allowedExts.includes(ext) ? ext : "mp3";
         const suffix = Math.random().toString(36).substring(2, 8);
-        const ext = input.fileName.split(".").pop() || "mp3";
-        const fileKey = `slideshow-audio/${Date.now()}-${suffix}.${ext}`;
+        const fileKey = `slideshow-audio/${Date.now()}-${suffix}.${safeExt}`;
         const { url } = await storagePut(fileKey, buffer, input.mimeType);
         return { success: true, url };
       }),

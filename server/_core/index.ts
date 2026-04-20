@@ -50,8 +50,18 @@ async function startServer() {
   // Ref: https://www.facebook.com/business/help/412185511855836
   app.get("/api/export/csv/:catalogId", async (req, res) => {
     try {
-      const { getUploadRecordsByCatalog } = await import("../db");
+      const { getUploadRecordsByCatalog, getCompanyByCatalogId } = await import("../db");
       const catalogId = req.params.catalogId;
+      const accessKey = req.query.key as string | undefined;
+      if (!accessKey) {
+        res.status(401).json({ error: "Missing access key. Add ?key=YOUR_ACCESS_KEY to the URL." });
+        return;
+      }
+      const company = await getCompanyByCatalogId(catalogId);
+      if (!company || company.accessKey !== accessKey) {
+        res.status(403).json({ error: "Invalid access key." });
+        return;
+      }
       const records = await getUploadRecordsByCatalog(catalogId);
 
       const escapeCsvField = (str: string) => {
@@ -96,7 +106,6 @@ async function startServer() {
       // - text/csv inline (no Content-Disposition: attachment which can confuse crawlers)
       // - Cache-Control to ensure Meta always gets fresh data
       res.setHeader("Content-Type", "text/csv; charset=utf-8");
-      res.setHeader("Access-Control-Allow-Origin", "*");
       res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
       res.setHeader("Pragma", "no-cache");
       res.setHeader("Expires", "0");
@@ -112,13 +121,21 @@ async function startServer() {
     res.redirect(`/api/export/csv/${req.params.catalogId}`);
   });
 
-  // JSON export endpoint (alternative)
   app.get("/api/export/json/:catalogId", async (req, res) => {
     try {
-      const { getUploadRecordsByCatalog } = await import("../db");
+      const { getUploadRecordsByCatalog, getCompanyByCatalogId } = await import("../db");
       const catalogId = req.params.catalogId;
+      const accessKey = req.query.key as string | undefined;
+      if (!accessKey) {
+        res.status(401).json({ error: "Missing access key. Add ?key=YOUR_ACCESS_KEY to the URL." });
+        return;
+      }
+      const company = await getCompanyByCatalogId(catalogId);
+      if (!company || company.accessKey !== accessKey) {
+        res.status(403).json({ error: "Invalid access key." });
+        return;
+      }
       const records = await getUploadRecordsByCatalog(catalogId);
-      res.setHeader("Access-Control-Allow-Origin", "*");
       res.json(records);
     } catch (error) {
       console.error("[JSON Export] Error:", error);

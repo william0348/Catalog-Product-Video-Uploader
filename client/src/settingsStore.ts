@@ -158,32 +158,19 @@ export const getCompaniesByEmail = async (email: string): Promise<CompanyInfo[]>
   }
 };
 
-/**
- * Get full company details including access token
- * @param email - If provided, server verifies this email is a company member
- */
-export const getCompanyDetails = async (companyId: number, email?: string): Promise<CompanyInfo | null> => {
+export const getCompanyDetails = async (companyId: number, email: string): Promise<CompanyInfo | null> => {
   try {
-    const params: any = { id: companyId };
-    if (email) params.email = email.toLowerCase();
-    return await trpcQuery('company.get', params);
+    return await trpcQuery('company.get', { id: companyId, email: email.toLowerCase() });
   } catch (e: any) {
     console.error('Failed to get company details:', e);
-    // Re-throw access denied errors so the caller can handle them
     if (e.message?.includes('不是此公司的成員')) throw e;
     return null;
   }
 };
 
-/**
- * Get company's full access token (not masked)
- * @param email - If provided, server verifies this email is a company member
- */
-export const getCompanyAccessToken = async (companyId: number, email?: string): Promise<string | null> => {
+export const getCompanyAccessToken = async (companyId: number, email: string): Promise<string | null> => {
   try {
-    const params: any = { id: companyId };
-    if (email) params.email = email.toLowerCase();
-    const result = await trpcQuery('company.getAccessToken', params);
+    const result = await trpcQuery('company.getAccessToken', { id: companyId, email: email.toLowerCase() });
     return result?.accessToken ?? null;
   } catch (e: any) {
     console.error('Failed to get company access token:', e);
@@ -196,12 +183,11 @@ export const getCompanyAccessToken = async (companyId: number, email?: string): 
  * Load settings from a specific company
  * @param email - If provided, server verifies this email is a company member
  */
-export const loadCompanySettings = async (companyId: number, email?: string): Promise<AppSettings> => {
+export const loadCompanySettings = async (companyId: number, email: string): Promise<AppSettings> => {
   try {
     const company = await getCompanyDetails(companyId, email);
     if (!company) return { ...DEFAULT_SETTINGS };
 
-    // Get the full (unmasked) access token
     const fullToken = await getCompanyAccessToken(companyId, email);
 
     const catalogs: CatalogConfig[] = company.catalogs ? JSON.parse(company.catalogs) : [];

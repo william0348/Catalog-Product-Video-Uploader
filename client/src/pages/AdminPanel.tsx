@@ -138,7 +138,7 @@ const CompanyManager = ({ t }: { t: (key: string) => string }) => {
             try {
                 const detail = await trpcQuery('company.get', { id: selectedCompanyId, email: userEmail.toLowerCase() });
                 setCompanyDetail(detail);
-                setEditToken(detail.facebookAccessTokenFull || '');
+                setEditToken('');
                 setEditAccessKey(detail.accessKey || '');
                 setTokenStatus({ type: null, message: '' });
 
@@ -285,7 +285,10 @@ const CompanyManager = ({ t }: { t: (key: string) => string }) => {
         }
     };
 
-    const getCsvUrl = (catalogId: string) => `${window.location.origin}/api/export/csv/${catalogId}`;
+    const getCsvUrl = (catalogId: string) => {
+        const key = editAccessKey || companyDetail?.accessKey || '';
+        return `${window.location.origin}/api/export/csv/${catalogId}${key ? `?key=${encodeURIComponent(key)}` : ''}`;
+    };
 
     const handleCopyCsvUrl = (catalogId: string) => {
         navigator.clipboard.writeText(getCsvUrl(catalogId)).then(() => {

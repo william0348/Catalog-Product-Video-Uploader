@@ -352,7 +352,7 @@ export const SlideshowGenerator = () => {
   useEffect(() => {
     if (!selectedCompanyId) return;
     (async () => {
-      const settings = await loadCompanySettings(selectedCompanyId);
+      const settings = await loadCompanySettings(selectedCompanyId, userEmail || '');
       setFbAccessToken(settings.facebookAccessToken);
       setConfiguredCatalogs(settings.catalogs);
       if (settings.catalogs.length > 0 && !selectedCatalogId) {

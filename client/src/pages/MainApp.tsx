@@ -108,7 +108,7 @@ export const MainApp = () => {
     const savedCompanyId = getSelectedCompany();
     if (savedCompanyId) {
       // Load company settings
-      loadCompanySettings(savedCompanyId, userEmail || undefined).then(companySettings => {
+      loadCompanySettings(savedCompanyId, userEmail || '').then(companySettings => {
         setConfiguredCatalogs(companySettings.catalogs);
         setFbAccessToken(companySettings.facebookAccessToken);
         setTokenInput(companySettings.facebookAccessToken);
@@ -185,7 +185,7 @@ export const MainApp = () => {
   useEffect(() => {
     if (view === 'input') {
       if (selectedCompanyId) {
-        loadCompanySettings(selectedCompanyId, userEmail || undefined).then(companySettings => {
+        loadCompanySettings(selectedCompanyId, userEmail || '').then(companySettings => {
           setConfiguredCatalogs(companySettings.catalogs);
           setFbAccessToken(companySettings.facebookAccessToken);
           setTokenInput(companySettings.facebookAccessToken);
@@ -235,7 +235,7 @@ export const MainApp = () => {
     setSelectedCompanyId(companyId);
     saveSelectedCompany(companyId);
     try {
-      const companySettings = await loadCompanySettings(companyId, userEmail || undefined);
+      const companySettings = await loadCompanySettings(companyId, userEmail || '');
       setConfiguredCatalogs(companySettings.catalogs);
       setFbAccessToken(companySettings.facebookAccessToken);
       setTokenInput(companySettings.facebookAccessToken);

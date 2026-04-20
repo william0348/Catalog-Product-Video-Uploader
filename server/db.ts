@@ -119,6 +119,21 @@ export async function getCompanyById(id: number): Promise<Company | undefined> {
   return rows[0];
 }
 
+export async function getCompanyByCatalogId(catalogId: string): Promise<Company | undefined> {
+  const db = await getDb();
+  if (!db) return undefined;
+  const rows = await db.select().from(companies);
+  for (const company of rows) {
+    try {
+      const catalogs = JSON.parse(company.catalogs || '[]');
+      if (Array.isArray(catalogs) && catalogs.some((c: any) => c.id === catalogId)) {
+        return company;
+      }
+    } catch { /* ignore parse errors */ }
+  }
+  return undefined;
+}
+
 export async function updateCompany(id: number, data: Partial<InsertCompany>): Promise<void> {
   const db = await getDb();
   if (!db) return;
