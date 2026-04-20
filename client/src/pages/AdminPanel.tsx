@@ -845,29 +845,28 @@ const VideoLog = ({ t, companies }: { t: (key: string) => string; companies: Com
     const [importSuccess, setImportSuccess] = useState<string | null>(null);
     const importFileRef = React.useRef<HTMLInputElement>(null);
 
-    // Load records from database
+    // Load records from database (only for user's companies)
     const fetchRecords = useCallback(async () => {
         setIsLoading(true);
         setError(null);
         try {
-            const response = await fetch('/api/trpc/uploads.listAll', {
-                method: 'GET',
-                credentials: 'include',
-            });
-            const data = await response.json();
-            const result = data?.result?.data?.json;
-            if (Array.isArray(result)) {
-                setRecords(result);
-            } else {
+            if (companies.length === 0) {
                 setRecords([]);
+                return;
             }
+            const allRecords = await Promise.all(
+                companies.map(c => trpcQuery('uploads.listByCompany', { companyId: c.id }))
+            );
+            const merged = allRecords.flat();
+            merged.sort((a: UploadRecord, b: UploadRecord) => new Date(b.uploadTimestamp).getTime() - new Date(a.uploadTimestamp).getTime());
+            setRecords(merged);
         } catch (e: any) {
             setError(`Failed to load records: ${e.message}`);
             setRecords([]);
         } finally {
             setIsLoading(false);
         }
-    }, []);
+    }, [companies]);
 
     // Load catalogs from companies (merge all company catalogs)
     useEffect(() => {
@@ -1762,11 +1761,33 @@ const UploaderPersonnel = ({ t, companies }: { t: (key: string, replacements?: {
         setIsLoading(true);
         setError(null);
         try {
-            let result;
+            let result: UploaderStatsData[];
             if (companyFilter !== 'all') {
                 result = await trpcQuery('uploads.uploadersByCompany', { companyId: parseInt(companyFilter, 10) });
+            } else if (companies.length > 0) {
+                const allResults = await Promise.all(
+                    companies.map(c => trpcQuery('uploads.uploadersByCompany', { companyId: c.id }))
+                );
+                const uploaderMap = new Map<string, UploaderStatsData>();
+                for (const uploaderList of allResults) {
+                    if (!Array.isArray(uploaderList)) continue;
+                    for (const u of uploaderList) {
+                        const existing = uploaderMap.get(u.uploadedBy);
+                        if (existing) {
+                            existing.totalUploads += u.totalUploads;
+                            if (new Date(u.lastUploadDate) > new Date(existing.lastUploadDate)) {
+                                existing.lastUploadDate = u.lastUploadDate;
+                            }
+                            const catSet = new Set([...existing.catalogs, ...u.catalogs]);
+                            existing.catalogs = Array.from(catSet);
+                        } else {
+                            uploaderMap.set(u.uploadedBy, { ...u, catalogs: [...u.catalogs] });
+                        }
+                    }
+                }
+                result = Array.from(uploaderMap.values());
             } else {
-                result = await trpcQuery('uploads.allUploaders');
+                result = [];
             }
             setUploaders(Array.isArray(result) ? result : []);
         } catch (e: any) {
@@ -1775,7 +1796,7 @@ const UploaderPersonnel = ({ t, companies }: { t: (key: string, replacements?: {
         } finally {
             setIsLoading(false);
         }
-    }, [companyFilter]);
+    }, [companyFilter, companies]);
 
     useEffect(() => {
         fetchUploaders();
