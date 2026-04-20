@@ -30,40 +30,46 @@ const VideoPreview = ({ video, width, height, title }: {
       rel="noopener noreferrer"
       title={`Open ${title} in Google Drive`}
       style={{
-        display: 'block',
-        position: 'relative',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: '8px',
         width: `${width}px`,
         height: `${height}px`,
-        borderRadius: '6px',
-        overflow: 'hidden',
+        borderRadius: '8px',
         cursor: 'pointer',
-        border: '1px solid #ddd',
-        backgroundColor: '#f0f0f0',
+        border: '1px solid #e0e0e0',
+        background: 'linear-gradient(135deg, #e8f0fe 0%, #f1f3f4 100%)',
+        textDecoration: 'none',
+        transition: 'all 0.2s',
+      }}
+      onMouseEnter={(e) => {
+        e.currentTarget.style.borderColor = '#4285f4';
+        e.currentTarget.style.boxShadow = '0 2px 8px rgba(66,133,244,0.2)';
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.borderColor = '#e0e0e0';
+        e.currentTarget.style.boxShadow = 'none';
       }}
     >
-      <iframe
-        src={embedUrl || downloadUrl}
-        width={width}
-        height={height}
-        allow="encrypted-media"
-        allowFullScreen
-        title={title}
-        style={{ border: 'none', borderRadius: '6px', pointerEvents: 'none' }}
-      />
       <div style={{
-        position: 'absolute',
-        bottom: 0,
-        left: 0,
-        right: 0,
-        padding: '4px',
-        background: 'rgba(0,0,0,0.5)',
-        color: '#fff',
-        fontSize: '10px',
-        textAlign: 'center',
-        textDecoration: 'none',
+        width: '40px',
+        height: '40px',
+        borderRadius: '50%',
+        backgroundColor: '#4285f4',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
       }}>
-        Click to open in Drive
+        <span style={{ color: '#fff', fontSize: '18px', marginLeft: '2px' }}>▶</span>
       </div>
+      <span style={{ fontSize: '11px', color: '#5f6368', textAlign: 'center', lineHeight: '1.3' }}>
+        已上傳
+      </span>
+      <span style={{ fontSize: '10px', color: '#4285f4' }}>
+        點擊預覽
+      </span>
     </a>
   );
 };
