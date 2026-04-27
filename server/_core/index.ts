@@ -50,18 +50,8 @@ async function startServer() {
   // Ref: https://www.facebook.com/business/help/412185511855836
   app.get("/api/export/csv/:catalogId", async (req, res) => {
     try {
-      const { getUploadRecordsByCatalog, getCompanyByCatalogId } = await import("../db");
+      const { getUploadRecordsByCatalog } = await import("../db");
       const catalogId = req.params.catalogId;
-      const accessKey = req.query.key as string | undefined;
-      if (!accessKey) {
-        res.status(401).json({ error: "Missing access key. Add ?key=YOUR_ACCESS_KEY to the URL." });
-        return;
-      }
-      const company = await getCompanyByCatalogId(catalogId);
-      if (!company || company.accessKey !== accessKey) {
-        res.status(403).json({ error: "Invalid access key." });
-        return;
-      }
       const records = await getUploadRecordsByCatalog(catalogId);
 
       const escapeCsvField = (str: string) => {
@@ -123,18 +113,8 @@ async function startServer() {
 
   app.get("/api/export/json/:catalogId", async (req, res) => {
     try {
-      const { getUploadRecordsByCatalog, getCompanyByCatalogId } = await import("../db");
+      const { getUploadRecordsByCatalog } = await import("../db");
       const catalogId = req.params.catalogId;
-      const accessKey = req.query.key as string | undefined;
-      if (!accessKey) {
-        res.status(401).json({ error: "Missing access key. Add ?key=YOUR_ACCESS_KEY to the URL." });
-        return;
-      }
-      const company = await getCompanyByCatalogId(catalogId);
-      if (!company || company.accessKey !== accessKey) {
-        res.status(403).json({ error: "Invalid access key." });
-        return;
-      }
       const records = await getUploadRecordsByCatalog(catalogId);
       res.json(records);
     } catch (error) {
