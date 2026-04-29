@@ -685,8 +685,8 @@ export const MainApp = () => {
       if (!stockFilterPassed) return false;
 
       if (lowercasedSearchTerm) {
-        const nameMatch = product.name.toLowerCase().includes(lowercasedSearchTerm);
-        const retailerIdMatch = product.retailer_id.toString().toLowerCase().includes(lowercasedSearchTerm);
+        const nameMatch = (product.name || '').toLowerCase().includes(lowercasedSearchTerm);
+        const retailerIdMatch = (product.retailer_id || '').toString().toLowerCase().includes(lowercasedSearchTerm);
         if (!nameMatch && !retailerIdMatch) return false;
       }
       
@@ -1054,6 +1054,7 @@ export const MainApp = () => {
                 <input
                     id="productSearch"
                     type="text"
+                    autoComplete="off"
                     placeholder={t('searchPlaceholder')}
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}

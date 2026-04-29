@@ -178,8 +178,8 @@ export const ProductTable = ({
                 </td>
                 <td data-label={t('name')}>{product.name}</td>
                 <td data-label={t('availability')}>
-                  <span className={`availability ${product.availability.replace(/\s+/g, "-")}`}>
-                    {product.availability}
+                  <span className={`availability ${(product.availability || '').replace(/\s+/g, "-")}`}>
+                    {product.availability || 'N/A'}
                   </span>
                 </td>
                 <td data-label={t('retailerId')}>{product.retailer_id}</td>
