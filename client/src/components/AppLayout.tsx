@@ -17,6 +17,7 @@ interface AppLayoutProps {
 
 const NAV_ITEMS = [
   { id: "main", icon: "📹", labelKey: "sidebarVideoUploader" },
+  { id: "reels", icon: "🎬", labelKey: "sidebarReels" },
   // { id: "slideshow", icon: "🎬", labelKey: "sidebarSlideshow" }, // Hidden from menu, code preserved
   { id: "admin", icon: "⚙️", labelKey: "sidebarAdmin" },
   { id: "terms", icon: "📄", labelKey: "sidebarTerms" },

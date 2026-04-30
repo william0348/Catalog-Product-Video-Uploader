@@ -2,6 +2,7 @@ import { COOKIE_NAME } from "@shared/const";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, router } from "./_core/trpc";
+import { reelsRouter } from "./reels/router";
 import { z } from "zod";
 import { generateSlideshow, fetchCatalogProducts, updateCatalogProductVideo, fetchProductSets, fetchProductSetProducts, fetchAllProductSetProducts, type SlideshowOptions } from "./slideshow";
 import { storagePut } from "./storage";
@@ -964,6 +965,8 @@ export const appRouter = router({
       return getAllSettings();
     }),
   }),
+
+  reels: reelsRouter,
 });
 
 export type AppRouter = typeof appRouter;

@@ -6,6 +6,7 @@ import { AdminPanel } from "@/pages/AdminPanel";
 import { TermsOfServicePage } from "@/pages/TermsOfServicePage";
 import { MainApp } from "@/pages/MainApp";
 import { SlideshowGenerator } from "@/pages/SlideshowGenerator";
+import { ReelsGenerator } from "@/pages/ReelsGenerator";
 
 // Map hash routes to page IDs
 const hashToPage = (hash: string): string => {
@@ -13,6 +14,7 @@ const hashToPage = (hash: string): string => {
         case '#/admin': return 'admin';
         case '#/terms': return 'terms';
         case '#/slideshow': return 'slideshow';
+        case '#/reels': return 'reels';
         case '#/':
         default: return 'main';
     }
@@ -23,6 +25,7 @@ const pageToHash = (page: string): string => {
         case 'admin': return '#/admin';
         case 'terms': return '#/terms';
         case 'slideshow': return '#/slideshow';
+        case 'reels': return '#/reels';
         case 'main':
         default: return '#/';
     }
@@ -69,6 +72,8 @@ const PageRouter = () => {
                 return <TermsOfServicePage />;
             case 'slideshow':
                 return <SlideshowGenerator key="slideshow" />;
+            case 'reels':
+                return <ReelsGenerator />;
             case 'main':
             default:
                 return <MainApp />;
