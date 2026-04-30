@@ -36,6 +36,7 @@ const PageRouter = () => {
     const { userEmail, isGoogleReady, handleGoogleLogin, handleLogout } = useGoogleAuth();
     const [currentPage, setCurrentPage] = useState(() => hashToPage(window.location.hash || '#/'));
     const [aiVideoEnabled, setAiVideoEnabled] = useState(false);
+    const [hasPrismKey, setHasPrismKey] = useState(false);
     
     useEffect(() => {
         const handleHashChange = () => {
@@ -77,7 +78,7 @@ const PageRouter = () => {
                 return <ReelsGenerator />;
             case 'main':
             default:
-                return <MainApp aiVideoEnabled={aiVideoEnabled} />;
+                return <MainApp aiVideoEnabled={aiVideoEnabled} onPrismKeyStatus={setHasPrismKey} />;
         }
     };
     
@@ -90,7 +91,7 @@ const PageRouter = () => {
             onLogout={handleLogout}
             isGoogleReady={isGoogleReady}
             aiVideoEnabled={aiVideoEnabled}
-            onToggleAiVideo={setAiVideoEnabled}
+            onToggleAiVideo={hasPrismKey ? setAiVideoEnabled : undefined}
             fullWidthContent={currentPage === 'main'}
         >
             {renderPage()}

@@ -16,6 +16,8 @@ export interface AppSettings {
   facebookAccessToken: string;
   catalogs: CatalogConfig[];
   accessKey: string;
+  geminiApiKey: string;
+  prismApiKey: string;
 }
 
 export interface CompanyInfo {
@@ -37,6 +39,8 @@ const DEFAULT_SETTINGS: AppSettings = {
   facebookAccessToken: '',
   catalogs: [],
   accessKey: '',
+  geminiApiKey: '',
+  prismApiKey: '',
 };
 
 // ===== Local cache for fast reads =====
@@ -195,6 +199,8 @@ export const loadCompanySettings = async (companyId: number, email: string): Pro
       facebookAccessToken: fullToken || '',
       catalogs,
       accessKey: company.accessKey || '',
+      geminiApiKey: (company as any).geminiApiKey || '',
+      prismApiKey: (company as any).prismApiKey || '',
     };
 
     // Cache locally for fast reads

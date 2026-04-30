@@ -20,7 +20,7 @@ import { apiFetch, fetchAllPages } from '@/api';
 declare const gapi: any;
 declare const window: any;
 
-export const MainApp = ({ aiVideoEnabled = false }: { aiVideoEnabled?: boolean }) => {
+export const MainApp = ({ aiVideoEnabled = false, onPrismKeyStatus }: { aiVideoEnabled?: boolean; onPrismKeyStatus?: (has: boolean) => void }) => {
   // Google Auth from shared context
   const { googleAccessToken, userEmail, isGapiClientReady, isGoogleReady, handleGoogleLogin, handleLogout } = useGoogleAuth();
 
@@ -113,6 +113,7 @@ export const MainApp = ({ aiVideoEnabled = false }: { aiVideoEnabled?: boolean }
         setFbAccessToken(companySettings.facebookAccessToken);
         setTokenInput(companySettings.facebookAccessToken);
         setCompanyAccessKeyValue(companySettings.accessKey);
+        onPrismKeyStatus?.(!!companySettings.prismApiKey);
       }).catch(e => {
         console.error(e);
         if (e.message?.includes('不是此公司的成員')) {
@@ -190,6 +191,7 @@ export const MainApp = ({ aiVideoEnabled = false }: { aiVideoEnabled?: boolean }
           setFbAccessToken(companySettings.facebookAccessToken);
           setTokenInput(companySettings.facebookAccessToken);
           setCompanyAccessKeyValue(companySettings.accessKey);
+          onPrismKeyStatus?.(!!companySettings.prismApiKey);
         }).catch(e => {
           console.error(e);
           if (e.message?.includes('不是此公司的成員')) {
