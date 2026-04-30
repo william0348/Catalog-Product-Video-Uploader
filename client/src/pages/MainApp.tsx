@@ -21,7 +21,7 @@ declare const gapi: any;
 declare const window: any;
 
 export const MainApp = ({ aiVideoEnabled = false, onPrismKeyStatus }: { aiVideoEnabled?: boolean; onPrismKeyStatus?: (has: boolean) => void }) => {
-  const [aiSettings, setAiSettings] = useState<{ prismApiKey: string; model: string; aspectRatio: string; duration: number; promptTemplate: string } | null>(null);
+  const [aiSettings, setAiSettings] = useState<{ prismApiKey: string; geminiApiKey?: string; model: string; aspectRatio: string; duration: number; promptTemplate: string } | null>(null);
   // Google Auth from shared context
   const { googleAccessToken, userEmail, isGapiClientReady, isGoogleReady, handleGoogleLogin, handleLogout } = useGoogleAuth();
 
@@ -114,12 +114,12 @@ export const MainApp = ({ aiVideoEnabled = false, onPrismKeyStatus }: { aiVideoE
         setFbAccessToken(companySettings.facebookAccessToken);
         setTokenInput(companySettings.facebookAccessToken);
         setCompanyAccessKeyValue(companySettings.accessKey);
-        onPrismKeyStatus?.(!!companySettings.prismApiKey);
-        if (companySettings.prismApiKey) {
+        onPrismKeyStatus?.(!!companySettings.prismApiKey || !!companySettings.geminiApiKey);
+        if (companySettings.prismApiKey || companySettings.geminiApiKey) {
           try {
             const parsed = companySettings.aiVideoSettings ? JSON.parse(companySettings.aiVideoSettings) : {};
-            setAiSettings({ prismApiKey: companySettings.prismApiKey, model: parsed.model || 'kling-v2', aspectRatio: parsed.aspectRatio || '9:16', duration: parsed.duration || 5, promptTemplate: parsed.promptTemplate || 'Product showcase, slow camera movement, professional lighting' });
-          } catch { setAiSettings({ prismApiKey: companySettings.prismApiKey, model: 'kling-v2', aspectRatio: '9:16', duration: 5, promptTemplate: 'Product showcase, slow camera movement, professional lighting' }); }
+            setAiSettings({ prismApiKey: companySettings.prismApiKey, geminiApiKey: companySettings.geminiApiKey, model: parsed.model || 'veo-3.1', aspectRatio: parsed.aspectRatio || '9:16', duration: parsed.duration || 8, promptTemplate: parsed.promptTemplate || 'Product showcase, slow camera movement, professional lighting' });
+          } catch { setAiSettings({ prismApiKey: companySettings.prismApiKey, geminiApiKey: companySettings.geminiApiKey, model: 'veo-3.1', aspectRatio: '9:16', duration: 8, promptTemplate: 'Product showcase, slow camera movement, professional lighting' }); }
         }
       }).catch(e => {
         console.error(e);

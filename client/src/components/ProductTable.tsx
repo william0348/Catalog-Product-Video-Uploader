@@ -86,32 +86,33 @@ const VideoPreview = ({ video, width, height, title }: {
 
 const AiGenerateButton = ({ product, aiSettings }: {
   product: Product;
-  aiSettings: { prismApiKey: string; model: string; aspectRatio: string; duration: number; promptTemplate: string };
+  aiSettings: { prismApiKey: string; model: string; aspectRatio: string; duration: number; promptTemplate: string; geminiApiKey?: string };
 }) => {
   const [status, setStatus] = useState<'idle' | 'generating' | 'polling' | 'done' | 'error'>('idle');
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
+  const geminiKey = aiSettings.geminiApiKey || aiSettings.prismApiKey;
+
   const handleGenerate = async () => {
-    if (!product.image_url) { setErrorMsg('此商品沒有圖片'); return; }
+    if (!geminiKey) { setErrorMsg('請先在管理面板設定 Gemini API Key'); return; }
     setStatus('generating');
     setErrorMsg(null);
     try {
       const result = await trpcMutate('prism.generate', {
-        prismApiKey: aiSettings.prismApiKey,
-        model: aiSettings.model,
+        geminiApiKey: geminiKey,
         prompt: `${aiSettings.promptTemplate}. Product: ${product.name}`,
-        imageUrl: product.image_url,
-        aspectRatio: aiSettings.aspectRatio,
+        imageUrl: product.image_url || undefined,
         duration: aiSettings.duration,
+        aspectRatio: aiSettings.aspectRatio,
       });
       setStatus('polling');
-      const genId = result.id;
+      const opName = result.operationName;
       const poll = async () => {
         for (let i = 0; i < 120; i++) {
           await new Promise(r => setTimeout(r, 5000));
           try {
-            const res = await fetch(`/api/trpc/prism.status?input=${encodeURIComponent(JSON.stringify({ json: { prismApiKey: aiSettings.prismApiKey, generationId: genId } }))}`, { credentials: 'include' });
+            const res = await fetch(`/api/trpc/prism.status?input=${encodeURIComponent(JSON.stringify({ json: { geminiApiKey: geminiKey, operationName: opName } }))}`, { credentials: 'include' });
             const data = await res.json();
             const gen = data?.result?.data?.json;
             if (gen?.status === 'completed' && gen?.videoUrl) {
@@ -310,8 +311,8 @@ export const ProductTable = ({
                         videoType="master"
                         onLoginRequest={onLoginRequest}
                     />
-                    {aiVideoEnabled && aiSettings?.prismApiKey && (
-                      <AiGenerateButton product={product} aiSettings={aiSettings} />
+                    {aiVideoEnabled && (aiSettings?.prismApiKey || aiSettings?.geminiApiKey) && (
+                      <AiGenerateButton product={product} aiSettings={aiSettings!} />
                     )}
                 </td>
                  <td data-label={t('otherVideo')}>

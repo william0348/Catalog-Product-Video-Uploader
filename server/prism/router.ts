@@ -1,7 +1,8 @@
 import { z } from "zod";
 import { router, publicProcedure } from "../_core/trpc";
-import { getAvailableModels, createGeneration, getGeneration } from "./prismService";
+import { getAvailableModels } from "./prismService";
 import { generateVideoPrompt } from "./promptGenerator";
+import { createVeoGeneration, getVeoStatus } from "./veoService";
 
 export const prismRouter = router({
   models: publicProcedure.query(() => {
@@ -25,26 +26,25 @@ export const prismRouter = router({
 
   generate: publicProcedure
     .input(z.object({
-      prismApiKey: z.string(),
-      model: z.string(),
+      geminiApiKey: z.string(),
       prompt: z.string(),
-      imageUrl: z.string(),
-      aspectRatio: z.string().default("1:1"),
-      duration: z.number().default(5),
+      imageUrl: z.string().optional(),
+      duration: z.number().default(8),
+      aspectRatio: z.string().default("9:16"),
     }))
     .mutation(async ({ input }) => {
-      return await createGeneration(
-        input.prismApiKey, input.model, input.prompt,
-        input.imageUrl, input.aspectRatio, input.duration
+      return await createVeoGeneration(
+        input.geminiApiKey, input.prompt, input.imageUrl,
+        input.duration, input.aspectRatio
       );
     }),
 
   status: publicProcedure
     .input(z.object({
-      prismApiKey: z.string(),
-      generationId: z.string(),
+      geminiApiKey: z.string(),
+      operationName: z.string(),
     }))
     .query(async ({ input }) => {
-      return await getGeneration(input.prismApiKey, input.generationId);
+      return await getVeoStatus(input.geminiApiKey, input.operationName);
     }),
 });
