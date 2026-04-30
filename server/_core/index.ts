@@ -45,6 +45,23 @@ async function startServer() {
   // Register Manus OAuth routes
   registerOAuthRoutes(app);
 
+  // Database backup endpoint (protected by secret key)
+  app.get("/api/backup", async (req, res) => {
+    const secret = process.env.BACKUP_SECRET;
+    if (!secret || req.query.key !== secret) {
+      res.status(403).json({ error: "Forbidden" });
+      return;
+    }
+    try {
+      const { runBackup } = await import("../backup");
+      const result = await runBackup();
+      res.json(result);
+    } catch (error: any) {
+      console.error("[Backup] Error:", error);
+      res.status(500).json({ error: error.message || "Backup failed" });
+    }
+  });
+
   // CSV export endpoint for Meta Catalog Supplementary Feed
   // Format: id, video[0].url, video[1].url (per Meta specification)
   // Ref: https://www.facebook.com/business/help/412185511855836
