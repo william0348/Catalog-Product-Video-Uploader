@@ -3337,6 +3337,57 @@ tbody tr.selected:hover td {
   white-space: nowrap;
 }
 
+/* Drive Storage Indicator */
+.drive-storage-indicator {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 0;
+}
+
+.drive-storage-bar-container {
+  width: 60px;
+  height: 6px;
+  background: var(--gray-3, #e5e5e5);
+  border-radius: 3px;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.drive-storage-bar-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.3s ease;
+}
+
+.drive-storage-green {
+  background: #34C759;
+}
+
+.drive-storage-yellow {
+  background: #FF9500;
+}
+
+.drive-storage-red {
+  background: #FF3B30;
+}
+
+.drive-storage-text {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  white-space: nowrap;
+}
+
+.drive-storage-text-red {
+  color: #FF3B30;
+  font-weight: 600;
+}
+
+.drive-storage-error {
+  color: var(--text-tertiary);
+  font-style: italic;
+}
+
 .switch-account-btn {
   background: none;
   border: 1px solid var(--gray-4);
@@ -3741,6 +3792,27 @@ tbody tr.selected:hover td {
 .sidebar-login-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+.sidebar-storage {
+  padding: 4px 8px;
+  display: flex;
+  justify-content: center;
+}
+
+.sidebar-storage .drive-storage-indicator {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 3px;
+  width: 100%;
+}
+
+.sidebar-storage .drive-storage-bar-container {
+  width: 100%;
+}
+
+.sidebar-storage .drive-storage-text {
+  text-align: center;
 }
 
 .sidebar-powered {

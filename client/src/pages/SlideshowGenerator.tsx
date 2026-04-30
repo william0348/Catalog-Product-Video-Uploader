@@ -962,7 +962,15 @@ export const SlideshowGenerator = () => {
         headers: { Authorization: `Bearer ${googleAccessToken}`, "Content-Type": "application/json; charset=UTF-8" },
         body: JSON.stringify(metadata),
       });
-      if (!initRes.ok) throw new Error(`Failed to initiate upload: ${initRes.statusText}`);
+      if (!initRes.ok) {
+        if (initRes.status === 403) {
+          const errData = await initRes.json().catch(() => ({}));
+          const reasons = errData?.error?.errors || [];
+          const isQuota = reasons.some((r: any) => r.reason === 'storageQuotaExceeded');
+          if (isQuota) throw new Error(t('driveStorageFull'));
+        }
+        throw new Error(`Failed to initiate upload: ${initRes.statusText}`);
+      }
       const location = initRes.headers.get("Location");
       if (!location) throw new Error("Could not get resumable upload URL.");
       const uploadRes = await fetch(location, { method: "PUT", headers: { "Content-Type": "video/mp4" }, body: videoBlob });

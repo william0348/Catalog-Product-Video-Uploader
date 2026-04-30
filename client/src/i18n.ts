@@ -82,6 +82,12 @@ export const translations = {
         fileTooLarge: "File size cannot exceed 100MB.",
         uploadNetworkError: "A network error occurred during the upload. Please check your connection and try again.",
         unknownUploadError: "An unknown error occurred during the upload process.",
+        driveStorageFull: "Upload failed: Your Google Drive storage is full. Please free up space or upgrade your storage plan.",
+        driveStorageFullHint: "Go to drive.google.com to delete unnecessary files or empty the trash to free up space.",
+        driveStorageUsed: "{used} / {total}",
+        driveStorageLoading: "Checking storage...",
+        driveStorageError: "Could not check storage",
+        driveStorageUnlimited: "Unlimited",
         // Toasts
         recordSavedSuccess: "Record saved to Database successfully!",
         // Intro Guide
@@ -447,6 +453,12 @@ export const translations = {
         fileTooLarge: "檔案大小不能超過 100MB。",
         uploadNetworkError: "上傳時發生網路錯誤，請檢查網路連線後重試。",
         unknownUploadError: "上傳過程中發生未知錯誤。",
+        driveStorageFull: "上傳失敗：您的 Google Drive 儲存空間已滿。請清理空間或升級儲存方案。",
+        driveStorageFullHint: "前往 drive.google.com 刪除不需要的檔案或清空垃圾桶以釋放空間。",
+        driveStorageUsed: "{used} / {total}",
+        driveStorageLoading: "正在檢查儲存空間...",
+        driveStorageError: "無法檢查儲存空間",
+        driveStorageUnlimited: "無限制",
         // Toasts
         recordSavedSuccess: "紀錄已成功儲存至資料庫！",
         // Intro Guide

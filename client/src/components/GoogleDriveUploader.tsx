@@ -7,13 +7,25 @@ import type { UploadedVideo, VideoType } from '@/types';
 
 declare const gapi: any;
 
-/**
- * Detects if an error is related to Google Drive permission/scope issues.
- * Returns true if the user likely didn't grant Drive access during login.
- */
+const isStorageQuotaError = (error: any, statusCode?: number): boolean => {
+    if (statusCode !== 403 && statusCode !== undefined) return false;
+    const msg = (error?.message || error?.result?.error?.message || String(error)).toLowerCase();
+    const reasons = error?.result?.error?.errors || error?.errors || [];
+    const hasQuotaReason = reasons.some?.((r: any) =>
+        r.reason === 'storageQuotaExceeded' || r.reason === 'quotaExceeded' || r.domain === 'usageLimits'
+    );
+    return hasQuotaReason ||
+        msg.includes('storage quota') ||
+        msg.includes('storagequotaexceeded') ||
+        msg.includes('the user\'s drive storage quota has been exceeded') ||
+        msg.includes('user storage quota exceeded') ||
+        msg.includes('not enough storage');
+};
+
 const isDrivePermissionError = (error: any, statusCode?: number): boolean => {
+    if (isStorageQuotaError(error, statusCode)) return false;
     if (statusCode === 403 || statusCode === 401) return true;
-    
+
     const msg = (error?.message || error?.result?.error?.message || String(error)).toLowerCase();
     return (
         msg.includes('insufficient permission') ||
@@ -52,6 +64,7 @@ export const GoogleDriveUploader = ({
     const [isDraggingOver, setIsDraggingOver] = useState(false);
     const [showUploader, setShowUploader] = useState(!isReupload);
     const [isPermissionError, setIsPermissionError] = useState(false);
+    const [isQuotaError, setIsQuotaError] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const { t } = useContext(LanguageContext);
     const { handleReauthorize: contextReauthorize } = useGoogleAuth();
@@ -66,6 +79,12 @@ export const GoogleDriveUploader = ({
     const handlePermissionError = () => {
         setIsPermissionError(true);
         setError(t('drivePermissionError'));
+        setUploading(false);
+    };
+
+    const handleQuotaError = () => {
+        setIsQuotaError(true);
+        setError(t('driveStorageFull'));
         setUploading(false);
     };
 
@@ -84,6 +103,7 @@ export const GoogleDriveUploader = ({
         setWarning(null);
         setError(null);
         setIsPermissionError(false);
+        setIsQuotaError(false);
         
         if (!file.type.startsWith('video/')) {
             setError(t('invalidFileType') || "Invalid file type. Please upload a video file.");
@@ -106,6 +126,10 @@ export const GoogleDriveUploader = ({
             try {
                 folderId = await getDriveFolderId();
             } catch (folderError: any) {
+                if (isStorageQuotaError(folderError)) {
+                    handleQuotaError();
+                    return;
+                }
                 if (isDrivePermissionError(folderError)) {
                     handlePermissionError();
                     return;
@@ -135,11 +159,15 @@ export const GoogleDriveUploader = ({
             });
 
             if (!res.ok) {
+                const errorData = await res.json().catch(() => ({}));
                 if (res.status === 403 || res.status === 401) {
+                    if (isStorageQuotaError(errorData?.error, res.status)) {
+                        handleQuotaError();
+                        return;
+                    }
                     handlePermissionError();
                     return;
                 }
-                const errorData = await res.json().catch(() => ({}));
                 throw new Error(errorData?.error?.message || `Failed to initiate upload session: ${res.statusText}`);
             }
             
@@ -168,6 +196,10 @@ export const GoogleDriveUploader = ({
                         const embedLink = `https://drive.google.com/file/d/${uploadedFile.id}/preview`;
                         handleSuccess({ downloadLink, embedLink });
                     } catch(permissionError: any) {
+                        if (isStorageQuotaError(permissionError)) {
+                            handleQuotaError();
+                            return;
+                        }
                         if (isDrivePermissionError(permissionError)) {
                             handlePermissionError();
                             return;
@@ -177,6 +209,13 @@ export const GoogleDriveUploader = ({
                         setUploading(false);
                     }
                 } else if (xhr.status === 403 || xhr.status === 401) {
+                    try {
+                        const errBody = JSON.parse(xhr.responseText);
+                        if (isStorageQuotaError(errBody?.error, xhr.status)) {
+                            handleQuotaError();
+                            return;
+                        }
+                    } catch {}
                     handlePermissionError();
                 } else {
                     setUploading(false);
@@ -198,6 +237,10 @@ export const GoogleDriveUploader = ({
             xhr.setRequestHeader('Content-Type', file.type);
             xhr.send(file);
         } catch (e: any) {
+            if (isStorageQuotaError(e)) {
+                handleQuotaError();
+                return;
+            }
             if (isDrivePermissionError(e)) {
                 handlePermissionError();
                 return;
@@ -317,8 +360,16 @@ export const GoogleDriveUploader = ({
                 </div>
             )}
             
-            {/* Regular error (non-permission) */}
-            {!isPermissionError && error && <p className="error-text-small">{error}</p>}
+            {/* Storage quota error */}
+            {isQuotaError && error && (
+                <div className="permission-error-container" style={{ background: '#FFF8E1', borderColor: '#FFE082' }}>
+                    <p className="error-text-small" style={{ marginBottom: '4px' }}>{error}</p>
+                    <p className="permission-hint-text">{t('driveStorageFullHint')}</p>
+                </div>
+            )}
+
+            {/* Regular error (non-permission, non-quota) */}
+            {!isPermissionError && !isQuotaError && error && <p className="error-text-small">{error}</p>}
         </div>
     );
 };

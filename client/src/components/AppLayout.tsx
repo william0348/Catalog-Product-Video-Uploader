@@ -1,6 +1,8 @@
 import React, { useContext, useState, useEffect } from "react";
 import { LanguageContext } from "@/contexts/LanguageContext";
+import { useGoogleAuth } from "@/contexts/GoogleAuthContext";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
+import { DriveStorageIndicator } from "@/components/DriveStorageIndicator";
 
 interface AppLayoutProps {
   children: React.ReactNode;
@@ -31,6 +33,7 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
   fullWidthContent = false,
 }) => {
   const { t } = useContext(LanguageContext);
+  const { googleAccessToken } = useGoogleAuth();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isDesktop, setIsDesktop] = useState(window.innerWidth >= 1024);
 
@@ -111,6 +114,11 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
               <span className="sidebar-nav-icon">G</span>
               <span>{isGoogleReady ? t("loginWithGoogle") : t("initializing")}</span>
             </button>
+          )}
+          {googleAccessToken && (
+            <div className="sidebar-storage">
+              <DriveStorageIndicator accessToken={googleAccessToken} />
+            </div>
           )}
           <div className="sidebar-powered">
             {t("poweredBy")}
