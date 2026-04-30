@@ -4,6 +4,16 @@ import { GoogleDriveUploader } from '@/components/GoogleDriveUploader';
 import type { Product, HoveredImage, ProductVideos, UploadedVideo, VideoType } from '@/types';
 import { LanguageContext } from '@/contexts/LanguageContext';
 
+const trpcMutate = async (path: string, input: any): Promise<any> => {
+  const response = await fetch(`/api/trpc/${path}`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
+    body: JSON.stringify({ json: input }),
+  });
+  const data = await response.json();
+  if (data?.error) throw new Error(data.error?.json?.message || data.error?.message || 'Request failed');
+  return data?.result?.data?.json;
+};
+
 /**
  * VideoPreview component - handles Google Drive video preview with fallback
  * Google Drive embed iframes can fail to load, so we provide:
@@ -74,6 +84,78 @@ const VideoPreview = ({ video, width, height, title }: {
   );
 };
 
+const AiGenerateButton = ({ product, aiSettings }: {
+  product: Product;
+  aiSettings: { prismApiKey: string; model: string; aspectRatio: string; duration: number; promptTemplate: string };
+}) => {
+  const [status, setStatus] = useState<'idle' | 'generating' | 'polling' | 'done' | 'error'>('idle');
+  const [videoUrl, setVideoUrl] = useState<string | null>(null);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  const handleGenerate = async () => {
+    if (!product.image_url) { setErrorMsg('此商品沒有圖片'); return; }
+    setStatus('generating');
+    setErrorMsg(null);
+    try {
+      const result = await trpcMutate('prism.generate', {
+        prismApiKey: aiSettings.prismApiKey,
+        model: aiSettings.model,
+        prompt: `${aiSettings.promptTemplate}. Product: ${product.name}`,
+        imageUrl: product.image_url,
+        aspectRatio: aiSettings.aspectRatio,
+        duration: aiSettings.duration,
+      });
+      setStatus('polling');
+      const genId = result.id;
+      const poll = async () => {
+        for (let i = 0; i < 120; i++) {
+          await new Promise(r => setTimeout(r, 5000));
+          try {
+            const res = await fetch(`/api/trpc/prism.status?input=${encodeURIComponent(JSON.stringify({ json: { prismApiKey: aiSettings.prismApiKey, generationId: genId } }))}`, { credentials: 'include' });
+            const data = await res.json();
+            const gen = data?.result?.data?.json;
+            if (gen?.status === 'completed' && gen?.videoUrl) {
+              setVideoUrl(gen.videoUrl);
+              setStatus('done');
+              return;
+            }
+            if (gen?.status === 'failed') {
+              setErrorMsg(gen?.error || '影片生成失敗');
+              setStatus('error');
+              return;
+            }
+          } catch {}
+        }
+        setErrorMsg('生成超時，請稍後再試');
+        setStatus('error');
+      };
+      poll();
+    } catch (e: any) {
+      setErrorMsg(e.message || '生成失敗');
+      setStatus('error');
+    }
+  };
+
+  if (status === 'done' && videoUrl) {
+    return (
+      <div style={{ marginTop: '8px' }}>
+        <a href={videoUrl} target="_blank" rel="noopener noreferrer" className="ai-generate-btn" style={{ background: '#22c55e', textDecoration: 'none' }}>
+          ✅ 下載影片
+        </a>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ marginTop: '8px' }}>
+      <button className="ai-generate-btn" onClick={handleGenerate} disabled={status === 'generating' || status === 'polling'}>
+        {status === 'generating' ? '⏳ 提交中...' : status === 'polling' ? '⏳ 生成中...' : '🤖 AI 生成'}
+      </button>
+      {errorMsg && <p style={{ color: '#dc2626', fontSize: '10px', marginTop: '4px' }}>{errorMsg}</p>}
+    </div>
+  );
+};
+
 export const ProductTable = ({
   products,
   catalogId,
@@ -92,6 +174,7 @@ export const ProductTable = ({
   onSelectAll,
   isAllSelected,
   aiVideoEnabled = false,
+  aiSettings = null,
 }: {
   products: Product[];
   catalogId: string;
@@ -110,6 +193,7 @@ export const ProductTable = ({
   onSelectAll: (isSelected: boolean) => void;
   isAllSelected: boolean;
   aiVideoEnabled?: boolean;
+  aiSettings?: { prismApiKey: string; model: string; aspectRatio: string; duration: number; promptTemplate: string } | null;
 }) => {
   const { t } = useContext(LanguageContext);
   if (isLoading) {
@@ -226,14 +310,8 @@ export const ProductTable = ({
                         videoType="master"
                         onLoginRequest={onLoginRequest}
                     />
-                    {aiVideoEnabled && (
-                      <button
-                        className="ai-generate-btn"
-                        title="AI 生成影片"
-                        onClick={() => alert(`AI 影片生成功能即將上線！\n商品：${product.name}\n將使用管理面板設定的模型和 Prompt 生成影片。`)}
-                      >
-                        🤖 AI 生成
-                      </button>
+                    {aiVideoEnabled && aiSettings?.prismApiKey && (
+                      <AiGenerateButton product={product} aiSettings={aiSettings} />
                     )}
                 </td>
                  <td data-label={t('otherVideo')}>

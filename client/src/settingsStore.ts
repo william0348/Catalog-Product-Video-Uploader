@@ -18,6 +18,7 @@ export interface AppSettings {
   accessKey: string;
   geminiApiKey: string;
   prismApiKey: string;
+  aiVideoSettings: string;
 }
 
 export interface CompanyInfo {
@@ -41,6 +42,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   accessKey: '',
   geminiApiKey: '',
   prismApiKey: '',
+  aiVideoSettings: '',
 };
 
 // ===== Local cache for fast reads =====
@@ -201,6 +203,7 @@ export const loadCompanySettings = async (companyId: number, email: string): Pro
       accessKey: company.accessKey || '',
       geminiApiKey: (company as any).geminiApiKey || '',
       prismApiKey: (company as any).prismApiKey || '',
+      aiVideoSettings: (company as any).aiVideoSettings || '',
     };
 
     // Cache locally for fast reads

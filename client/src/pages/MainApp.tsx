@@ -21,6 +21,7 @@ declare const gapi: any;
 declare const window: any;
 
 export const MainApp = ({ aiVideoEnabled = false, onPrismKeyStatus }: { aiVideoEnabled?: boolean; onPrismKeyStatus?: (has: boolean) => void }) => {
+  const [aiSettings, setAiSettings] = useState<{ prismApiKey: string; model: string; aspectRatio: string; duration: number; promptTemplate: string } | null>(null);
   // Google Auth from shared context
   const { googleAccessToken, userEmail, isGapiClientReady, isGoogleReady, handleGoogleLogin, handleLogout } = useGoogleAuth();
 
@@ -114,6 +115,12 @@ export const MainApp = ({ aiVideoEnabled = false, onPrismKeyStatus }: { aiVideoE
         setTokenInput(companySettings.facebookAccessToken);
         setCompanyAccessKeyValue(companySettings.accessKey);
         onPrismKeyStatus?.(!!companySettings.prismApiKey);
+        if (companySettings.prismApiKey) {
+          try {
+            const parsed = companySettings.aiVideoSettings ? JSON.parse(companySettings.aiVideoSettings) : {};
+            setAiSettings({ prismApiKey: companySettings.prismApiKey, model: parsed.model || 'kling-v2', aspectRatio: parsed.aspectRatio || '9:16', duration: parsed.duration || 5, promptTemplate: parsed.promptTemplate || 'Product showcase, slow camera movement, professional lighting' });
+          } catch { setAiSettings({ prismApiKey: companySettings.prismApiKey, model: 'kling-v2', aspectRatio: '9:16', duration: 5, promptTemplate: 'Product showcase, slow camera movement, professional lighting' }); }
+        }
       }).catch(e => {
         console.error(e);
         if (e.message?.includes('不是此公司的成員')) {
@@ -123,7 +130,6 @@ export const MainApp = ({ aiVideoEnabled = false, onPrismKeyStatus }: { aiVideoE
         }
       });
     } else {
-      // No company selected — clear all settings
       setConfiguredCatalogs([]);
       setFbAccessToken('');
       setTokenInput('');
@@ -1124,6 +1130,7 @@ export const MainApp = ({ aiVideoEnabled = false, onPrismKeyStatus }: { aiVideoE
             onSelectAll={handleSelectAll}
             isAllSelected={isAllSelected}
             aiVideoEnabled={aiVideoEnabled}
+            aiSettings={aiSettings}
         />
         {error && <p className="error-text" role="alert">{error}</p>}
         <AppFooter />
