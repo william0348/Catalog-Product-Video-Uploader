@@ -846,6 +846,126 @@ const CompanyManager = ({ t }: { t: (key: string) => string }) => {
 
 
 
+// ==================== API Keys Manager Component ====================
+const ApiKeysManager = ({ userEmail, googleAccessToken, companies, t }: { userEmail: string | null; googleAccessToken: string | null; companies: CompanyData[]; t: (key: string) => string }) => {
+    const [selectedCompanyId, setSelectedCompanyId] = useState<number | null>(null);
+    const [geminiKey, setGeminiKey] = useState('');
+    const [prismKey, setPrismKey] = useState('');
+    const [showGemini, setShowGemini] = useState(false);
+    const [showPrism, setShowPrism] = useState(false);
+    const [isSaving, setIsSaving] = useState(false);
+    const [saveMsg, setSaveMsg] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+    const [isLoading, setIsLoading] = useState(false);
+
+    const loadCompanyKeys = async (companyId: number) => {
+        setIsLoading(true);
+        try {
+            const detail = await trpcQuery('company.get', { id: companyId, email: (userEmail || '').toLowerCase() });
+            setGeminiKey(detail?.geminiApiKey || '');
+            setPrismKey(detail?.prismApiKey || '');
+        } catch (e) {
+            console.error('Failed to load API keys:', e);
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    const handleSelectCompany = (id: number) => {
+        setSelectedCompanyId(id);
+        setSaveMsg(null);
+        loadCompanyKeys(id);
+    };
+
+    const handleSave = async () => {
+        if (!selectedCompanyId || !userEmail) return;
+        setIsSaving(true);
+        setSaveMsg(null);
+        try {
+            await trpcMutate('company.update', {
+                id: selectedCompanyId,
+                email: userEmail.toLowerCase(),
+                geminiApiKey: geminiKey,
+                prismApiKey: prismKey,
+            });
+            setSaveMsg({ type: 'success', message: 'API Keys 已儲存！' });
+            setTimeout(() => setSaveMsg(null), 3000);
+        } catch (e: any) {
+            setSaveMsg({ type: 'error', message: e.message });
+        } finally {
+            setIsSaving(false);
+        }
+    };
+
+    if (!userEmail) {
+        return <div className="settings-section" style={{ textAlign: 'center', padding: '40px' }}><p>{t('googleLoginRequiredForAdmin')}</p></div>;
+    }
+
+    return (
+        <div style={{ padding: '20px 0' }}>
+            {/* Company Selector */}
+            <div className="form-group" style={{ marginBottom: '24px' }}>
+                <label>{t('selectCompany')}</label>
+                <select value={selectedCompanyId || ''} onChange={(e) => { const id = parseInt(e.target.value); if (id) handleSelectCompany(id); }}>
+                    <option value="">{t('selectCompanyPlaceholder')}</option>
+                    {companies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                </select>
+            </div>
+
+            {selectedCompanyId && !isLoading && (
+                <div className="settings-section" style={{ background: '#faf5ff', border: '1px solid #e9d5ff', borderRadius: '16px', padding: '24px' }}>
+                    <h3 style={{ color: '#7c3aed', marginBottom: '16px' }}>🤖 AI 影片 & 圖片生成設定</h3>
+
+                    <div className="form-group">
+                        <label>Gemini API Key（Reels 分鏡圖生成）</label>
+                        <div className="token-input-group">
+                            <input type={showGemini ? 'text' : 'password'} value={geminiKey} onChange={(e) => setGeminiKey(e.target.value)} placeholder="AIzaSy..." className="token-input" />
+                            <button onClick={() => setShowGemini(!showGemini)} className="toggle-visibility-button">{showGemini ? '🙈' : '👁️'}</button>
+                        </div>
+                        <p className="help-text">從 <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer" style={{ color: '#7c3aed' }}>Google AI Studio</a> 取得</p>
+                    </div>
+
+                    <div className="form-group">
+                        <label>Prism Videos API Key（AI 影片生成）</label>
+                        <div className="token-input-group">
+                            <input type={showPrism ? 'text' : 'password'} value={prismKey} onChange={(e) => setPrismKey(e.target.value)} placeholder="prism_..." className="token-input" />
+                            <button onClick={() => setShowPrism(!showPrism)} className="toggle-visibility-button">{showPrism ? '🙈' : '👁️'}</button>
+                        </div>
+                        <p className="help-text">從 <a href="https://prismvideos.com" target="_blank" rel="noopener noreferrer" style={{ color: '#7c3aed' }}>Prism Videos</a> 取得</p>
+                    </div>
+
+                    {/* Model pricing grid */}
+                    <div style={{ marginTop: '16px', padding: '16px', background: 'white', borderRadius: '12px', border: '1px solid #e5e7eb' }}>
+                        <div style={{ fontSize: '12px', fontWeight: 700, color: '#7c3aed', marginBottom: '12px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>可用模型 & 費用</div>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                            {[
+                                { name: 'Veo 3.1', provider: 'Google', duration: '8秒', cost: '~$0.80' },
+                                { name: 'Kling v2', provider: 'Kuaishou', duration: '10秒', cost: '~$0.20' },
+                                { name: 'Seedance 2.0', provider: 'ByteDance', duration: '10秒', cost: '~$0.15' },
+                                { name: 'Sora', provider: 'OpenAI', duration: '20秒', cost: '~$1.00' },
+                            ].map(m => (
+                                <div key={m.name} style={{ padding: '10px', background: '#f8f5ff', borderRadius: '8px', border: '1px solid #e9d5ff' }}>
+                                    <div style={{ fontWeight: 700, fontSize: '13px' }}>{m.name}</div>
+                                    <div style={{ fontSize: '11px', color: '#64748b' }}>{m.provider} · {m.duration} · {m.cost}/支</div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+
+                    <button onClick={handleSave} disabled={isSaving} className="save-token-button" style={{ marginTop: '20px', width: '100%' }}>
+                        {isSaving ? <div className="loader-small"></div> : '💾 儲存 API 設定'}
+                    </button>
+
+                    {saveMsg && (
+                        <p className={saveMsg.type === 'success' ? 'success-text' : 'error-text'} style={{ marginTop: '8px' }}>{saveMsg.message}</p>
+                    )}
+                </div>
+            )}
+
+            {isLoading && <div style={{ textAlign: 'center', padding: '40px' }}><div className="loader-small" style={{ margin: '0 auto' }}></div></div>}
+        </div>
+    );
+};
+
 // ==================== Video Log Component (Database-backed) ====================
 interface UploadRecord {
     id: number;
@@ -1982,7 +2102,7 @@ const UploaderPersonnel = ({ t, companies }: { t: (key: string, replacements?: {
 
 // ==================== Main AdminPanel Component ====================
 export const AdminPanel = ({ onBack }: AdminPanelProps) => {
-    const [activeTab, setActiveTab] = useState<'log' | 'company'>('log');
+    const [activeTab, setActiveTab] = useState<'log' | 'company' | 'apikeys'>('log');
     const { t } = useContext(LanguageContext);
     const { userEmail, googleAccessToken, handleGoogleLogin, isGoogleReady } = useGoogleAuth();
     const [companies, setCompanies] = useState<CompanyData[]>([]);
@@ -2058,8 +2178,14 @@ export const AdminPanel = ({ onBack }: AdminPanelProps) => {
                     >
                         🏢 {t('companyManagement')}
                     </button>
+                    <button
+                        className={`admin-tab ${activeTab === 'apikeys' ? 'active' : ''}`}
+                        onClick={() => setActiveTab('apikeys')}
+                    >
+                        🔑 API 設定
+                    </button>
                 </div>
-                
+
                 {/* Log Tab */}
                 {activeTab === 'log' && (
                     <VideoLog t={t} companies={companies} />
@@ -2068,6 +2194,11 @@ export const AdminPanel = ({ onBack }: AdminPanelProps) => {
                 {/* Company Management Tab */}
                 {activeTab === 'company' && (
                     <CompanyManager t={t} />
+                )}
+
+                {/* API Keys Tab */}
+                {activeTab === 'apikeys' && (
+                    <ApiKeysManager userEmail={userEmail} googleAccessToken={googleAccessToken} companies={companies} t={t} />
                 )}
             </div>
             <AppFooter />

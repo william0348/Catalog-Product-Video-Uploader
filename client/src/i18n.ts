@@ -26,7 +26,7 @@ export const translations = {
         cancel: "Cancel",
         backToHome: "Back to Home",
         // Home Page
-        homeHeader: "Reels & Catalog Super Cool",
+        homeHeader: "Reels & Catalog Tool",
         homeSubheader: "The ultimate tool for managing video assets for your product catalogs.",
         coreFeatures: "Core Features",
         featureFetch: "Fetch Products: Instantly load products from any Facebook Catalog using its ID.",
@@ -399,7 +399,7 @@ export const translations = {
         cancel: "取消",
         backToHome: "回到首頁",
         // Home Page
-        homeHeader: "Reels & Catalog Super Cool",
+        homeHeader: "Reels & Catalog Tool",
         homeSubheader: "管理您目錄影片資產的終極工具。",
         coreFeatures: "核心功能",
         featureFetch: "讀取商品：使用目錄 ID 即時載入任何 Facebook 目錄中的商品。",

@@ -47,16 +47,16 @@ const PageRouter = () => {
     }, []);
     
     useEffect(() => {
-        let title = 'Reels & Catalog Super Cool';
+        let title = 'Reels & Catalog Tool';
         switch (currentPage) {
             case 'admin':
-                title = `${t('adminPanel')} - Reels & Catalog Super Cool`;
+                title = `${t('adminPanel')} - Reels & Catalog Tool`;
                 break;
             case 'terms':
-                title = `${t('termsOfService')} - Reels & Catalog Super Cool`;
+                title = `${t('termsOfService')} - Reels & Catalog Tool`;
                 break;
             case 'slideshow':
-                title = `${t('slideshowTitle') || 'Slideshow Generator'} - Reels & Catalog Super Cool`;
+                title = `${t('slideshowTitle') || 'Slideshow Generator'} - Reels & Catalog Tool`;
                 break;
         }
         document.title = title;

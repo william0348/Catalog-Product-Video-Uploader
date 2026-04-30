@@ -74,7 +74,7 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
             className="sidebar-logo"
           />
           <div className="sidebar-brand">
-            <span className="sidebar-brand-title">Reels & Catalog Super Cool</span>
+            <span className="sidebar-brand-title">Reels & Catalog Tool</span>
             <span className="sidebar-brand-subtitle">AI-Powered Marketing Tools</span>
           </div>
         </div>
