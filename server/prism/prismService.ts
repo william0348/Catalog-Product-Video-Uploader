@@ -4,10 +4,11 @@ export interface PrismModel {
   id: string;
   name: string;
   provider: string;
-  supportsImageToVideo: boolean;
-  supportedAspectRatios: string[];
+  maxDuration: number;
   supportedDurations: number[];
+  supportedAspectRatios: string[];
   estimatedCostUsd: number;
+  promptStyle: string;
 }
 
 export interface PrismGeneration {
@@ -21,17 +22,55 @@ export interface PrismGeneration {
   completedAt?: string;
 }
 
-const KNOWN_MODELS: PrismModel[] = [
-  { id: "seedance-2.0", name: "Seedance 2.0", provider: "ByteDance", supportsImageToVideo: true, supportedAspectRatios: ["9:16", "1:1", "16:9"], supportedDurations: [5, 10], estimatedCostUsd: 0.15 },
-  { id: "veo-3.1", name: "Veo 3.1", provider: "Google", supportsImageToVideo: true, supportedAspectRatios: ["9:16", "1:1", "16:9"], supportedDurations: [5, 8], estimatedCostUsd: 0.80 },
-  { id: "kling-v2", name: "Kling v2", provider: "Kuaishou", supportsImageToVideo: true, supportedAspectRatios: ["9:16", "1:1", "16:9"], supportedDurations: [5, 10], estimatedCostUsd: 0.20 },
-  { id: "hailuo", name: "Hailuo", provider: "MiniMax", supportsImageToVideo: true, supportedAspectRatios: ["9:16", "1:1", "16:9"], supportedDurations: [5], estimatedCostUsd: 0.10 },
-  { id: "sora", name: "Sora", provider: "OpenAI", supportsImageToVideo: true, supportedAspectRatios: ["9:16", "1:1", "16:9"], supportedDurations: [5, 10, 20], estimatedCostUsd: 1.00 },
-  { id: "runway-gen4", name: "Runway Gen4", provider: "Runway", supportsImageToVideo: true, supportedAspectRatios: ["9:16", "1:1", "16:9"], supportedDurations: [5, 10], estimatedCostUsd: 0.50 },
+export const PRISM_MODELS: PrismModel[] = [
+  {
+    id: "veo-3.1",
+    name: "Veo 3.1",
+    provider: "Google",
+    maxDuration: 8,
+    supportedDurations: [5, 8],
+    supportedAspectRatios: ["9:16", "1:1"],
+    estimatedCostUsd: 0.80,
+    promptStyle: "Focus on cinematic quality, detailed lighting, high-fidelity visuals, smooth camera movements",
+  },
+  {
+    id: "kling-v2",
+    name: "Kling v2",
+    provider: "Kuaishou",
+    maxDuration: 10,
+    supportedDurations: [5, 10],
+    supportedAspectRatios: ["9:16", "1:1"],
+    estimatedCostUsd: 0.20,
+    promptStyle: "Focus on dynamic product showcase, camera rotation, zoom effects, motion-rich transitions",
+  },
+  {
+    id: "seedance-2.0",
+    name: "Seedance 2.0",
+    provider: "ByteDance",
+    maxDuration: 10,
+    supportedDurations: [5, 10],
+    supportedAspectRatios: ["9:16", "1:1"],
+    estimatedCostUsd: 0.15,
+    promptStyle: "Focus on human interaction, lifestyle scenes, natural product usage, storytelling",
+  },
+  {
+    id: "sora",
+    name: "Sora",
+    provider: "OpenAI",
+    maxDuration: 20,
+    supportedDurations: [5, 10, 20],
+    supportedAspectRatios: ["9:16", "1:1"],
+    estimatedCostUsd: 1.00,
+    promptStyle: "Detailed scene descriptions, complex camera movements, multiple scene transitions, creative visual storytelling",
+  },
 ];
 
 export function getAvailableModels(): PrismModel[] {
-  return KNOWN_MODELS;
+  return PRISM_MODELS;
+}
+
+export function getModelById(modelId: string): PrismModel | undefined {
+  return PRISM_MODELS.find(m => m.id === modelId);
 }
 
 export async function createGeneration(
@@ -70,16 +109,4 @@ export async function getGeneration(prismKey: string, generationId: string): Pro
   }
 
   return await res.json();
-}
-
-export async function batchCreateGenerations(
-  prismKey: string,
-  items: Array<{ model: string; prompt: string; imageUrl: string; aspectRatio: string; duration: number }>
-): Promise<PrismGeneration[]> {
-  const results: PrismGeneration[] = [];
-  for (const item of items) {
-    const gen = await createGeneration(prismKey, item.model, item.prompt, item.imageUrl, item.aspectRatio, item.duration);
-    results.push(gen);
-  }
-  return results;
 }

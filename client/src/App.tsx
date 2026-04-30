@@ -35,6 +35,7 @@ const PageRouter = () => {
     const { t } = useContext(LanguageContext);
     const { userEmail, isGoogleReady, handleGoogleLogin, handleLogout } = useGoogleAuth();
     const [currentPage, setCurrentPage] = useState(() => hashToPage(window.location.hash || '#/'));
+    const [aiVideoEnabled, setAiVideoEnabled] = useState(false);
     
     useEffect(() => {
         const handleHashChange = () => {
@@ -76,7 +77,7 @@ const PageRouter = () => {
                 return <ReelsGenerator />;
             case 'main':
             default:
-                return <MainApp />;
+                return <MainApp aiVideoEnabled={aiVideoEnabled} />;
         }
     };
     
@@ -88,6 +89,8 @@ const PageRouter = () => {
             onGoogleLogin={handleGoogleLogin}
             onLogout={handleLogout}
             isGoogleReady={isGoogleReady}
+            aiVideoEnabled={aiVideoEnabled}
+            onToggleAiVideo={setAiVideoEnabled}
             fullWidthContent={currentPage === 'main'}
         >
             {renderPage()}

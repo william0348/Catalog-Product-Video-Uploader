@@ -13,6 +13,8 @@ interface AppLayoutProps {
   onLogout?: () => void;
   isGoogleReady?: boolean;
   fullWidthContent?: boolean;
+  aiVideoEnabled?: boolean;
+  onToggleAiVideo?: (enabled: boolean) => void;
 }
 
 const NAV_ITEMS = [
@@ -32,6 +34,8 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
   onLogout,
   isGoogleReady = true,
   fullWidthContent = false,
+  aiVideoEnabled = false,
+  onToggleAiVideo,
 }) => {
   const { t } = useContext(LanguageContext);
   const { googleAccessToken } = useGoogleAuth();
@@ -78,14 +82,24 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
         {/* Navigation */}
         <nav className="sidebar-nav">
           {NAV_ITEMS.map((item) => (
+            <React.Fragment key={item.id}>
             <button
-              key={item.id}
               className={`sidebar-nav-item ${currentPage === item.id ? "active" : ""}`}
               onClick={() => handleNav(item.id)}
             >
               <span className="sidebar-nav-icon">{item.icon}</span>
               <span className="sidebar-nav-label">{t(item.labelKey)}</span>
             </button>
+            {item.id === "main" && onToggleAiVideo && (
+              <div className="sidebar-ai-toggle" onClick={(e) => { e.stopPropagation(); onToggleAiVideo(!aiVideoEnabled); }}>
+                <span className="sidebar-ai-toggle-icon">🤖</span>
+                <span className="sidebar-ai-toggle-label">{t('sidebarAiVideo')}</span>
+                <span className={`sidebar-ai-toggle-switch ${aiVideoEnabled ? 'on' : ''}`}>
+                  <span className="sidebar-ai-toggle-knob" />
+                </span>
+              </div>
+            )}
+            </React.Fragment>
           ))}
         </nav>
 
