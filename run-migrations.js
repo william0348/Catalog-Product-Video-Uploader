@@ -99,6 +99,7 @@ const MIGRATIONS = [
   `ALTER TABLE \`companies\` ADD COLUMN \`tokenExpiresAt\` timestamp`,
   `ALTER TABLE \`companies\` ADD COLUMN \`geminiApiKey\` text`,
   `ALTER TABLE \`companies\` ADD COLUMN \`prismApiKey\` text`,
+  `ALTER TABLE \`companies\` ADD COLUMN \`aiVideoSettings\` text`,
 ];
 
 async function runMigrations() {

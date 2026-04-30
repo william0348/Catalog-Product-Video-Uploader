@@ -131,6 +131,7 @@ export const appRouter = router({
         catalogs: z.string().optional(),
         geminiApiKey: z.string().optional(),
         prismApiKey: z.string().optional(),
+        aiVideoSettings: z.string().optional(),
       }))
       .mutation(async ({ input }) => {
         const { id, email, ...data } = input;
@@ -146,6 +147,7 @@ export const appRouter = router({
         if (data.catalogs !== undefined) updateData.catalogs = data.catalogs;
         if (data.geminiApiKey !== undefined) updateData.geminiApiKey = data.geminiApiKey;
         if (data.prismApiKey !== undefined) updateData.prismApiKey = data.prismApiKey;
+        if (data.aiVideoSettings !== undefined) updateData.aiVideoSettings = data.aiVideoSettings;
 
         // Auto-check token expiration when token is updated
         if (data.facebookAccessToken) {

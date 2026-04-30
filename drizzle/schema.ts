@@ -39,6 +39,7 @@ export const companies = mysqlTable("companies", {
   tokenExpiresAt: timestamp("tokenExpiresAt"),
   geminiApiKey: text("geminiApiKey"),
   prismApiKey: text("prismApiKey"),
+  aiVideoSettings: text("aiVideoSettings"),
   createdBy: int("createdBy").notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),

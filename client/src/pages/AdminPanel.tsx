@@ -853,6 +853,14 @@ const ApiKeysManager = ({ userEmail, googleAccessToken, companies, t }: { userEm
     const [prismKey, setPrismKey] = useState('');
     const [showGemini, setShowGemini] = useState(false);
     const [showPrism, setShowPrism] = useState(false);
+    const [defaultModel, setDefaultModel] = useState('kling-v2');
+    const [defaultAspect, setDefaultAspect] = useState('9:16');
+    const [defaultDuration, setDefaultDuration] = useState(5);
+    const [promptTemplate, setPromptTemplate] = useState('Product showcase, slow camera movement, professional lighting, clean background');
+    const [productTypeForPrompt, setProductTypeForPrompt] = useState('');
+    const [isGeneratingPrompt, setIsGeneratingPrompt] = useState(false);
+    const [generatedStoryboard, setGeneratedStoryboard] = useState<Array<{ timeRange: string; description: string }>>([]);
+    const [logoPreview, setLogoPreview] = useState('');
     const [isSaving, setIsSaving] = useState(false);
     const [saveMsg, setSaveMsg] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
     const [isLoading, setIsLoading] = useState(false);
@@ -863,6 +871,13 @@ const ApiKeysManager = ({ userEmail, googleAccessToken, companies, t }: { userEm
             const detail = await trpcQuery('company.get', { id: companyId, email: (userEmail || '').toLowerCase() });
             setGeminiKey(detail?.geminiApiKey || '');
             setPrismKey(detail?.prismApiKey || '');
+            try {
+                const aiSettings = detail?.aiVideoSettings ? JSON.parse(detail.aiVideoSettings) : {};
+                setDefaultModel(aiSettings.model || 'kling-v2');
+                setDefaultAspect(aiSettings.aspectRatio || '9:16');
+                setDefaultDuration(aiSettings.duration || 5);
+                setPromptTemplate(aiSettings.promptTemplate || 'Product showcase, slow camera movement, professional lighting, clean background');
+            } catch { /* ignore parse errors */ }
         } catch (e) {
             console.error('Failed to load API keys:', e);
         } finally {
@@ -876,6 +891,24 @@ const ApiKeysManager = ({ userEmail, googleAccessToken, companies, t }: { userEm
         loadCompanyKeys(id);
     };
 
+    const handleGeneratePrompt = async () => {
+        if (!productTypeForPrompt) return;
+        setIsGeneratingPrompt(true);
+        try {
+            const result = await trpcMutate('prism.generatePrompt', {
+                productType: productTypeForPrompt,
+                modelId: defaultModel,
+                duration: defaultDuration,
+            });
+            setPromptTemplate(result.prompt);
+            setGeneratedStoryboard(result.storyboard || []);
+        } catch (e: any) {
+            alert('Prompt 生成失敗: ' + e.message);
+        } finally {
+            setIsGeneratingPrompt(false);
+        }
+    };
+
     const handleSave = async () => {
         if (!selectedCompanyId || !userEmail) return;
         setIsSaving(true);
@@ -886,6 +919,12 @@ const ApiKeysManager = ({ userEmail, googleAccessToken, companies, t }: { userEm
                 email: userEmail.toLowerCase(),
                 geminiApiKey: geminiKey,
                 prismApiKey: prismKey,
+                aiVideoSettings: JSON.stringify({
+                    model: defaultModel,
+                    aspectRatio: defaultAspect,
+                    duration: defaultDuration,
+                    promptTemplate: promptTemplate,
+                }),
             });
             setSaveMsg({ type: 'success', message: 'API Keys 已儲存！' });
             setTimeout(() => setSaveMsg(null), 3000);
@@ -933,22 +972,129 @@ const ApiKeysManager = ({ userEmail, googleAccessToken, companies, t }: { userEm
                         <p className="help-text">從 <a href="https://prismvideos.com" target="_blank" rel="noopener noreferrer" style={{ color: '#7c3aed' }}>Prism Videos</a> 取得</p>
                     </div>
 
-                    {/* Model pricing grid */}
+                    {/* Default Model Selection */}
                     <div style={{ marginTop: '16px', padding: '16px', background: 'white', borderRadius: '12px', border: '1px solid #e5e7eb' }}>
-                        <div style={{ fontSize: '12px', fontWeight: 700, color: '#7c3aed', marginBottom: '12px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>可用模型 & 費用</div>
+                        <div style={{ fontSize: '12px', fontWeight: 700, color: '#7c3aed', marginBottom: '12px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>預設影片模型（點擊選擇）</div>
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
                             {[
-                                { name: 'Veo 3.1', provider: 'Google', duration: '8秒', cost: '~$0.80' },
-                                { name: 'Kling v2', provider: 'Kuaishou', duration: '10秒', cost: '~$0.20' },
-                                { name: 'Seedance 2.0', provider: 'ByteDance', duration: '10秒', cost: '~$0.15' },
-                                { name: 'Sora', provider: 'OpenAI', duration: '20秒', cost: '~$1.00' },
+                                { id: 'veo-3.1', name: 'Veo 3.1', provider: 'Google', maxDur: 8, durations: [5, 8], cost: '~$0.80' },
+                                { id: 'kling-v2', name: 'Kling v2', provider: 'Kuaishou', maxDur: 10, durations: [5, 10], cost: '~$0.20' },
+                                { id: 'seedance-2.0', name: 'Seedance 2.0', provider: 'ByteDance', maxDur: 10, durations: [5, 10], cost: '~$0.15' },
+                                { id: 'sora', name: 'Sora', provider: 'OpenAI', maxDur: 20, durations: [5, 10, 20], cost: '~$1.00' },
                             ].map(m => (
-                                <div key={m.name} style={{ padding: '10px', background: '#f8f5ff', borderRadius: '8px', border: '1px solid #e9d5ff' }}>
-                                    <div style={{ fontWeight: 700, fontSize: '13px' }}>{m.name}</div>
-                                    <div style={{ fontSize: '11px', color: '#64748b' }}>{m.provider} · {m.duration} · {m.cost}/支</div>
+                                <div key={m.id} onClick={() => {
+                                    setDefaultModel(m.id);
+                                    if (defaultDuration > m.maxDur) setDefaultDuration(m.durations[0]);
+                                }} style={{
+                                    padding: '12px', borderRadius: '10px', cursor: 'pointer', transition: 'all 0.15s',
+                                    border: defaultModel === m.id ? '2px solid #7c3aed' : '1px solid #e9d5ff',
+                                    background: defaultModel === m.id ? 'rgba(124,58,237,0.08)' : '#f8f5ff',
+                                }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                        <div style={{ fontWeight: 700, fontSize: '13px', color: defaultModel === m.id ? '#7c3aed' : '#374151' }}>{m.name}</div>
+                                        {defaultModel === m.id && <span style={{ fontSize: '14px' }}>✓</span>}
+                                    </div>
+                                    <div style={{ fontSize: '11px', color: '#64748b', marginTop: '2px' }}>{m.provider} · 最長{m.maxDur}秒 · {m.cost}/支</div>
                                 </div>
                             ))}
                         </div>
+                    </div>
+
+                    {/* Aspect Ratio & Duration */}
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginTop: '16px' }}>
+                        <div className="form-group" style={{ margin: 0 }}>
+                            <label>預設比例</label>
+                            <select value={defaultAspect} onChange={(e) => setDefaultAspect(e.target.value)}>
+                                <option value="9:16">9:16（直式 / Reels）</option>
+                                <option value="1:1">1:1（正方形）</option>
+                            </select>
+                        </div>
+                        <div className="form-group" style={{ margin: 0 }}>
+                            <label>預設時長</label>
+                            <select value={defaultDuration} onChange={(e) => setDefaultDuration(parseInt(e.target.value))}>
+                                {(() => {
+                                    const model = [
+                                        { id: 'veo-3.1', durations: [5, 8] },
+                                        { id: 'kling-v2', durations: [5, 10] },
+                                        { id: 'seedance-2.0', durations: [5, 10] },
+                                        { id: 'sora', durations: [5, 10, 20] },
+                                    ].find(m => m.id === defaultModel);
+                                    return (model?.durations || [5]).map(d => (
+                                        <option key={d} value={d}>{d} 秒</option>
+                                    ));
+                                })()}
+                            </select>
+                        </div>
+                    </div>
+
+                    {/* Prompt Template */}
+                    <div className="form-group" style={{ marginTop: '16px' }}>
+                        <label>預設 Prompt 模板（英文效果最佳）</label>
+                        <textarea
+                            value={promptTemplate}
+                            onChange={(e) => setPromptTemplate(e.target.value)}
+                            rows={4}
+                            placeholder="Product showcase, slow camera movement, professional lighting..."
+                            style={{ width: '100%', padding: '10px 14px', border: '1px solid #e5e7eb', borderRadius: '10px', fontSize: '14px', fontFamily: 'inherit', boxSizing: 'border-box', resize: 'vertical' }}
+                        />
+                        <p className="help-text">此 Prompt 會套用在所有 AI 影片生成，用戶不需要自己輸入</p>
+                    </div>
+
+                    {/* AI Prompt Generator */}
+                    <div style={{ marginTop: '16px', padding: '16px', background: 'white', borderRadius: '12px', border: '1px solid #e5e7eb' }}>
+                        <div style={{ fontSize: '12px', fontWeight: 700, color: '#7c3aed', marginBottom: '10px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>✨ AI 智能 Prompt 生成</div>
+                        <p className="help-text" style={{ marginBottom: '12px' }}>輸入商品類型，AI 會根據所選模型生成最佳化的影片 Prompt 和分鏡腳本</p>
+                        <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
+                            <input
+                                type="text"
+                                value={productTypeForPrompt}
+                                onChange={(e) => setProductTypeForPrompt(e.target.value)}
+                                placeholder="例如：美妝保養品、3C配件、服飾..."
+                                style={{ flex: 1 }}
+                            />
+                            <button
+                                onClick={handleGeneratePrompt}
+                                disabled={isGeneratingPrompt || !productTypeForPrompt}
+                                style={{ padding: '8px 16px', background: 'linear-gradient(135deg, #7c3aed, #6366f1)', color: 'white', border: 'none', borderRadius: '8px', fontSize: '13px', fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap', width: 'auto', opacity: (isGeneratingPrompt || !productTypeForPrompt) ? 0.5 : 1 }}
+                            >
+                                {isGeneratingPrompt ? '生成中...' : '✨ AI 生成'}
+                            </button>
+                        </div>
+                        {generatedStoryboard.length > 0 && (
+                            <div style={{ marginTop: '12px', padding: '12px', background: '#f8f5ff', borderRadius: '8px' }}>
+                                <div style={{ fontSize: '12px', fontWeight: 600, color: '#7c3aed', marginBottom: '8px' }}>分鏡腳本：</div>
+                                {generatedStoryboard.map((s, i) => (
+                                    <div key={i} style={{ fontSize: '12px', color: '#374151', marginBottom: '4px' }}>
+                                        <span style={{ fontWeight: 600, color: '#7c3aed' }}>{s.timeRange}</span> {s.description}
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Logo Upload */}
+                    <div className="form-group" style={{ marginTop: '16px' }}>
+                        <label>品牌 Logo（結尾 CTA 使用）</label>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                            {logoPreview ? (
+                                <div style={{ position: 'relative' }}>
+                                    <img src={logoPreview} alt="Logo" style={{ width: '64px', height: '64px', objectFit: 'contain', borderRadius: '8px', border: '1px solid #e5e7eb' }} />
+                                    <button onClick={() => { setLogoPreview(''); }} style={{ position: 'absolute', top: '-6px', right: '-6px', width: '20px', height: '20px', borderRadius: '50%', background: '#ef4444', color: 'white', border: 'none', fontSize: '12px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0 }}>✕</button>
+                                </div>
+                            ) : null}
+                            <label style={{ padding: '8px 16px', background: '#f1f5f9', border: '1px dashed #94a3b8', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', color: '#64748b' }}>
+                                📁 上傳 Logo
+                                <input type="file" accept="image/*" style={{ display: 'none' }} onChange={(e) => {
+                                    const file = e.target.files?.[0];
+                                    if (file) {
+                                        const reader = new FileReader();
+                                        reader.onload = () => setLogoPreview(reader.result as string);
+                                        reader.readAsDataURL(file);
+                                    }
+                                }} />
+                            </label>
+                        </div>
+                        <p className="help-text">Logo 會出現在 AI 生成影片的最後一秒作為 CTA</p>
                     </div>
 
                     <button onClick={handleSave} disabled={isSaving} className="save-token-button" style={{ marginTop: '20px', width: '100%' }}>
