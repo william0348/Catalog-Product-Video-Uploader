@@ -2,6 +2,7 @@
 import React, { useState, useEffect, useCallback, useMemo, useContext } from 'react';
 import * as XLSX from 'xlsx';
 import { AppFooter } from '@/components/AppFooter';
+import { DriveStorageIndicator } from '@/components/DriveStorageIndicator';
 import { LanguageContext } from '@/contexts/LanguageContext';
 import { useGoogleAuth } from '@/contexts/GoogleAuthContext';
 import { fetchCatalogName, validateAccessToken, type AppSettings, type CatalogConfig } from '@/settingsStore';
@@ -1916,7 +1917,7 @@ const UploaderPersonnel = ({ t, companies }: { t: (key: string, replacements?: {
 export const AdminPanel = ({ onBack }: AdminPanelProps) => {
     const [activeTab, setActiveTab] = useState<'log' | 'company'>('log');
     const { t } = useContext(LanguageContext);
-    const { userEmail, handleGoogleLogin, isGoogleReady } = useGoogleAuth();
+    const { userEmail, googleAccessToken, handleGoogleLogin, isGoogleReady } = useGoogleAuth();
     const [companies, setCompanies] = useState<CompanyData[]>([]);
 
     // Load all companies for the current user (using Google login email)
@@ -1972,6 +1973,7 @@ export const AdminPanel = ({ onBack }: AdminPanelProps) => {
                         <span style={{ fontSize: '11px', color: '#4caf50', background: '#e8f5e9', padding: '2px 6px', borderRadius: '4px' }}>
                             {t('googleVerified') || 'Google 已驗證'}
                         </span>
+                        <DriveStorageIndicator accessToken={googleAccessToken} />
                     </div>
                 </header>
 
