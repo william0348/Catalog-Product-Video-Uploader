@@ -20,7 +20,7 @@ import { apiFetch, fetchAllPages } from '@/api';
 declare const gapi: any;
 declare const window: any;
 
-export const MainApp = () => {
+export const MainApp = ({ aiVideoEnabled = false }: { aiVideoEnabled?: boolean }) => {
   // Google Auth from shared context
   const { googleAccessToken, userEmail, isGapiClientReady, isGoogleReady, handleGoogleLogin, handleLogout } = useGoogleAuth();
 
@@ -1104,7 +1104,7 @@ export const MainApp = () => {
             </div>
         )}
 
-        <ProductTable 
+        <ProductTable
             products={filteredProducts}
             catalogId={catalogId}
             clientName={clientName}
@@ -1121,6 +1121,7 @@ export const MainApp = () => {
             onSelectionChange={handleSelectionChange}
             onSelectAll={handleSelectAll}
             isAllSelected={isAllSelected}
+            aiVideoEnabled={aiVideoEnabled}
         />
         {error && <p className="error-text" role="alert">{error}</p>}
         <AppFooter />

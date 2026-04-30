@@ -76,6 +76,10 @@ export const ReelsGenerator = () => {
   const [showHookSelector, setShowHookSelector] = useState(false);
   const [selectedHooks, setSelectedHooks] = useState<string[]>([]);
   const [expandedSections, setExpandedSections] = useState<Set<number>>(new Set());
+  const [sceneImages, setSceneImages] = useState<Record<string, string>>({});
+  const [isGeneratingImages, setIsGeneratingImages] = useState(false);
+  const [imageStyle, setImageStyle] = useState<'pencil_sketch' | 'realistic'>('pencil_sketch');
+  const [imageError, setImageError] = useState<string | null>(null);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
@@ -149,6 +153,34 @@ export const ReelsGenerator = () => {
       if (next.has(i)) next.delete(i); else next.add(i);
       return next;
     });
+  };
+
+  const handleGenerateImages = async () => {
+    if (!selectedIdea) return;
+    const geminiKey = prompt('請輸入 Gemini API Key（或在管理面板設定）:');
+    if (!geminiKey) return;
+    setIsGeneratingImages(true);
+    setImageError(null);
+    try {
+      const data = await trpcMutate('reels.generateSceneImages', {
+        geminiApiKey: geminiKey,
+        concept: selectedIdea.idea.concept,
+        brandName: formData.brandName,
+        industry: formData.industry,
+        title: selectedIdea.idea.title,
+        imageStyle,
+      });
+      const imageMap: Record<string, string> = {};
+      for (const img of data.images) {
+        if (img.imageUrl) imageMap[img.label] = img.imageUrl;
+      }
+      setSceneImages(imageMap);
+      setExpandedSections(new Set(parseConceptToSections(selectedIdea.idea.concept).map((_, i) => i)));
+    } catch (e: any) {
+      setImageError(e.message || '圖片生成失敗');
+    } finally {
+      setIsGeneratingImages(false);
+    }
   };
 
   const canGenerateSegments = formData.industry && formData.targetAudience && formData.brandName && formData.productBenefits && formData.productDescription;
@@ -313,6 +345,28 @@ export const ReelsGenerator = () => {
               <button className="reels-modal-close" onClick={() => setSelectedIdea(null)}>✕</button>
             </div>
             <div className="reels-modal-body">
+              {/* Image Style Selector + Generate Button */}
+              <div style={{ marginBottom: '20px', padding: '16px', background: '#f8f5ff', borderRadius: '12px', border: '1px solid #e9d5ff' }}>
+                <div style={{ fontSize: '12px', fontWeight: 700, color: '#7c3aed', marginBottom: '10px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>場景圖片生成</div>
+                <div style={{ display: 'flex', gap: '8px', marginBottom: '12px' }}>
+                  <button onClick={() => setImageStyle('pencil_sketch')}
+                    style={{ flex: 1, padding: '10px', borderRadius: '10px', border: imageStyle === 'pencil_sketch' ? '2px solid #7c3aed' : '1px solid #e5e7eb', background: imageStyle === 'pencil_sketch' ? 'rgba(124,58,237,0.08)' : 'white', cursor: 'pointer', textAlign: 'left', width: 'auto' }}>
+                    <div style={{ fontSize: '13px', fontWeight: 600, color: imageStyle === 'pencil_sketch' ? '#7c3aed' : '#374151' }}>✏️ 鉛筆素描</div>
+                    <div style={{ fontSize: '10px', color: '#94a3b8' }}>Pencil Sketch Style</div>
+                  </button>
+                  <button onClick={() => setImageStyle('realistic')}
+                    style={{ flex: 1, padding: '10px', borderRadius: '10px', border: imageStyle === 'realistic' ? '2px solid #7c3aed' : '1px solid #e5e7eb', background: imageStyle === 'realistic' ? 'rgba(124,58,237,0.08)' : 'white', cursor: 'pointer', textAlign: 'left', width: 'auto' }}>
+                    <div style={{ fontSize: '13px', fontWeight: 600, color: imageStyle === 'realistic' ? '#7c3aed' : '#374151' }}>📷 寫實攝影</div>
+                    <div style={{ fontSize: '10px', color: '#94a3b8' }}>Realistic Photography</div>
+                  </button>
+                </div>
+                <button onClick={handleGenerateImages} disabled={isGeneratingImages} className="reels-btn-primary" style={{ width: '100%' }}>
+                  {isGeneratingImages ? <><span className="reels-spinner" style={{ borderTopColor: 'white', borderColor: 'rgba(255,255,255,0.3)' }}></span> 生成場景圖片中...</> : `🎨 為 ${parseConceptToSections(selectedIdea.idea.concept).length} 個場景生成 AI 圖片`}
+                </button>
+                {imageError && <p style={{ color: '#dc2626', fontSize: '12px', marginTop: '8px' }}>{imageError}</p>}
+                {Object.keys(sceneImages).length > 0 && <p style={{ color: '#22c55e', fontSize: '11px', marginTop: '8px' }}>✓ 已生成 {Object.keys(sceneImages).length} 張場景圖片</p>}
+              </div>
+
               {parseConceptToSections(selectedIdea.idea.concept).map((section, i) => {
                 const isExpanded = expandedSections.has(i);
                 return (
@@ -325,7 +379,17 @@ export const ReelsGenerator = () => {
                       <span style={{ color: '#94a3b8', fontSize: '14px' }}>{isExpanded ? '▲' : '▼'}</span>
                     </div>
                     {isExpanded ? (
-                      <div className="reels-scene-content">{section.content}</div>
+                      <>
+                        {sceneImages[section.label] && (
+                          <div style={{ position: 'relative' }}>
+                            <img src={sceneImages[section.label]} alt={`${section.label} 場景圖`} style={{ width: '100%', maxHeight: '300px', objectFit: 'cover' }} />
+                            <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, background: 'linear-gradient(transparent, rgba(0,0,0,0.6))', padding: '8px 12px' }}>
+                              <span style={{ color: 'white', fontSize: '11px' }}>AI 生成 · {section.label}</span>
+                            </div>
+                          </div>
+                        )}
+                        <div className="reels-scene-content">{section.content}</div>
+                      </>
                     ) : (
                       <div style={{ padding: '10px 18px', fontSize: '12px', color: '#94a3b8' }}>
                         {section.content.substring(0, 100)}...

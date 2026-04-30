@@ -91,6 +91,7 @@ export const ProductTable = ({
   onSelectionChange,
   onSelectAll,
   isAllSelected,
+  aiVideoEnabled = false,
 }: {
   products: Product[];
   catalogId: string;
@@ -108,6 +109,7 @@ export const ProductTable = ({
   onSelectionChange: (retailerId: string, isSelected: boolean) => void;
   onSelectAll: (isSelected: boolean) => void;
   isAllSelected: boolean;
+  aiVideoEnabled?: boolean;
 }) => {
   const { t } = useContext(LanguageContext);
   if (isLoading) {
@@ -224,6 +226,15 @@ export const ProductTable = ({
                         videoType="master"
                         onLoginRequest={onLoginRequest}
                     />
+                    {aiVideoEnabled && (
+                      <button
+                        className="ai-generate-btn"
+                        title="AI 生成影片"
+                        onClick={() => alert(`AI 影片生成功能即將上線！\n商品：${product.name}\n將使用管理面板設定的模型和 Prompt 生成影片。`)}
+                      >
+                        🤖 AI 生成
+                      </button>
+                    )}
                 </td>
                  <td data-label={t('otherVideo')}>
                     {nineBySixteenVideo && (
