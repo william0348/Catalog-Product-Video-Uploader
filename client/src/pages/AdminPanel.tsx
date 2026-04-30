@@ -80,6 +80,10 @@ const CompanyManager = ({ t }: { t: (key: string) => string }) => {
     // Company settings edit
     const [editToken, setEditToken] = useState('');
     const [editAccessKey, setEditAccessKey] = useState('');
+    const [editGeminiKey, setEditGeminiKey] = useState('');
+    const [editPrismKey, setEditPrismKey] = useState('');
+    const [showGeminiKey, setShowGeminiKey] = useState(false);
+    const [showPrismKey, setShowPrismKey] = useState(false);
     const [showEditToken, setShowEditToken] = useState(false);
     const [isSavingCompany, setIsSavingCompany] = useState(false);
     const [companySaveMsg, setCompanySaveMsg] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
@@ -141,6 +145,8 @@ const CompanyManager = ({ t }: { t: (key: string) => string }) => {
                 setCompanyDetail(detail);
                 setEditToken('');
                 setEditAccessKey(detail.accessKey || '');
+                setEditGeminiKey(detail.geminiApiKey || '');
+                setEditPrismKey(detail.prismApiKey || '');
                 setTokenStatus({ type: null, message: '' });
 
                 const members = await trpcQuery('members.list', { companyId: selectedCompanyId, requesterEmail: userEmail.toLowerCase() });
@@ -185,6 +191,8 @@ const CompanyManager = ({ t }: { t: (key: string) => string }) => {
                 email: userEmail.toLowerCase(),
                 facebookAccessToken: editToken,
                 accessKey: editAccessKey,
+                geminiApiKey: editGeminiKey,
+                prismApiKey: editPrismKey,
             });
             setCompanySaveMsg({ type: 'success', message: t('companySaved') });
             setTimeout(() => setCompanySaveMsg(null), 3000);
@@ -557,6 +565,65 @@ const CompanyManager = ({ t }: { t: (key: string) => string }) => {
                         onChange={(e) => setEditAccessKey(e.target.value)}
                         placeholder={t('companyAccessKeyPlaceholder')}
                     />
+                </div>
+            </div>
+
+            {/* AI Settings Section */}
+            <div className="settings-section">
+                <h3>🤖 AI 影片 & 圖片生成設定</h3>
+                <p className="info-text-small" style={{ marginBottom: '16px' }}>設定 AI 服務的 API Key，用於影片生成和 Reels 腳本分鏡圖。</p>
+
+                <div className="form-group">
+                    <label>Gemini API Key（Reels 分鏡圖生成）</label>
+                    <div className="token-input-group">
+                        <input
+                            type={showGeminiKey ? 'text' : 'password'}
+                            value={editGeminiKey}
+                            onChange={(e) => setEditGeminiKey(e.target.value)}
+                            placeholder="AIzaSy..."
+                            className="token-input"
+                        />
+                        <button onClick={() => setShowGeminiKey(!showGeminiKey)} className="toggle-visibility-button">
+                            {showGeminiKey ? '🙈' : '👁️'}
+                        </button>
+                    </div>
+                    <p className="help-text">從 <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--system-blue)' }}>Google AI Studio</a> 取得</p>
+                </div>
+
+                <div className="form-group">
+                    <label>Prism Videos API Key（AI 影片生成）</label>
+                    <div className="token-input-group">
+                        <input
+                            type={showPrismKey ? 'text' : 'password'}
+                            value={editPrismKey}
+                            onChange={(e) => setEditPrismKey(e.target.value)}
+                            placeholder="prism_..."
+                            className="token-input"
+                        />
+                        <button onClick={() => setShowPrismKey(!showPrismKey)} className="toggle-visibility-button">
+                            {showPrismKey ? '🙈' : '👁️'}
+                        </button>
+                    </div>
+                    <p className="help-text">從 <a href="https://prismvideos.com" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--system-blue)' }}>Prism Videos</a> 取得</p>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: '8px', marginTop: '12px', padding: '12px', background: 'var(--gray-1)', borderRadius: '8px' }}>
+                    <div style={{ textAlign: 'center', fontSize: '11px' }}>
+                        <div style={{ fontWeight: 700 }}>Veo 3.1</div>
+                        <div style={{ color: '#64748b' }}>8秒 · ~$0.80</div>
+                    </div>
+                    <div style={{ textAlign: 'center', fontSize: '11px' }}>
+                        <div style={{ fontWeight: 700 }}>Kling v2</div>
+                        <div style={{ color: '#64748b' }}>10秒 · ~$0.20</div>
+                    </div>
+                    <div style={{ textAlign: 'center', fontSize: '11px' }}>
+                        <div style={{ fontWeight: 700 }}>Seedance 2.0</div>
+                        <div style={{ color: '#64748b' }}>10秒 · ~$0.15</div>
+                    </div>
+                    <div style={{ textAlign: 'center', fontSize: '11px' }}>
+                        <div style={{ fontWeight: 700 }}>Sora</div>
+                        <div style={{ color: '#64748b' }}>20秒 · ~$1.00</div>
+                    </div>
                 </div>
             </div>
 

@@ -3646,6 +3646,7 @@ tbody tr.selected:hover td {
 .sidebar-nav-item {
   display: flex;
   align-items: center;
+  justify-content: flex-start;
   gap: 12px;
   padding: 10px 14px;
   border: none;
