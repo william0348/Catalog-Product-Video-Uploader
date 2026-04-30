@@ -1,8 +1,7 @@
 import { getDb } from "./db";
 import { users, companies, companyMembers, uploadRecords, appSettings, slideshowTemplates } from "../drizzle/schema";
 
-const FOLDER_ID = process.env.BACKUP_DRIVE_FOLDER_ID || "1OJxHK6RrbV46rKSnBDo3vTEQP5ZUtcIH";
-const RETENTION_DAYS = 30;
+const BUCKET = process.env.BACKUP_GCS_BUCKET || "cpv-uploader-backups";
 
 async function getAccessToken(): Promise<string> {
   const metadataUrl =
@@ -15,77 +14,27 @@ async function getAccessToken(): Promise<string> {
   return data.access_token;
 }
 
-async function uploadToDrive(token: string, fileName: string, content: string): Promise<string> {
-  const metadata = {
-    name: fileName,
-    mimeType: "application/json",
-    parents: [FOLDER_ID],
-  };
-
-  const boundary = "backup_boundary_" + Date.now();
-  const body =
-    `--${boundary}\r\n` +
-    `Content-Type: application/json; charset=UTF-8\r\n\r\n` +
-    `${JSON.stringify(metadata)}\r\n` +
-    `--${boundary}\r\n` +
-    `Content-Type: application/json\r\n\r\n` +
-    `${content}\r\n` +
-    `--${boundary}--`;
-
-  const res = await fetch(
-    "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart",
-    {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": `multipart/related; boundary=${boundary}`,
-      },
-      body,
-    }
-  );
+async function uploadToGCS(token: string, fileName: string, content: string): Promise<string> {
+  const url = `https://storage.googleapis.com/upload/storage/v1/b/${BUCKET}/o?uploadType=media&name=${encodeURIComponent(fileName)}`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: content,
+  });
 
   if (!res.ok) {
     const err = await res.text();
-    throw new Error(`Drive upload failed (${res.status}): ${err}`);
+    throw new Error(`GCS upload failed (${res.status}): ${err}`);
   }
 
-  const file = await res.json();
-  return file.id;
+  const obj = await res.json();
+  return `gs://${BUCKET}/${obj.name}`;
 }
 
-async function cleanupOldBackups(token: string): Promise<number> {
-  const cutoff = new Date();
-  cutoff.setDate(cutoff.getDate() - RETENTION_DAYS);
-  const cutoffStr = cutoff.toISOString();
-
-  const query = `'${FOLDER_ID}' in parents and name contains 'cpv-backup-' and createdTime < '${cutoffStr}' and trashed = false`;
-  const listUrl = `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(query)}&fields=files(id,name,createdTime)`;
-
-  const res = await fetch(listUrl, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
-
-  if (!res.ok) return 0;
-
-  const data = await res.json();
-  const files = data.files || [];
-  let deleted = 0;
-
-  for (const file of files) {
-    const delRes = await fetch(
-      `https://www.googleapis.com/drive/v3/files/${file.id}`,
-      {
-        method: "DELETE",
-        headers: { Authorization: `Bearer ${token}` },
-      }
-    );
-    if (delRes.ok) deleted++;
-  }
-
-  return deleted;
-}
-
-export async function runBackup(): Promise<{ success: boolean; message: string; fileId?: string }> {
+export async function runBackup(): Promise<{ success: boolean; message: string; path?: string }> {
   const db = await getDb();
   if (!db) {
     return { success: false, message: "Database not available" };
@@ -124,18 +73,15 @@ export async function runBackup(): Promise<{ success: boolean; message: string; 
   };
 
   const content = JSON.stringify(backup, null, 2);
-
   const token = await getAccessToken();
-  const fileId = await uploadToDrive(token, fileName, content);
-
-  const deleted = await cleanupOldBackups(token);
+  const gcsPath = await uploadToGCS(token, fileName, content);
 
   const totalRecords = usersData.length + companiesData.length + membersData.length +
     recordsData.length + settingsData.length + templatesData.length;
 
   return {
     success: true,
-    message: `Backup "${fileName}" uploaded (${totalRecords} records). ${deleted > 0 ? `Cleaned up ${deleted} old backup(s).` : ""}`,
-    fileId,
+    message: `Backup "${fileName}" uploaded to GCS (${totalRecords} records across 6 tables).`,
+    path: gcsPath,
   };
 }
