@@ -115,12 +115,10 @@ export const MainApp = ({ aiVideoEnabled = false, onPrismKeyStatus }: { aiVideoE
         setTokenInput(companySettings.facebookAccessToken);
         setCompanyAccessKeyValue(companySettings.accessKey);
         onPrismKeyStatus?.(!!companySettings.prismApiKey || !!companySettings.geminiApiKey);
-        if (companySettings.prismApiKey || companySettings.geminiApiKey) {
-          try {
-            const parsed = companySettings.aiVideoSettings ? JSON.parse(companySettings.aiVideoSettings) : {};
-            setAiSettings({ prismApiKey: companySettings.prismApiKey, geminiApiKey: companySettings.geminiApiKey, model: parsed.model || 'veo-3.1', aspectRatio: parsed.aspectRatio || '9:16', duration: parsed.duration || 8, promptTemplate: parsed.promptTemplate || 'Product showcase, slow camera movement, professional lighting' });
-          } catch { setAiSettings({ prismApiKey: companySettings.prismApiKey, geminiApiKey: companySettings.geminiApiKey, model: 'veo-3.1', aspectRatio: '9:16', duration: 8, promptTemplate: 'Product showcase, slow camera movement, professional lighting' }); }
-        }
+        try {
+          const parsed = companySettings.aiVideoSettings ? JSON.parse(companySettings.aiVideoSettings) : {};
+          setAiSettings({ prismApiKey: companySettings.prismApiKey || '', geminiApiKey: companySettings.geminiApiKey || '', model: parsed.model || 'veo-3.1', aspectRatio: parsed.aspectRatio || '9:16', duration: parsed.duration || 8, promptTemplate: parsed.promptTemplate || 'Product showcase, slow camera movement, professional lighting' });
+        } catch { setAiSettings({ prismApiKey: companySettings.prismApiKey || '', geminiApiKey: companySettings.geminiApiKey || '', model: 'veo-3.1', aspectRatio: '9:16', duration: 8, promptTemplate: 'Product showcase, slow camera movement, professional lighting' }); }
       }).catch(e => {
         console.error(e);
         if (e.message?.includes('不是此公司的成員')) {
@@ -197,7 +195,11 @@ export const MainApp = ({ aiVideoEnabled = false, onPrismKeyStatus }: { aiVideoE
           setFbAccessToken(companySettings.facebookAccessToken);
           setTokenInput(companySettings.facebookAccessToken);
           setCompanyAccessKeyValue(companySettings.accessKey);
-          onPrismKeyStatus?.(!!companySettings.prismApiKey);
+          onPrismKeyStatus?.(!!companySettings.prismApiKey || !!companySettings.geminiApiKey);
+          try {
+            const parsed = companySettings.aiVideoSettings ? JSON.parse(companySettings.aiVideoSettings) : {};
+            setAiSettings({ prismApiKey: companySettings.prismApiKey || '', geminiApiKey: companySettings.geminiApiKey || '', model: parsed.model || 'veo-3.1', aspectRatio: parsed.aspectRatio || '9:16', duration: parsed.duration || 8, promptTemplate: parsed.promptTemplate || 'Product showcase, slow camera movement, professional lighting' });
+          } catch { setAiSettings({ prismApiKey: companySettings.prismApiKey || '', geminiApiKey: companySettings.geminiApiKey || '', model: 'veo-3.1', aspectRatio: '9:16', duration: 8, promptTemplate: 'Product showcase, slow camera movement, professional lighting' }); }
         }).catch(e => {
           console.error(e);
           if (e.message?.includes('不是此公司的成員')) {
