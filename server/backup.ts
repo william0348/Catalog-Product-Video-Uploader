@@ -34,6 +34,36 @@ async function uploadToGCS(token: string, fileName: string, content: string): Pr
   return `gs://${BUCKET}/${obj.name}`;
 }
 
+const KEEP_COUNT = 2;
+
+async function cleanupOldBackups(token: string): Promise<number> {
+  const listUrl = `https://storage.googleapis.com/storage/v1/b/${BUCKET}/o?prefix=cpv-backup-`;
+  const res = await fetch(listUrl, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) return 0;
+
+  const data = await res.json();
+  const items: { name: string }[] = data.items || [];
+
+  const sorted = items
+    .filter((f) => f.name.startsWith("cpv-backup-") && f.name.endsWith(".json"))
+    .sort((a, b) => b.name.localeCompare(a.name));
+
+  const toDelete = sorted.slice(KEEP_COUNT);
+  let deleted = 0;
+
+  for (const file of toDelete) {
+    const delRes = await fetch(
+      `https://storage.googleapis.com/storage/v1/b/${BUCKET}/o/${encodeURIComponent(file.name)}`,
+      { method: "DELETE", headers: { Authorization: `Bearer ${token}` } }
+    );
+    if (delRes.ok || delRes.status === 204) deleted++;
+  }
+
+  return deleted;
+}
+
 export async function runBackup(): Promise<{ success: boolean; message: string; path?: string }> {
   const db = await getDb();
   if (!db) {
@@ -75,13 +105,14 @@ export async function runBackup(): Promise<{ success: boolean; message: string; 
   const content = JSON.stringify(backup, null, 2);
   const token = await getAccessToken();
   const gcsPath = await uploadToGCS(token, fileName, content);
+  const deleted = await cleanupOldBackups(token);
 
   const totalRecords = usersData.length + companiesData.length + membersData.length +
     recordsData.length + settingsData.length + templatesData.length;
 
   return {
     success: true,
-    message: `Backup "${fileName}" uploaded to GCS (${totalRecords} records across 6 tables).`,
+    message: `Backup "${fileName}" uploaded to GCS (${totalRecords} records across 6 tables).${deleted > 0 ? ` Cleaned up ${deleted} old backup(s).` : ""}`,
     path: gcsPath,
   };
 }
