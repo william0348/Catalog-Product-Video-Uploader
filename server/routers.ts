@@ -3,6 +3,7 @@ import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, router } from "./_core/trpc";
 import { reelsRouter } from "./reels/router";
+import { prismRouter } from "./prism/router";
 import { z } from "zod";
 import { generateSlideshow, fetchCatalogProducts, updateCatalogProductVideo, fetchProductSets, fetchProductSetProducts, fetchAllProductSetProducts, type SlideshowOptions } from "./slideshow";
 import { storagePut } from "./storage";
@@ -128,6 +129,8 @@ export const appRouter = router({
         facebookAccessToken: z.string().optional(),
         accessKey: z.string().optional(),
         catalogs: z.string().optional(),
+        geminiApiKey: z.string().optional(),
+        prismApiKey: z.string().optional(),
       }))
       .mutation(async ({ input }) => {
         const { id, email, ...data } = input;
@@ -141,6 +144,8 @@ export const appRouter = router({
         if (data.facebookAccessToken !== undefined) updateData.facebookAccessToken = data.facebookAccessToken;
         if (data.accessKey !== undefined) updateData.accessKey = data.accessKey;
         if (data.catalogs !== undefined) updateData.catalogs = data.catalogs;
+        if (data.geminiApiKey !== undefined) updateData.geminiApiKey = data.geminiApiKey;
+        if (data.prismApiKey !== undefined) updateData.prismApiKey = data.prismApiKey;
 
         // Auto-check token expiration when token is updated
         if (data.facebookAccessToken) {
@@ -967,6 +972,7 @@ export const appRouter = router({
   }),
 
   reels: reelsRouter,
+  prism: prismRouter,
 });
 
 export type AppRouter = typeof appRouter;

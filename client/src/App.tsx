@@ -45,16 +45,16 @@ const PageRouter = () => {
     }, []);
     
     useEffect(() => {
-        let title = 'CPV Uploader';
+        let title = 'Reels & Catalog Super Cool';
         switch (currentPage) {
             case 'admin':
-                title = `${t('adminPanel')} - CPV Uploader`;
+                title = `${t('adminPanel')} - Reels & Catalog Super Cool`;
                 break;
             case 'terms':
-                title = `${t('termsOfService')} - CPV Uploader`;
+                title = `${t('termsOfService')} - Reels & Catalog Super Cool`;
                 break;
             case 'slideshow':
-                title = `${t('slideshowTitle') || 'Slideshow Generator'} - CPV Uploader`;
+                title = `${t('slideshowTitle') || 'Slideshow Generator'} - Reels & Catalog Super Cool`;
                 break;
         }
         document.title = title;

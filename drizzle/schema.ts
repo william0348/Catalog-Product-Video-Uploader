@@ -37,6 +37,8 @@ export const companies = mysqlTable("companies", {
   accessKey: varchar("accessKey", { length: 255 }),
   /** Facebook Access Token expiration timestamp */
   tokenExpiresAt: timestamp("tokenExpiresAt"),
+  geminiApiKey: text("geminiApiKey"),
+  prismApiKey: text("prismApiKey"),
   createdBy: int("createdBy").notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),

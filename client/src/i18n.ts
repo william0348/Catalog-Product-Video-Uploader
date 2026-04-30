@@ -25,7 +25,7 @@ export const translations = {
         cancel: "Cancel",
         backToHome: "Back to Home",
         // Home Page
-        homeHeader: "CPV Video Uploader",
+        homeHeader: "Reels & Catalog Super Cool",
         homeSubheader: "The ultimate tool for managing video assets for your product catalogs.",
         coreFeatures: "Core Features",
         featureFetch: "Fetch Products: Instantly load products from any Facebook Catalog using its ID.",
@@ -397,7 +397,7 @@ export const translations = {
         cancel: "取消",
         backToHome: "回到首頁",
         // Home Page
-        homeHeader: "CPV 影片上傳工具",
+        homeHeader: "Reels & Catalog Super Cool",
         homeSubheader: "管理您目錄影片資產的終極工具。",
         coreFeatures: "核心功能",
         featureFetch: "讀取商品：使用目錄 ID 即時載入任何 Facebook 目錄中的商品。",
